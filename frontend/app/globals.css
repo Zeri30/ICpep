@@ -1,26 +1,203 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ---------------------------------------------------------------------------
+   ICPEP – BulSU Meneses Campus · Design tokens (Tailwind v4)
+   Palette: ~80% dark, ~15% crimson, ~5% amber/slate accents
+--------------------------------------------------------------------------- */
+@theme {
+  --color-background: #050505;
+  --color-foreground: #f5f5f5;
+
+  --color-card: #0a0a0a;
+  --color-card-foreground: #f5f5f5;
+
+  --color-primary: #dc2626;
+  --color-primary-foreground: #ffffff;
+  --color-primary-glow: #ef4444;
+  --color-primary-dark: #b91c1c;
+
+  --color-secondary: #1a1a1a;
+  --color-secondary-foreground: #a3a3a3;
+
+  --color-muted: #171717;
+  --color-muted-foreground: #737373;
+
+  --color-accent: #b91c1c;
+  --color-line: #262626;
+
+  --color-amber-accent: #f59e0b;
+  --color-slate-accent: #64748b;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-orbitron), var(--font-rajdhani), sans-serif;
+  --font-head: var(--font-rajdhani), var(--font-inter), sans-serif;
+
+  --shadow-glow-sm: 0 0 18px rgba(220, 38, 38, 0.25);
+  --shadow-glow: 0 0 20px rgba(220, 38, 38, 0.3);
+  --shadow-glow-lg: 0 0 45px rgba(220, 38, 38, 0.35);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 92px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  /* `clip` prevents horizontal scroll without creating a scroll container,
+     so it doesn't break `position: sticky` used by the pinned Teams scene. */
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 8px;
+  border: 2px solid #0a0a0a;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b91c1c;
+}
+
+input[type="date"],
+select {
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Utilities & effects
+--------------------------------------------------------------------------- */
+.glass {
+  background: rgba(5, 5, 5, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 24px rgba(220, 38, 38, 0.55), 0 0 60px rgba(220, 38, 38, 0.25);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Hero animated gradient mesh */
+.hero-mesh {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 20%, rgba(127, 29, 29, 0.35), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 80% 65%, rgba(185, 28, 28, 0.22), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 55% 90%, rgba(69, 10, 10, 0.5), transparent 65%),
+    #050505;
+  background-size: 180% 180%;
+  animation: meshShift 16s ease-in-out infinite;
+}
+@keyframes meshShift {
+  0%, 100% { background-position: 0% 40%; }
+  50% { background-position: 100% 60%; }
+}
+
+/* Floating hero particles */
+.particle {
+  position: absolute;
+  border-radius: 9999px;
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+  filter: blur(0.5px);
+  animation-name: floatP;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes floatP {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(14px, -26px, 0); }
+  50% { transform: translate3d(-10px, -48px, 0); }
+  75% { transform: translate3d(-20px, -18px, 0); }
+}
+
+@keyframes bounceDown {
+  0%, 100% { transform: translateY(0); opacity: 0.9; }
+  50% { transform: translateY(9px); opacity: 0.4; }
+}
+.chevron-bounce {
+  animation: bounceDown 1.8s ease-in-out infinite;
+}
+
+@keyframes pulseRing {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45); }
+  70% { box-shadow: 0 0 0 16px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+.pulse-ring {
+  animation: pulseRing 2.2s ease-out infinite;
+}
+
+/* Gallery placeholder patterns */
+.pat-diag {
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 11px);
+}
+.pat-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 15px 15px;
+}
+.pat-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Dark filter for embedded map */
+.map-dark {
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.35) brightness(0.9) contrast(1.05);
+}
+
+/* Marquee band */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: inline-flex;
+  width: max-content;
+  animation: marquee 26s linear infinite;
+}
+.marquee-track.reverse {
+  animation-direction: reverse;
+}
+.marquee-wrap:hover .marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
+
+/* Outlined "stroke" display type — used for editorial headings */
+.text-stroke {
+  -webkit-text-stroke: 1px rgba(245, 245, 245, 0.35);
+  color: transparent;
+}
+.text-stroke-red {
+  -webkit-text-stroke: 1.5px rgba(220, 38, 38, 0.55);
+  color: transparent;
 }
