@@ -1,8 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, ChevronRight, Cpu, Menu, X } from "lucide-react";
+import { ArrowRight, ChevronRight, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import Logo from "@/components/ui/Logo";
 import { NAV_LINKS } from "@/lib/data";
 import { useActiveSection } from "@/lib/useActiveSection";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
@@ -38,12 +39,12 @@ export default function Navbar() {
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-[72px] flex items-center justify-between gap-4">
           {/* Logo */}
           <a href="#home" className="flex items-center gap-3 shrink-0 group">
-            <span className="grid place-items-center w-10 h-10 rounded-md bg-gradient-to-br from-primary to-primary-dark text-white shadow-glow-sm group-hover:shadow-glow transition-shadow">
-              <Cpu size={20} />
+            <span className="grid place-items-center w-11 h-11 rounded-full transition-[filter] drop-shadow-[0_0_10px_rgba(220,38,38,0.35)] group-hover:drop-shadow-[0_0_16px_rgba(220,38,38,0.55)]">
+              <Logo size={44} priority className="w-11 h-11" />
             </span>
             <span className="leading-tight">
               <span className="block font-display font-bold tracking-widest text-sm text-foreground">
-                ICPEP
+                ICpEP.SE
               </span>
               <span className="block font-head text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
                 BulSU Meneses
@@ -118,8 +119,11 @@ export default function Navbar() {
               className="fixed top-0 right-0 bottom-0 z-[70] w-[82%] max-w-sm bg-card border-l border-line flex flex-col lg:hidden"
             >
               <div className="flex items-center justify-between px-6 h-[72px] border-b border-line">
-                <span className="font-display font-bold tracking-widest text-sm">
-                  ICPEP <span className="text-primary">MENU</span>
+                <span className="flex items-center gap-2.5">
+                  <Logo size={32} className="w-8 h-8" />
+                  <span className="font-display font-bold tracking-widest text-sm">
+                    ICpEP.SE <span className="text-primary">MENU</span>
+                  </span>
                 </span>
                 <button
                   onClick={() => setOpen(false)}

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "motion/react";
 import { Quote } from "lucide-react";
 import SectionHeading from "@/components/ui/SectionHeading";
@@ -19,12 +20,24 @@ function AdviserCard({ o }: { o: Officer }) {
       <div className="absolute inset-0 bg-gradient-to-r from-amber-accent/10 via-card to-card" />
       <div className="absolute inset-0 pat-grid opacity-30" />
       <div className="relative grid sm:grid-cols-[auto_1fr] gap-7 md:gap-10 p-7 md:p-10 items-center">
-        {/* Big monogram */}
+        {/* Designed portrait card, or monogram fallback */}
         <div className="relative mx-auto sm:mx-0">
           <div className="absolute -inset-3 rounded-3xl bg-amber-accent/10 blur-xl" />
-          <div className="relative grid place-items-center w-32 h-32 md:w-40 md:h-40 rounded-3xl border border-amber-accent/30 bg-gradient-to-br from-amber-accent/25 to-card font-display font-black text-5xl md:text-6xl text-amber-accent">
-            {o.initials}
-          </div>
+          {o.photo ? (
+            <div className="relative w-40 md:w-48 aspect-[4/5] rounded-3xl overflow-hidden border border-amber-accent/30">
+              <Image
+                src={o.photo}
+                alt={o.name}
+                fill
+                sizes="(max-width: 768px) 160px, 192px"
+                className="object-cover"
+              />
+            </div>
+          ) : (
+            <div className="relative grid place-items-center w-32 h-32 md:w-40 md:h-40 rounded-3xl border border-amber-accent/30 bg-gradient-to-br from-amber-accent/25 to-card font-display font-black text-5xl md:text-6xl text-amber-accent">
+              {o.initials}
+            </div>
+          )}
         </div>
         {/* Text */}
         <div>
@@ -64,27 +77,49 @@ function OfficerCard({ o, i }: { o: Officer; i: number }) {
         className="relative aspect-[4/5] overflow-hidden"
         style={{ background: `linear-gradient(${angle}deg, rgba(220,38,38,0.22), #0a0a0a 72%)` }}
       >
-        <div className="absolute inset-0 pat-dots opacity-50" />
-        {/* index */}
-        <span className="absolute top-4 left-5 font-display font-bold text-sm text-white/25">
-          {String(i + 1).padStart(2, "0")}
-        </span>
-        {/* big initials */}
-        <div className="absolute inset-0 grid place-items-center">
-          <span className="font-display font-black text-7xl md:text-8xl text-primary-glow/90 group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_25px_rgba(220,38,38,0.35)]">
-            {o.initials}
-          </span>
-        </div>
-        {/* role pill anchored to bottom */}
-        <span className="absolute bottom-4 left-5 rounded-full border border-primary/30 bg-background/70 backdrop-blur px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary-glow">
-          {o.role}
-        </span>
-        <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-card to-transparent" />
+        {o.photo ? (
+          /* Designed portrait card — art already carries name + branding, so
+             it fills the frame without overlay chrome. */
+          <Image
+            src={o.photo}
+            alt={o.name}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="object-cover group-hover:scale-[1.03] transition-transform duration-300"
+          />
+        ) : (
+          <>
+            <div className="absolute inset-0 pat-dots opacity-50" />
+            {/* index */}
+            <span className="absolute top-4 left-5 font-display font-bold text-sm text-white/25">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            {/* big initials */}
+            <div className="absolute inset-0 grid place-items-center">
+              <span className="font-display font-black text-7xl md:text-8xl text-primary-glow/90 group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_25px_rgba(220,38,38,0.35)]">
+                {o.initials}
+              </span>
+            </div>
+            {/* role pill anchored to bottom */}
+            <span className="absolute bottom-4 left-5 rounded-full border border-primary/30 bg-background/70 backdrop-blur px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary-glow">
+              {o.role}
+            </span>
+            <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-card to-transparent" />
+          </>
+        )}
       </div>
-      {/* Name plate */}
+      {/* Caption — the designed card already carries both the name and role in
+          its art, so photo cards show only the year/degree; monogram cards
+          fall back to showing the name. */}
       <div className="p-6 border-t border-line">
-        <h4 className="font-head font-bold text-xl text-foreground leading-tight">{o.name}</h4>
-        <p className="mt-1.5 text-xs text-muted-foreground tracking-wide">{o.detail}</p>
+        {o.photo ? (
+          <p className="text-sm text-muted-foreground tracking-wide">{o.detail}</p>
+        ) : (
+          <>
+            <h4 className="font-head font-bold text-xl text-foreground leading-tight">{o.name}</h4>
+            <p className="mt-1.5 text-xs text-muted-foreground tracking-wide">{o.detail}</p>
+          </>
+        )}
       </div>
     </motion.article>
   );

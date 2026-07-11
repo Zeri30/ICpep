@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowRight, Calendar, ChevronDown, Code2, Cpu, MousePointerClick, Trophy, Users, Zap } from "lucide-react";
+import { ArrowRight, Calendar, ChevronDown, Code2, Cpu, Trophy, Users, Zap } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import CtaButton from "@/components/ui/CtaButton";
 import CountUp from "@/components/ui/CountUp";
@@ -110,7 +110,7 @@ export default function Hero() {
               transition={{ delay: 1.5, duration: 0.5 }}
             >
               <Badge tone="red" className="mb-6">
-                <Zap size={12} /> Official Student Chapter
+                <Zap size={12} /> Student Edition
               </Badge>
             </motion.div>
 
@@ -132,7 +132,7 @@ export default function Hero() {
               transition={{ delay: 1.85, duration: 0.6, ease: easeOutExpo }}
               className="mt-7 text-base sm:text-lg lg:text-xl font-light text-secondary-foreground tracking-wide"
             >
-              Engineering the Future, One Line of Code at a Time
+              I can&apos;t, but we can.
             </motion.p>
 
             <motion.div
@@ -148,16 +148,6 @@ export default function Hero() {
                 View Events <Calendar size={16} />
               </CtaButton>
             </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 2.4, duration: 0.6 }}
-              className="mt-8 inline-flex items-center gap-2 text-[11px] font-head uppercase tracking-[0.3em] text-muted-foreground"
-            >
-              <MousePointerClick size={13} className="text-primary/70" />
-              Move · click · drag the background
-            </motion.p>
           </div>
         </div>
 

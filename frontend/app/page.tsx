@@ -1,4 +1,5 @@
 import LoadingScreen from "@/components/LoadingScreen";
+import SmoothScroll from "@/components/SmoothScroll";
 import GsapRefresher from "@/components/GsapRefresher";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import Navbar from "@/components/layout/Navbar";
@@ -18,6 +19,7 @@ export default function Home() {
   return (
     <>
       <LoadingScreen />
+      <SmoothScroll />
       <GsapRefresher />
       <ScrollProgressBar />
       <Navbar />

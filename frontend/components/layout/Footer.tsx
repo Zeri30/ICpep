@@ -1,4 +1,5 @@
-import { Cpu, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
+import Logo from "@/components/ui/Logo";
 import { Facebook, Github } from "@/components/ui/BrandIcons";
 import { NAV_LINKS, CONTACT } from "@/lib/data";
 
@@ -11,11 +12,9 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <a href="#home" className="flex items-center gap-3">
-              <span className="grid place-items-center w-10 h-10 rounded-md bg-gradient-to-br from-primary to-primary-dark text-white shadow-glow-sm">
-                <Cpu size={20} />
-              </span>
+              <Logo size={48} className="w-12 h-12 drop-shadow-[0_0_12px_rgba(220,38,38,0.3)]" />
               <span className="leading-tight">
-                <span className="block font-display font-bold tracking-widest text-sm">ICPEP</span>
+                <span className="block font-display font-bold tracking-widest text-sm">ICpEP.SE</span>
                 <span className="block font-head text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
                   BulSU Meneses
                 </span>

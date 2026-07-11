@@ -29,7 +29,7 @@ export default function About() {
                 icon: Zap,
                 accent: "text-primary-glow",
                 glyph: "text-primary/[0.05]",
-                body: "To develop competent, innovative, and values-driven Computer Engineering students through quality training, meaningful collaboration, and hands-on technical experience — equipping every member to excel in academics, competition, and the profession.",
+                body: "The Institute of Computer Engineers of the Philippines Student Edition (ICpEP.SE) is committed to bridging the gap between the industry and the academe by empowering the interests, welfare, and ideals of its members, developing a strong harmonious foundation within its community, and professionalizing the skills of its officers and members for global competitiveness and national progression.",
               },
               {
                 label: "Vision",

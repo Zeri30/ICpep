@@ -1,8 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Award,
+  Camera,
+  Clapperboard,
   Code2,
-  FileText,
   Gamepad2,
   Heart,
   Lightbulb,
@@ -14,7 +15,6 @@ import {
   Target,
   Terminal,
   Trophy,
-  Wrench,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ export const STATS: {
   prefix?: string;
   label: string;
 }[] = [
-  { end: 150, suffix: "+", label: "Members" },
+  { end: 215, label: "Members" },
   { end: 6, label: "Teams" },
   { end: 20, suffix: "+", label: "Events" },
   { end: 2019, prefix: "Est. ", label: "Established" },
@@ -107,30 +107,54 @@ export interface Officer {
   detail: string;
   initials: string;
   featured?: boolean;
+  /** Optional designed portrait card (4:5). Falls back to the initials
+      monogram when absent. */
+  photo?: string;
 }
 
 export const OFFICERS: Officer[] = [
-  { name: "Engr. Marvin S. Dela Cruz", role: "Organization Adviser", detail: "Faculty Adviser · CpE Department", initials: "MD", featured: true },
-  { name: "John Aldrin Santos", role: "President", detail: "BS Computer Engineering – 5th Year", initials: "JS" },
-  { name: "Kristine Mae Villanueva", role: "Vice President", detail: "BS Computer Engineering – 5th Year", initials: "KV" },
-  { name: "Angelica R. Ramos", role: "Secretary", detail: "BS Computer Engineering – 4th Year", initials: "AR" },
-  { name: "Mark Joseph Bautista", role: "Treasurer", detail: "BS Computer Engineering – 4th Year", initials: "MB" },
-  { name: "Patricia Anne Mercado", role: "Auditor", detail: "BS Computer Engineering – 4th Year", initials: "PM" },
-  { name: "Carlo Miguel De Guzman", role: "Public Information Officer", detail: "BS Computer Engineering – 3rd Year", initials: "CD" },
+  { name: "Engr. Amanda Fe H. Abelardo", role: "Organization Adviser", detail: "Faculty Adviser · CCpE, MSCpE", initials: "AA", featured: true, photo: "/board/amanda-abelardo-photo.jpg" },
+  { name: "Archie R. Baltazar", role: "President", detail: "BS Computer Engineering – 4th Year", initials: "AB", photo: "/board/archie-baltazar.jpg" },
+  { name: "Julia Mae D. Narne", role: "Vice President – External", detail: "BS Computer Engineering – 3rd Year", initials: "JN", photo: "/board/julia-mae-narne.jpg" },
+  { name: "John Quelvin B. Rosales", role: "Vice President – Internal", detail: "BS Computer Engineering – 3rd Year", initials: "JR", photo: "/board/john-quelvin-rosales.jpg" },
+  { name: "Clint Kelvin H. Ignacio", role: "Secretary", detail: "BS Computer Engineering – 3rd Year", initials: "CI", photo: "/board/clint-kelvin-ignacio.jpg" },
+  { name: "Shyrra Mhay F. Poral", role: "Assistant Secretary", detail: "BS Computer Engineering – 3rd Year", initials: "SP", photo: "/board/shyrra-mhay-poral.jpg" },
+  { name: "Hazel Rose V. De Guzman", role: "Treasurer", detail: "BS Computer Engineering – 4th Year", initials: "HD", photo: "/board/hazel-rose-de-guzman.jpg" },
+  { name: "Ma. Kathleen D. Gutierrez", role: "Assistant Treasurer", detail: "BS Computer Engineering – 3rd Year", initials: "MG", photo: "/board/ma-kathleen-gutierrez.jpg" },
+  { name: "Diana Lyn N. Sulit", role: "Auditor", detail: "BS Computer Engineering – 4th Year", initials: "DS", photo: "/board/diana-lyn-sulit.jpg" },
+  { name: "Jherylyn R. Cala", role: "Public Relations Officer", detail: "BS Computer Engineering – 3rd Year", initials: "JC", photo: "/board/jherylyn-cala.jpg" },
+  { name: "Michaella Denise S. San Pedro", role: "Board Director", detail: "BS Computer Engineering – 3rd Year", initials: "MS", photo: "/board/michaella-san-pedro.jpg" },
+  { name: "Shieryl P. Martinez", role: "Board Director", detail: "BS Computer Engineering – 3rd Year", initials: "SM", photo: "/board/shieryl-martinez.jpg" },
+  { name: "Marielle L. Bauto", role: "Board Director", detail: "BS Computer Engineering – 4th Year", initials: "MB", photo: "/board/marielle-bauto.jpg" },
+  { name: "Marc Julian A. Marcelo", role: "Board Director", detail: "BS Computer Engineering – 4th Year", initials: "MM", photo: "/board/marc-julian.jpg" },
 ];
 
 /* ---------------------------------------------------------------------------
    Teams
 --------------------------------------------------------------------------- */
+/** A team head or member. `photo` is optional — falls back to an initials
+    avatar until a real image URL/path is provided. */
+export interface TeamMember {
+  name: string;
+  year: string;
+  photo?: string;
+}
+
 export interface Team {
   icon: LucideIcon;
   accent: string;
   name: string;
   head: string;
+  /** Optional headshot for the team head. Falls back to an initials avatar. */
+  headPhoto?: string;
+  /** Year level of the team head (for the roster section). */
+  headYear: string;
   members: string;
   desc: string;
   resp: string[];
   skills: string[];
+  /** General members (excluding the head). */
+  roster: TeamMember[];
 }
 
 export const TEAMS: Team[] = [
@@ -138,61 +162,108 @@ export const TEAMS: Team[] = [
     icon: Terminal,
     accent: "#ef4444",
     name: "Programming Team",
-    head: "Czerina Piedad",
+    head: "Czerina L. Piedad",
+    headPhoto: "/team/czerina-piedad.jpg",
+    headYear: "BS CpE – 4th Year",
     members: "8–12 members",
     desc: "The backbone of ICPEP's technical identity. Develops projects, competes in hackathons, and leads coding workshops for the whole chapter.",
     resp: ["Web development", "App development", "Competitive programming", "Technical workshops"],
     skills: ["One programming language", "Problem-solving", "Algorithmic thinking"],
+    roster: [
+      { name: "Dominic Andrew M. Alberto", year: "3rd Year", photo: "/team/dominic-alberto-v2.jpg" },
+      { name: "Khurt Paul E. Anzures", year: "3rd Year", photo: "/team/khurt-anzures.jpg" },
+      { name: "Ferose Hana M. Asuncion", year: "4th Year", photo: "/team/ferose-asuncion.jpg" },
+      { name: "Merylle Joy G. Marquez", year: "4th Year", photo: "/team/merylle-marquez.jpg" },
+    ],
   },
   {
-    icon: FileText,
+    icon: Camera,
     accent: "#f59e0b",
     name: "Documentation Team",
-    head: "Jasmine T. Reyes",
+    head: "John Exequiel B. Pascual",
+    headPhoto: "/team/john-pascual.jpg",
+    headYear: "BS CpE – 4th Year",
     members: "5–8 members",
-    desc: "Ensures every event, activity, and decision is properly recorded and archived — the institutional memory of the organization.",
-    resp: ["Meeting minutes", "Event documentation", "Report writing", "Archival"],
-    skills: ["Technical writing", "Attention to detail", "Organization"],
+    desc: "The eyes of ICPEP — captures every event through photos and videos, then edits and archives them into the visual memory of the chapter.",
+    resp: ["Event photography", "Videography", "Photo & video editing", "Media archival"],
+    skills: ["Photography & videography", "Photo/video editing", "Attention to detail"],
+    roster: [
+      { name: "Nicole Kimberly I. Acevedo", year: "3rd Year", photo: "/team/nicole-acevedo.jpg" },
+      { name: "Felicisimo P. Esmeralda", year: "4th Year", photo: "/team/felicisimo-esmeralda.jpg" },
+      { name: "Lhea Mae J. Esteban", year: "3rd Year", photo: "/team/lhea-esteban.jpg" },
+      { name: "Marc Robert P. Torres", year: "3rd Year", photo: "/team/marc-torres.jpg" },
+    ],
   },
   {
     icon: PenTool,
     accent: "#64748b",
     name: "Writers Team",
-    head: "Louise Gabriel Ocampo",
+    head: "Charlene Faye R. Samaniego",
+    headPhoto: "/team/charlene-samaniego.jpg",
+    headYear: "BS CpE – 4th Year",
     members: "5–8 members",
     desc: "The voice of ICPEP — crafts announcements, social media captions, press releases, and creative content that carries the chapter's identity.",
-    resp: ["Content creation", "Copywriting", "Newsletter", "Blog posts"],
+    resp: ["Content creation", "Copywriting", "Newsletter"],
     skills: ["Creative writing", "Grammar proficiency", "Storytelling"],
+    roster: [
+      { name: "Cloiez Veniz L. Belmonte", year: "4th Year", photo: "/team/cloiez-belmonte.jpg" },
+      { name: "Amyleanne Q. Cuerdo", year: "3rd Year", photo: "/team/amyleanne-cuerdo.jpg" },
+      { name: "Kristine L. Panganiban", year: "4th Year", photo: "/team/kristine-panganiban.jpg" },
+    ],
   },
   {
     icon: Share2,
     accent: "#ef4444",
     name: "Social Media Team",
-    head: "Andrea Nicole Salvador",
+    head: "Jhandell C. Alcantara",
+    headPhoto: "/team/jhandell-alcantara.jpg",
+    headYear: "BS CpE – 4th Year",
     members: "6–10 members",
     desc: "Manages ICPEP's digital presence across all platforms — from content scheduling to community engagement and analytics.",
-    resp: ["Social media management", "Content scheduling", "Community engagement", "Analytics"],
+    resp: ["Social media management", "Content scheduling", "Community engagement"],
     skills: ["Social media literacy", "Graphic design basics", "Trend awareness"],
+    roster: [
+      { name: "Hazel Mae M. Barcia", year: "3rd Year", photo: "/team/hazel-barcia.jpg" },
+      { name: "Trisha Mae G. Domingo", year: "3rd Year", photo: "/team/trisha-domingo.jpg" },
+      { name: "Ernalyn L. Galman", year: "3rd Year", photo: "/team/ernalyn-galman.jpg" },
+      { name: "Nica Mae M. Galvez", year: "3rd Year", photo: "/team/nica-galvez.jpg" },
+    ],
   },
   {
-    icon: Wrench,
+    icon: Clapperboard,
     accent: "#f59e0b",
-    name: "Technical Team",
-    head: "Rafael D. Manalastas",
+    name: "Multimedia Team",
+    head: "R Jay L. Villafuerte",
+    headPhoto: "/team/rjay-villafuerte.jpg",
+    headYear: "BS CpE – 3rd Year",
     members: "5–8 members",
-    desc: "Handles all technical logistics — AV setup, streaming, IT support, and equipment management during every event.",
-    resp: ["Sound systems", "Projector setup", "Live streaming", "Troubleshooting"],
-    skills: ["Technical troubleshooting", "Audio-visual knowledge", "Adaptability"],
+    desc: "The creative force of ICPEP — designs graphics, posters, and visual content that give every event and announcement its polished, professional look.",
+    resp: ["Graphic design", "Motion graphics", "Event posters & visuals", "Digital illustrations"],
+    skills: ["Graphic design", "Visual storytelling", "Creativity"],
+    roster: [
+      { name: "Arian James M. Desiderio", year: "4th Year", photo: "/team/arian-desiderio.jpg" },
+      { name: "John Vincent G. Roque", year: "3rd Year", photo: "/team/john-roque.jpg" },
+      { name: "Justin D. San Antonio", year: "3rd Year", photo: "/team/justin-san-antonio.jpg" },
+      { name: "Alessandra A. Taculao", year: "3rd Year", photo: "/team/alessandra-taculao.jpg" },
+    ],
   },
   {
     icon: Gamepad2,
     accent: "#64748b",
     name: "E-sports Team",
-    head: "Joshua Emmanuel Cruz",
+    head: "Rex Gabriel M. Biazon",
+    headPhoto: "/team/rex-biazon.jpg",
+    headYear: "BS CpE – 4th Year",
     members: "8–15 members",
     desc: "Represents ICPEP in competitive gaming — builds school pride and fosters teamwork, discipline, and strategy through esports.",
     resp: ["Tournament participation", "Team practice", "Gaming event organization"],
     skills: ["Competitive gaming skill", "Teamwork", "Strategic thinking"],
+    roster: [
+      { name: "Arlan Reyniel F. Angel", year: "3rd Year", photo: "/team/arlan-angel.jpg" },
+      { name: "Keith Ryan B. Delos Santos", year: "3rd Year", photo: "/team/keith-delos-santos.jpg" },
+      { name: "Kalvin Vishnu M. Negapatan", year: "4th Year", photo: "/team/kalvin-negapatan.jpg" },
+      { name: "Abegail Joiece C. Pogoy", year: "3rd Year", photo: "/team/abegail-pogoy.jpg" },
+    ],
   },
 ];
 
@@ -265,7 +336,7 @@ export const GALLERY_ITEMS: GalleryItem[] = [
 /* ---------------------------------------------------------------------------
    Membership form fields
 --------------------------------------------------------------------------- */
-export const YEAR_LEVELS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
+export const YEAR_LEVELS = ["3rd Year", "4th Year"];
 export const SECTIONS = ["Section A", "Section B"];
 
 /* ---------------------------------------------------------------------------
@@ -278,27 +349,23 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Is there a membership fee?",
-    a: "Yes, a minimal membership fee is collected to fund the organization's activities, events, and materials. The exact amount may vary per academic year and is always announced transparently before collection.",
-  },
-  {
-    q: "Do I need coding experience to join?",
-    a: "Not at all! ICPEP welcomes all skill levels. We run workshops, trainings, and mentorship programs specifically designed to help beginners grow — many of our best members started with zero experience.",
+    a: "Yes. A membership fee of ₱50 is collected upon joining. This one-time contribution helps fund the organization's seminars, activities, and materials throughout the academic year, ensuring that every member benefits from the programs and opportunities ICpEP provides.",
   },
   {
     q: "Can I be part of multiple teams?",
-    a: "Yes. Members can participate in more than one team based on their interests and availability. Many members contribute to both a technical team and a creative or events team.",
+    a: "No. To help members focus and contribute meaningfully, each member is assigned to a single team that best matches their skills and interests. This ensures that every team stays organized and that responsibilities are shared fairly across the organization.",
   },
   {
-    q: "How often does ICPEP hold events?",
-    a: "Regularly — from weekly team meetings to monthly seminars and workshops, plus major flagship events every semester such as ICPEP Week and Programming Month.",
+    q: "How often does ICpEP hold events?",
+    a: "ICpEP does not hold events on a regular schedule. However, the organization conducts seminars and participates in major activities such as CPE Week, Programming Month, and R3 competition tryouts, along with other organization-related events.",
   },
   {
     q: "Will I get a certificate for participating?",
     a: "Yes. Certificates are issued for the seminars, workshops, and competitions you take part in — great additions to your résumé, scholarship applications, and professional portfolio.",
   },
   {
-    q: "How do I stay updated on ICPEP activities?",
-    a: "Follow our official Facebook page for announcements, and join our members' group chat once you've completed your membership. That's where schedules, reminders, and opportunities are shared first.",
+    q: "How do I stay updated on ICpEP activities?",
+    a: "There is no official group chat. Members can stay updated by following the organization's official Facebook page, where announcements, events, and other updates are posted.",
   },
 ];
 
@@ -308,7 +375,7 @@ export const FAQS: { q: string; a: string }[] = [
 export const CONTACT = {
   facebook: "ICPEP – BulSU Meneses Campus",
   facebookUrl: "#",
-  email: "icpep.meneses@bulsu.edu.ph",
+  email: "icpep.se.menesescampus@gmail.com",
   location: "Bulacan State University – Meneses Campus, Guiguinto, Bulacan",
   mapEmbed:
     "https://www.google.com/maps?q=Bulacan+State+University+Meneses+Campus+Guiguinto+Bulacan&output=embed",

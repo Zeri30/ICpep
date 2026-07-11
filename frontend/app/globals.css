@@ -201,3 +201,20 @@ select {
   -webkit-text-stroke: 1.5px rgba(220, 38, 38, 0.55);
   color: transparent;
 }
+
+/* ---------------------------------------------------------------------------
+   Lenis smooth scroll (see components/SmoothScroll.tsx)
+--------------------------------------------------------------------------- */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
