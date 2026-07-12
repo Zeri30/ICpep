@@ -1,18 +1,16 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronDown, FolderUp, Loader2, Send } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import Reveal from "@/components/ui/Reveal";
 import SectionHeading from "@/components/ui/SectionHeading";
 import PresentationInner from "@/components/ui/PresentationInner";
+import FileDropField, { type FileDropValue } from "@/components/ui/FileDropField";
 import { SECTIONS, YEAR_LEVELS } from "@/lib/data";
 
-/* Shared Google Drive folder where applicants upload their formal picture.
-   In Drive: right-click the folder → Share → set "Anyone with the link" so
-   students can add their photo, then paste the folder's share link here. */
-const DRIVE_UPLOAD_URL =
-  "https://drive.google.com/drive/folders/1zLX-jrsESSQC55MoeSO6CQ-qGQULIx0E?usp=sharing";
-const DRIVE_READY = DRIVE_UPLOAD_URL.startsWith("http");
+/* Base URL of the Laravel API that receives applications.
+   Configure it in .env.local as NEXT_PUBLIC_API_URL (e.g. http://localhost:8000). */
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type FormStatus = "idle" | "submitting" | "success" | "error";
 
@@ -62,13 +60,64 @@ function SuccessPanel({ onReset }: { onReset: () => void }) {
 export default function Membership() {
   const [status, setStatus] = useState<FormStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [signatureFile, setSignatureFile] = useState<FileDropValue>(null);
+  const [pictureFile, setPictureFile] = useState<FileDropValue>(null);
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const resetForm = () => {
+    setStatus("idle");
+    setSignatureFile(null);
+    setPictureFile(null);
+    setErrorMsg("");
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Formspree has been disconnected; online submissions are paused until a
-    // new backend is wired up.
-    setStatus("error");
-    setErrorMsg("Online applications are temporarily unavailable. Please check back soon.");
+
+    if (!signatureFile || !pictureFile) {
+      setStatus("error");
+      setErrorMsg("Please upload both your e-signature and your formal picture.");
+      return;
+    }
+
+    // Build the payload before any await so we don't rely on the event later.
+    const payload = new FormData(e.currentTarget);
+    payload.append("signature", signatureFile);
+    payload.append("picture", pictureFile);
+
+    setStatus("submitting");
+    setErrorMsg("");
+
+    try {
+      const res = await fetch(`${API_URL}/api/applications`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        body: payload,
+      });
+
+      if (!res.ok) {
+        let msg = "Something went wrong submitting your application. Please try again.";
+        try {
+          const data = await res.json();
+          // Laravel returns { message, errors: { field: [msg, ...] } } on 422.
+          if (res.status === 422 && data?.errors) {
+            const first = Object.values(data.errors)[0];
+            if (Array.isArray(first) && typeof first[0] === "string") msg = first[0];
+          } else if (typeof data?.message === "string" && data.message) {
+            msg = data.message;
+          }
+        } catch {
+          /* non-JSON error response — keep the generic message */
+        }
+        setStatus("error");
+        setErrorMsg(msg);
+        return;
+      }
+
+      setStatus("success");
+    } catch {
+      setStatus("error");
+      setErrorMsg("Couldn't reach the server. Please check your connection and try again.");
+    }
   };
 
   return (
@@ -89,7 +138,7 @@ export default function Membership() {
 
         <Reveal delay={0.1}>
           {status === "success" ? (
-          <SuccessPanel onReset={() => setStatus("idle")} />
+          <SuccessPanel onReset={resetForm} />
           ) : (
           <form
             onSubmit={handleSubmit}
@@ -186,55 +235,26 @@ export default function Membership() {
                 <input id="phone" name="phone" type="tel" required placeholder="0912 345 6789" className={fieldBase} />
               </div>
 
-              {/* E-signature (full width) */}
+              {/* E-signature — file upload (full width) */}
               <div className="sm:col-span-2">
-                <Label htmlFor="signature">E-Signature</Label>
-                <input id="signature" name="signature" type="text" required placeholder="Type your full name" className={fieldBase} />
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Typing your full name serves as your electronic signature.
-                </p>
+                <FileDropField
+                  label="E-Signature"
+                  file={signatureFile}
+                  onFileChange={setSignatureFile}
+                  required
+                  hint="Upload a clear photo or scan of your handwritten signature (or a signed PDF)."
+                />
               </div>
 
-              {/* Formal picture — upload to shared Drive folder (full width) */}
+              {/* Formal picture — file upload (full width) */}
               <div className="sm:col-span-2">
-                <Label htmlFor="pictureUploaded">Formal Picture</Label>
-                <div className="rounded-md border border-line bg-secondary/40 p-4">
-                  <p className="text-sm text-secondary-foreground leading-relaxed">
-                    Upload your formal picture (white background) to our shared Google Drive folder.
-                    Please name your file with your full name — e.g.{" "}
-                    <span className="text-foreground">DelaCruz_Juan.jpg</span>.
-                  </p>
-                  <a
-                    href={DRIVE_READY ? DRIVE_UPLOAD_URL : undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-disabled={!DRIVE_READY}
-                    className={`mt-3 inline-flex items-center gap-2 rounded-md border px-4 py-2.5 text-xs font-head font-semibold uppercase tracking-widest transition-colors ${
-                      DRIVE_READY
-                        ? "border-primary/40 bg-primary/10 text-primary-glow hover:bg-primary/20"
-                        : "border-line bg-secondary/60 text-muted-foreground pointer-events-none"
-                    }`}
-                  >
-                    <FolderUp size={15} /> Open Drive Folder
-                  </a>
-                  {!DRIVE_READY && (
-                    <p className="mt-2 text-xs text-muted-foreground">Drive folder link coming soon.</p>
-                  )}
-                  <label
-                    htmlFor="pictureUploaded"
-                    className="mt-4 flex items-start gap-2.5 text-sm text-secondary-foreground cursor-pointer normal-case tracking-normal font-sans"
-                  >
-                    <input
-                      id="pictureUploaded"
-                      name="pictureUploaded"
-                      type="checkbox"
-                      required
-                      value="Yes"
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                    />
-                    <span>I confirm I have uploaded my formal picture to the Drive folder above.</span>
-                  </label>
-                </div>
+                <FileDropField
+                  label="Formal Picture"
+                  file={pictureFile}
+                  onFileChange={setPictureFile}
+                  required
+                  hint="A recent formal photo with a white background."
+                />
               </div>
             </div>
 
