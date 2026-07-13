@@ -4,6 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ApplicationResource\Pages;
 use App\Models\Application;
+use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\Section as InfoSection;
 use Filament\Infolists\Components\TextEntry;
@@ -13,7 +15,9 @@ use Filament\Tables;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ApplicationResource extends Resource
 {
@@ -21,24 +25,41 @@ class ApplicationResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
 
-    protected static ?string $navigationLabel = 'Membership Applications';
+    /** Every submitted form is a registered member, so this is the Members List. */
+    protected static ?string $navigationLabel = 'Members List';
 
-    protected static ?string $modelLabel = 'application';
+    protected static ?string $modelLabel = 'member';
 
-    protected static ?string $pluralModelLabel = 'applications';
+    protected static ?string $pluralModelLabel = 'members';
 
-    /** Applications are created by the public website form, never in the admin. */
+    protected static ?int $navigationSort = 1;
+
+    /** Year levels / sections offered on the public membership form. */
+    protected const YEAR_LEVELS = ['3rd Year', '4th Year'];
+
+    protected const SECTIONS = ['Section A', 'Section B'];
+
+    /** Combined "Year & Section" options (e.g. 3A) → [year_level, section]. */
+    protected const CLASS_MAP = [
+        '3A' => ['3rd Year', 'Section A'],
+        '3B' => ['3rd Year', 'Section B'],
+        '4A' => ['4th Year', 'Section A'],
+        '4B' => ['4th Year', 'Section B'],
+    ];
+
+    /** Members are created by the public website form, never in the admin. */
     public static function canCreate(): bool
     {
         return false;
     }
 
+    /** Live member count shown as a badge on the sidebar item. */
     public static function getNavigationBadge(): ?string
     {
-        return (string) static::getModel()::where('status', 'pending')->count();
+        return (string) static::getModel()::count();
     }
 
-    /** Signed, short-lived URL for a private file in the Supabase bucket. */
+    /** Signed, short-lived URL for viewing a private file in the Supabase bucket. */
     protected static function fileUrl(?string $path): ?string
     {
         if (! $path) {
@@ -50,6 +71,71 @@ class ApplicationResource extends Resource
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    /**
+     * Stream a private file to the admin as a download (attachment), so it can be
+     * saved locally for use outside the system.
+     */
+    protected static function downloadFile(Application $record, string $which): ?StreamedResponse
+    {
+        $path = $which === 'picture' ? $record->picture_path : $record->signature_path;
+
+        if (! $path) {
+            return null;
+        }
+
+        $ext = pathinfo($path, PATHINFO_EXTENSION);
+        $name = str($record->full_name)->slug('_')."_{$which}".($ext ? ".{$ext}" : '');
+
+        try {
+            return Storage::disk('supabase')->download($path, $name);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Member details')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('surname')
+                            ->required()
+                            ->maxLength(100),
+                        Forms\Components\TextInput::make('given_name')
+                            ->label('Given name')
+                            ->required()
+                            ->maxLength(100),
+                        Forms\Components\TextInput::make('middle_initial')
+                            ->label('Middle initial')
+                            ->maxLength(1),
+                        Forms\Components\DatePicker::make('birthday')
+                            ->native(false)
+                            ->required(),
+                        Forms\Components\Select::make('year_level')
+                            ->label('Year level')
+                            ->options(array_combine(self::YEAR_LEVELS, self::YEAR_LEVELS))
+                            ->required(),
+                        Forms\Components\Select::make('section')
+                            ->options(array_combine(self::SECTIONS, self::SECTIONS))
+                            ->required(),
+                        Forms\Components\TextInput::make('email')
+                            ->email()
+                            ->required()
+                            ->maxLength(150),
+                        Forms\Components\TextInput::make('phone')
+                            ->tel()
+                            ->required()
+                            ->maxLength(30),
+                        Forms\Components\Textarea::make('address')
+                            ->required()
+                            ->rows(2)
+                            ->columnSpanFull(),
+                    ]),
+            ]);
     }
 
     public static function table(Table $table): Table
@@ -69,57 +155,73 @@ class ApplicationResource extends Resource
                     ->description(fn (Application $record): string => $record->email)
                     ->searchable(['surname', 'given_name'])
                     ->sortable(),
+                TextColumn::make('class_code')
+                    ->label('Class')
+                    ->badge()
+                    ->color('primary')
+                    ->tooltip(fn (Application $record): string => "{$record->year_level} · {$record->section}"),
                 TextColumn::make('year_level')
                     ->label('Year')
                     ->badge()
-                    ->color('gray'),
+                    ->color('gray')
+                    ->toggleable(),
                 TextColumn::make('section')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('phone')
                     ->label('Phone')
                     ->toggleable(),
-                TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'approved' => 'success',
-                        'rejected' => 'danger',
-                        default => 'warning',
-                    })
-                    ->sortable(),
                 TextColumn::make('created_at')
-                    ->label('Submitted')
+                    ->label('Registered')
                     ->dateTime('M j, Y g:i A')
                     ->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'approved' => 'Approved',
-                        'rejected' => 'Rejected',
-                    ]),
+                Tables\Filters\SelectFilter::make('class')
+                    ->label('Year & Section')
+                    ->options(array_combine(array_keys(self::CLASS_MAP), array_keys(self::CLASS_MAP)))
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+                        if (! $value || ! isset(self::CLASS_MAP[$value])) {
+                            return $query;
+                        }
+                        [$year, $section] = self::CLASS_MAP[$value];
+
+                        return $query->where('year_level', $year)->where('section', $section);
+                    }),
+                Tables\Filters\TrashedFilter::make()
+                    ->label('Deleted members')
+                    ->placeholder('Active members')
+                    ->trueLabel('With deleted')
+                    ->falseLabel('Only deleted'),
             ])
             ->actions([
+                // Standalone (not in the ⋯ menu) so it's easy to reach; only
+                // shows on soft-deleted rows.
+                Tables\Actions\RestoreAction::make()
+                    ->label('Undo delete')
+                    ->iconButton()
+                    ->tooltip('Undo delete')
+                    ->color('success')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->requiresConfirmation()
+                    ->modalHeading('Restore member')
+                    ->modalDescription(fn (Application $record): string => "Restore {$record->full_name} back to the members list?"),
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ViewAction::make(),
-                    Tables\Actions\Action::make('approve')
-                        ->label('Approve')
-                        ->icon('heroicon-o-check-circle')
-                        ->color('success')
-                        ->requiresConfirmation()
-                        ->modalHeading('Approve application')
-                        ->modalDescription(fn (Application $record): string => "Mark {$record->full_name}'s application as approved?")
-                        ->action(fn (Application $record) => $record->update(['status' => 'approved']))
-                        ->visible(fn (Application $record): bool => ! $record->trashed() && $record->status !== 'approved'),
-                    Tables\Actions\Action::make('reject')
-                        ->label('Reject')
-                        ->icon('heroicon-o-x-circle')
-                        ->color('danger')
-                        ->requiresConfirmation()
-                        ->modalHeading('Reject application')
-                        ->modalDescription(fn (Application $record): string => "Mark {$record->full_name}'s application as rejected?")
-                        ->action(fn (Application $record) => $record->update(['status' => 'rejected']))
-                        ->visible(fn (Application $record): bool => ! $record->trashed() && $record->status !== 'rejected'),
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\Action::make('download_picture')
+                        ->label('Download photo')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('gray')
+                        ->action(fn (Application $record) => static::downloadFile($record, 'picture'))
+                        ->visible(fn (Application $record): bool => (bool) $record->picture_path),
+                    Tables\Actions\Action::make('download_signature')
+                        ->label('Download signature')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('gray')
+                        ->action(fn (Application $record) => static::downloadFile($record, 'signature'))
+                        ->visible(fn (Application $record): bool => (bool) $record->signature_path),
                     Tables\Actions\Action::make('signature')
                         ->label('Open signature')
                         ->icon('heroicon-o-pencil-square')
@@ -128,19 +230,20 @@ class ApplicationResource extends Resource
                         ->openUrlInNewTab()
                         ->visible(fn (Application $record): bool => (bool) static::fileUrl($record->signature_path)),
                     Tables\Actions\DeleteAction::make()
-                        ->label('Move to Deleted')
-                        ->modalHeading('Delete application')
-                        ->modalDescription('This moves the application to the Deleted tab. You can restore it later, or permanently delete it from there.'),
-                    Tables\Actions\RestoreAction::make()
-                        ->modalHeading('Restore application'),
-                    Tables\Actions\ForceDeleteAction::make()
-                        ->modalHeading('Permanently delete')
-                        ->modalDescription('This permanently deletes the application and its uploaded files. This cannot be undone.'),
+                        ->label('Delete')
+                        ->modalHeading('Delete member')
+                        ->modalDescription('This removes the member from the list. The record is kept in the database (soft delete) and can be undone from the "Deleted members" filter.'),
                 ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Delete'),
+                    Tables\Actions\RestoreBulkAction::make()
+                        ->label('Undo delete')
+                        ->requiresConfirmation()
+                        ->modalHeading('Restore members')
+                        ->modalDescription('Restore the selected members back to the members list?'),
                 ]),
             ]);
     }
@@ -149,21 +252,18 @@ class ApplicationResource extends Resource
     {
         return $infolist
             ->schema([
-                InfoSection::make('Applicant')
+                InfoSection::make('Member')
                     ->columns(2)
                     ->schema([
                         TextEntry::make('full_name')->label('Full name'),
-                        TextEntry::make('status')
+                        TextEntry::make('class_code')
+                            ->label('Class')
                             ->badge()
-                            ->color(fn (string $state): string => match ($state) {
-                                'approved' => 'success',
-                                'rejected' => 'danger',
-                                default => 'warning',
-                            }),
+                            ->color('primary'),
                         TextEntry::make('year_level')->label('Year level'),
                         TextEntry::make('section'),
                         TextEntry::make('birthday')->date('F j, Y'),
-                        TextEntry::make('created_at')->label('Submitted')->dateTime('F j, Y g:i A'),
+                        TextEntry::make('created_at')->label('Registered')->dateTime('F j, Y g:i A'),
                         TextEntry::make('email')->copyable()->icon('heroicon-o-envelope'),
                         TextEntry::make('phone')->copyable()->icon('heroicon-o-phone'),
                         TextEntry::make('address')->columnSpanFull(),
@@ -195,6 +295,7 @@ class ApplicationResource extends Resource
         return [
             'index' => Pages\ListApplications::route('/'),
             'view' => Pages\ViewApplication::route('/{record}'),
+            'edit' => Pages\EditApplication::route('/{record}/edit'),
         ];
     }
 }

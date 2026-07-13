@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local-only session notes / compacted messages (never commit)
+SESSION-NOTES.md
+*.session-notes.md
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -6,7 +6,8 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use App\Filament\Widgets\RecentActivities;
+use App\Filament\Widgets\MembersByClass;
+use App\Filament\Widgets\RegistrationsOverTime;
 use App\Filament\Widgets\StatsOverview;
 use Filament\Enums\ThemeMode;
 use Filament\Pages\Dashboard;
@@ -44,7 +45,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->widgets([
                 StatsOverview::class,
-                RecentActivities::class,
+                MembersByClass::class,
+                RegistrationsOverTime::class,
             ])
             ->renderHook(
                 PanelsRenderHook::USER_MENU_BEFORE,

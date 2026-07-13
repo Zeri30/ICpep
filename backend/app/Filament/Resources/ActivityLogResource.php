@@ -18,7 +18,7 @@ class ActivityLogResource extends Resource
 
     protected static ?string $pluralModelLabel = 'activity log';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     /** Entries are written automatically; they are never created or edited by hand. */
     public static function canCreate(): bool
@@ -41,10 +41,9 @@ class ActivityLogResource extends Resource
                 Tables\Columns\TextColumn::make('action')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'approved', 'restored' => 'success',
-                        'rejected', 'force_deleted' => 'danger',
+                        'registered', 'restored' => 'success',
                         'deleted' => 'warning',
-                        'registered' => 'info',
+                        'updated' => 'info',
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => str($state)->replace('_', ' ')->title()),
@@ -59,11 +58,9 @@ class ActivityLogResource extends Resource
                 Tables\Filters\SelectFilter::make('action')
                     ->options([
                         'registered' => 'Registered',
-                        'approved' => 'Approved',
-                        'rejected' => 'Rejected',
+                        'updated' => 'Edited',
                         'deleted' => 'Deleted',
                         'restored' => 'Restored',
-                        'force_deleted' => 'Permanently deleted',
                         'login' => 'Login',
                     ]),
             ])

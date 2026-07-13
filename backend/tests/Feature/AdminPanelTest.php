@@ -4,7 +4,8 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\ActivityLogResource;
 use App\Filament\Resources\ApplicationResource;
-use App\Filament\Widgets\RecentActivities;
+use App\Filament\Widgets\MembersByClass;
+use App\Filament\Widgets\RegistrationsOverTime;
 use App\Filament\Widgets\StatsOverview;
 use App\Models\Application;
 use App\Models\User;
@@ -38,7 +39,6 @@ class AdminPanelTest extends TestCase
             'phone' => '09123456789',
             'signature_path' => 'signatures/x.png',
             'picture_path' => 'pictures/x.png',
-            'status' => 'pending',
         ], $overrides));
     }
 
@@ -58,9 +58,9 @@ class AdminPanelTest extends TestCase
         $this->makeApplication(['year_level' => '4th Year']);
         $this->actingAs($this->admin());
 
-        // 2 registrations × ₱50 fee = ₱100.00 expected revenue.
+        // 2 members × ₱50 fee = ₱100.00 expected revenue.
         Livewire::test(StatsOverview::class)
-            ->assertSee('Registrations (live)')
+            ->assertSee('Members')
             ->assertSee('Expected revenue')
             ->assertSee('₱100.00');
     }
@@ -87,6 +87,17 @@ class AdminPanelTest extends TestCase
             ->assertSee('Dela Cruz');
     }
 
+    public function test_member_edit_page_renders(): void
+    {
+        Storage::fake('supabase');
+        $application = $this->makeApplication();
+
+        $this->actingAs($this->admin())
+            ->get(ApplicationResource::getUrl('edit', ['record' => $application]))
+            ->assertOk()
+            ->assertSee('Dela Cruz');
+    }
+
     public function test_activity_log_page_renders(): void
     {
         $this->actingAs($this->admin())
@@ -94,14 +105,45 @@ class AdminPanelTest extends TestCase
             ->assertOk();
     }
 
-    public function test_recent_activities_widget_renders(): void
+    public function test_dashboard_chart_widgets_render(): void
     {
-        $this->makeApplication(); // creates a "registered" activity
+        $this->makeApplication();
         $this->actingAs($this->admin());
 
-        Livewire::test(RecentActivities::class)
+        Livewire::test(MembersByClass::class)->assertOk();
+        Livewire::test(RegistrationsOverTime::class)->assertOk();
+    }
+
+    public function test_deleted_members_are_hidden_from_the_members_list_by_default(): void
+    {
+        Storage::fake('supabase');
+        $active = $this->makeApplication(['surname' => 'Active']);
+        $deleted = $this->makeApplication(['surname' => 'Removed']);
+        $deleted->delete();
+
+        // Soft-deleted members are kept in the DB but no longer shown by default.
+        $this->actingAs($this->admin())
+            ->get(ApplicationResource::getUrl('index'))
             ->assertOk()
-            ->assertSee('Recent activity');
+            ->assertSee('Active')
+            ->assertDontSee('Removed');
+
+        $this->assertSoftDeleted('applications', ['id' => $deleted->id]);
+    }
+
+    public function test_deleted_member_can_be_restored(): void
+    {
+        Storage::fake('supabase');
+        $member = $this->makeApplication(['surname' => 'Removed']);
+        $member->delete();
+        $this->assertSoftDeleted('applications', ['id' => $member->id]);
+
+        // The "Undo delete" (restore) action brings the member back.
+        $member->restore();
+
+        $this->assertNotSoftDeleted('applications', ['id' => $member->id]);
+        $this->assertSame(1, Application::count());
+        $this->assertDatabaseHas('activity_logs', ['action' => 'restored']);
     }
 
     /* ------------------------------------------------------- model behavior */
@@ -113,14 +155,30 @@ class AdminPanelTest extends TestCase
         $this->assertDatabaseHas('activity_logs', ['action' => 'registered']);
     }
 
-    public function test_approving_updates_status_and_logs_activity(): void
+    public function test_editing_member_details_logs_an_update(): void
     {
         $application = $this->makeApplication();
 
-        $application->update(['status' => 'approved']);
+        $application->update(['phone' => '09998887777']);
 
-        $this->assertSame('approved', $application->fresh()->status);
-        $this->assertDatabaseHas('activity_logs', ['action' => 'approved']);
+        $this->assertSame('09998887777', $application->fresh()->phone);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'updated']);
+    }
+
+    public function test_full_name_uses_last_first_middle_format(): void
+    {
+        $member = $this->makeApplication(['surname' => 'Dela Cruz', 'given_name' => 'Juan', 'middle_initial' => 'S']);
+        $this->assertSame('Dela Cruz, Juan, S.', $member->full_name);
+
+        $noMiddle = $this->makeApplication(['surname' => 'Reyes', 'given_name' => 'Ana', 'middle_initial' => null]);
+        $this->assertSame('Reyes, Ana', $noMiddle->full_name);
+    }
+
+    public function test_class_code_accessor_combines_year_and_section(): void
+    {
+        $member = $this->makeApplication(['year_level' => '4th Year', 'section' => 'Section B']);
+
+        $this->assertSame('4B', $member->class_code);
     }
 
     public function test_deleting_soft_deletes_and_logs(): void
@@ -130,21 +188,23 @@ class AdminPanelTest extends TestCase
 
         $application->delete();
 
-        // Kept in the DB (Deleted tab), logged, and excluded from live counts.
+        // Kept in the DB (Deleted view), logged, and excluded from live counts.
         $this->assertSoftDeleted('applications', ['id' => $application->id]);
         $this->assertSame(1, Application::onlyTrashed()->count());
         $this->assertSame(0, Application::count());
         $this->assertDatabaseHas('activity_logs', ['action' => 'deleted']);
     }
 
-    public function test_force_delete_removes_record_and_logs(): void
+    public function test_restoring_logs_a_restore_not_an_update(): void
     {
         Storage::fake('supabase');
         $application = $this->makeApplication();
+        $application->delete();
 
-        $application->forceDelete();
+        $application->restore();
 
-        $this->assertDatabaseMissing('applications', ['id' => $application->id]);
-        $this->assertDatabaseHas('activity_logs', ['action' => 'force_deleted']);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'restored']);
+        // The restore() save() must not be mistaken for an admin edit.
+        $this->assertDatabaseMissing('activity_logs', ['action' => 'updated']);
     }
 }

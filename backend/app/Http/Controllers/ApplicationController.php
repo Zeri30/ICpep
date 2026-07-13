@@ -46,11 +46,10 @@ class ApplicationController extends Controller
             'phone'           => $validated['phone'],
             'signature_path'  => $signaturePath,
             'picture_path'    => $picturePath,
-            'status'          => 'pending',
         ]);
 
         return response()->json([
-            'message' => 'Application received',
+            'message' => 'Membership registered',
             'id'      => $application->id,
         ], 201);
     }
