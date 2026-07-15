@@ -16,6 +16,8 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -99,41 +101,78 @@ class ApplicationResource extends Resource
     {
         return $form
             ->schema([
+                // Field order and labels mirror the public membership form, so
+                // an officer reading a record sees it the way the applicant
+                // filled it in.
                 Forms\Components\Section::make('Member details')
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('surname')
+                            ->label('Surname')
                             ->required()
                             ->maxLength(100),
                         Forms\Components\TextInput::make('given_name')
-                            ->label('Given name')
+                            ->label('Given Name')
                             ->required()
                             ->maxLength(100),
                         Forms\Components\TextInput::make('middle_initial')
-                            ->label('Middle initial')
+                            ->label('Middle Initial')
+                            ->helperText('Optional, as on the public form.')
                             ->maxLength(1),
-                        Forms\Components\DatePicker::make('birthday')
-                            ->native(false)
-                            ->required(),
                         Forms\Components\Select::make('year_level')
-                            ->label('Year level')
+                            ->label('Year Level')
                             ->options(array_combine(self::YEAR_LEVELS, self::YEAR_LEVELS))
                             ->required(),
                         Forms\Components\Select::make('section')
+                            ->label('Section')
                             ->options(array_combine(self::SECTIONS, self::SECTIONS))
                             ->required(),
+                        Forms\Components\DatePicker::make('birthday')
+                            ->label('Birthday')
+                            ->native(false)
+                            ->required(),
+                        Forms\Components\Textarea::make('address')
+                            ->label('Address')
+                            ->required()
+                            ->rows(2)
+                            ->columnSpanFull(),
                         Forms\Components\TextInput::make('email')
+                            ->label('Email')
                             ->email()
                             ->required()
                             ->maxLength(150),
                         Forms\Components\TextInput::make('phone')
+                            ->label('Phone Number')
                             ->tel()
                             ->required()
                             ->maxLength(30),
-                        Forms\Components\Textarea::make('address')
-                            ->required()
-                            ->rows(2)
-                            ->columnSpanFull(),
+                    ]),
+                // Not part of the public form — this is the officers' record of
+                // the ₱50 fee, and it drives the dashboard's revenue figure.
+                Forms\Components\Section::make('Membership Fee')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\Toggle::make('is_paid')
+                            ->label('Paid')
+                            ->helperText(fn (): string => 'Adds '.config('icpep.currency_symbol')
+                                .number_format((float) config('icpep.membership_fee'), 0).' to the revenue total.')
+                            ->live()
+                            // The toggle is a view over paid_at, which stays the
+                            // single source of truth for status *and* date.
+                            ->afterStateHydrated(fn (Forms\Components\Toggle $component, ?Application $record) => $component->state((bool) $record?->paid_at))
+                            ->afterStateUpdated(function (bool $state, Forms\Set $set, ?Application $record): void {
+                                // Keep the original date when re-ticking a member
+                                // who was already paid, rather than stamping now.
+                                $set('paid_at', $state ? ($record?->paid_at ?? now()) : null);
+                            })
+                            ->dehydrated(false),
+                        Forms\Components\DateTimePicker::make('paid_at')
+                            ->label('Date paid')
+                            ->native(false)
+                            ->maxDate(now())
+                            ->placeholder('Not paid yet')
+                            ->helperText('Back-date this if the fee was collected earlier.')
+                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_paid')),
                     ]),
             ]);
     }
@@ -171,6 +210,14 @@ class ApplicationResource extends Resource
                 TextColumn::make('phone')
                     ->label('Phone')
                     ->toggleable(),
+                TextColumn::make('paid_at')
+                    ->label('Payment')
+                    ->badge()
+                    ->state(fn (Application $record): string => $record->is_paid ? 'Paid' : 'Unpaid')
+                    ->color(fn (Application $record): string => $record->is_paid ? 'success' : 'gray')
+                    ->icon(fn (Application $record): string => $record->is_paid ? 'heroicon-m-check-circle' : 'heroicon-m-clock')
+                    ->tooltip(fn (Application $record): ?string => $record->paid_at?->format('M j, Y g:i A'))
+                    ->sortable(),
                 TextColumn::make('created_at')
                     ->label('Registered')
                     ->dateTime('M j, Y g:i A')
@@ -188,6 +235,67 @@ class ApplicationResource extends Resource
                         [$year, $section] = self::CLASS_MAP[$value];
 
                         return $query->where('year_level', $year)->where('section', $section);
+                    }),
+                Tables\Filters\SelectFilter::make('payment')
+                    ->label('Payment')
+                    ->options([
+                        'paid' => 'Paid',
+                        'unpaid' => 'Unpaid',
+                    ])
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {
+                        'paid' => $query->paid(),
+                        'unpaid' => $query->unpaid(),
+                        default => $query,
+                    }),
+                // Narrow the list to a specific span — e.g. everyone who
+                // registered during an enrolment week, or who paid last month.
+                Tables\Filters\Filter::make('date_range')
+                    ->label('Date range')
+                    ->form([
+                        Forms\Components\Select::make('field')
+                            ->label('Date field')
+                            ->options([
+                                'created_at' => 'Registered',
+                                'paid_at' => 'Paid',
+                                'birthday' => 'Birthday',
+                            ])
+                            ->default('created_at')
+                            ->selectablePlaceholder(false),
+                        Forms\Components\DatePicker::make('from')
+                            ->label('From')
+                            ->native(false)
+                            ->maxDate(now()),
+                        Forms\Components\DatePicker::make('until')
+                            ->label('Until')
+                            ->native(false)
+                            ->maxDate(now()),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $field = in_array($data['field'] ?? null, ['created_at', 'paid_at', 'birthday'], true)
+                            ? $data['field']
+                            : 'created_at';
+
+                        return $query
+                            // whereDate keeps the bounds inclusive: a timestamp
+                            // column compared against a bare date would other-
+                            // wise drop everything after 00:00 on the end day.
+                            ->when($data['from'] ?? null, fn (Builder $q, $date): Builder => $q->whereDate($field, '>=', $date))
+                            ->when($data['until'] ?? null, fn (Builder $q, $date): Builder => $q->whereDate($field, '<=', $date));
+                    })
+                    ->indicateUsing(function (array $data): ?string {
+                        if (blank($data['from'] ?? null) && blank($data['until'] ?? null)) {
+                            return null;
+                        }
+
+                        $label = ['created_at' => 'Registered', 'paid_at' => 'Paid', 'birthday' => 'Birthday'][$data['field'] ?? 'created_at'] ?? 'Registered';
+                        $from = filled($data['from'] ?? null) ? Carbon::parse($data['from'])->format('M j, Y') : null;
+                        $until = filled($data['until'] ?? null) ? Carbon::parse($data['until'])->format('M j, Y') : null;
+
+                        return match (true) {
+                            $from && $until => "{$label}: {$from} – {$until}",
+                            (bool) $from => "{$label}: from {$from}",
+                            default => "{$label}: until {$until}",
+                        };
                     }),
                 Tables\Filters\TrashedFilter::make()
                     ->label('Deleted members')
@@ -207,6 +315,26 @@ class ApplicationResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading('Restore member')
                     ->modalDescription(fn (Application $record): string => "Restore {$record->full_name} back to the members list?"),
+                // Standalone: paying is the routine job, so it shouldn't be
+                // buried a click deep in the ⋯ menu.
+                Tables\Actions\Action::make('toggle_paid')
+                    ->label(fn (Application $record): string => $record->is_paid ? 'Mark as unpaid' : 'Mark as paid')
+                    ->tooltip(fn (Application $record): string => $record->is_paid ? 'Mark as unpaid' : 'Mark as paid')
+                    ->iconButton()
+                    ->icon(fn (Application $record): string => $record->is_paid ? 'heroicon-o-arrow-uturn-left' : 'heroicon-o-banknotes')
+                    ->color(fn (Application $record): string => $record->is_paid ? 'gray' : 'success')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (Application $record): string => $record->is_paid ? 'Mark as unpaid' : 'Mark as paid')
+                    ->modalDescription(function (Application $record): string {
+                        $fee = config('icpep.currency_symbol').number_format((float) config('icpep.membership_fee'), 0);
+
+                        return $record->is_paid
+                            ? "This removes {$fee} from the revenue total and clears {$record->full_name}'s payment date."
+                            : "This adds {$fee} to the revenue total and records today as {$record->full_name}'s payment date.";
+                    })
+                    ->action(fn (Application $record) => $record->update([
+                        'paid_at' => $record->is_paid ? null : now(),
+                    ])),
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ViewAction::make(),
                     Tables\Actions\EditAction::make(),
@@ -237,6 +365,28 @@ class ApplicationResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('mark_paid')
+                        ->label('Mark as paid')
+                        ->icon('heroicon-o-banknotes')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Mark as paid')
+                        ->modalDescription('Records today as the payment date for the selected members who have not paid yet. Members already marked paid keep their original date.')
+                        ->action(function (Collection $records): void {
+                            // Skip members already paid so a bulk run never
+                            // rewrites a payment date that is already on record.
+                            $records->whereNull('paid_at')->each->update(['paid_at' => now()]);
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('mark_unpaid')
+                        ->label('Mark as unpaid')
+                        ->icon('heroicon-o-arrow-uturn-left')
+                        ->color('gray')
+                        ->requiresConfirmation()
+                        ->modalHeading('Mark as unpaid')
+                        ->modalDescription('Clears the payment date for the selected members and removes their fees from the revenue total.')
+                        ->action(fn (Collection $records) => $records->whereNotNull('paid_at')->each->update(['paid_at' => null]))
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\DeleteBulkAction::make()
                         ->label('Delete'),
                     Tables\Actions\RestoreBulkAction::make()
@@ -252,23 +402,39 @@ class ApplicationResource extends Resource
     {
         return $infolist
             ->schema([
+                // Mirrors the public form's order, with the derived/system
+                // fields (class code, registered date) kept alongside.
                 InfoSection::make('Member')
                     ->columns(2)
                     ->schema([
-                        TextEntry::make('full_name')->label('Full name'),
+                        TextEntry::make('full_name')->label('Full Name'),
                         TextEntry::make('class_code')
                             ->label('Class')
                             ->badge()
                             ->color('primary'),
-                        TextEntry::make('year_level')->label('Year level'),
-                        TextEntry::make('section'),
-                        TextEntry::make('birthday')->date('F j, Y'),
+                        TextEntry::make('year_level')->label('Year Level'),
+                        TextEntry::make('section')->label('Section'),
+                        TextEntry::make('birthday')->label('Birthday')->date('F j, Y'),
                         TextEntry::make('created_at')->label('Registered')->dateTime('F j, Y g:i A'),
-                        TextEntry::make('email')->copyable()->icon('heroicon-o-envelope'),
-                        TextEntry::make('phone')->copyable()->icon('heroicon-o-phone'),
-                        TextEntry::make('address')->columnSpanFull(),
+                        TextEntry::make('address')->label('Address')->columnSpanFull(),
+                        TextEntry::make('email')->label('Email')->copyable()->icon('heroicon-o-envelope'),
+                        TextEntry::make('phone')->label('Phone Number')->copyable()->icon('heroicon-o-phone'),
                     ]),
-                InfoSection::make('Formal picture')
+                InfoSection::make('Membership Fee')
+                    ->columns(2)
+                    ->schema([
+                        TextEntry::make('paid_at')
+                            ->label('Status')
+                            ->badge()
+                            ->state(fn (Application $record): string => $record->is_paid ? 'Paid' : 'Unpaid')
+                            ->color(fn (Application $record): string => $record->is_paid ? 'success' : 'gray')
+                            ->icon(fn (Application $record): string => $record->is_paid ? 'heroicon-m-check-circle' : 'heroicon-m-clock'),
+                        TextEntry::make('paid_at')
+                            ->label('Date paid')
+                            ->placeholder('Not paid yet')
+                            ->dateTime('F j, Y g:i A'),
+                    ]),
+                InfoSection::make('Formal Picture')
                     ->schema([
                         ImageEntry::make('picture_path')
                             ->hiddenLabel()
@@ -277,7 +443,7 @@ class ApplicationResource extends Resource
                             ->checkFileExistence(false)
                             ->height(260),
                     ]),
-                InfoSection::make('E-signature')
+                InfoSection::make('E-Signature')
                     ->schema([
                         TextEntry::make('signature_path')
                             ->hiddenLabel()

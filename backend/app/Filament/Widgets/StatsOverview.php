@@ -22,7 +22,13 @@ class StatsOverview extends BaseWidget
         $live = Application::count();
         $thirdYear = Application::where('year_level', '3rd Year')->count();
         $fourthYear = Application::where('year_level', '4th Year')->count();
-        $revenue = $live * $fee;
+
+        // Derived from who has actually paid, never accumulated. Marking a member
+        // paid adds one fee here and unmarking removes it, with no stored total
+        // that could drift out of step with the members list.
+        $paid = Application::paid()->count();
+        $unpaid = $live - $paid;
+        $collected = $paid * $fee;
 
         return [
             Stat::make('Members', $live)
@@ -37,10 +43,13 @@ class StatsOverview extends BaseWidget
                 ->description('members')
                 ->descriptionIcon('heroicon-m-academic-cap')
                 ->color('info'),
-            Stat::make('Expected revenue', $symbol.number_format($revenue, 2))
-                ->description($symbol.number_format($fee, 0).' × '.$live.' members')
+            Stat::make('Revenue collected', $symbol.number_format($collected, 2))
+                ->description(
+                    $paid.' of '.$live.' paid'
+                    .($unpaid > 0 ? ' · '.$unpaid.' pending '.$symbol.number_format($unpaid * $fee, 0) : '')
+                )
                 ->descriptionIcon('heroicon-m-banknotes')
-                ->color('success'),
+                ->color($unpaid > 0 ? 'warning' : 'success'),
         ];
     }
 }

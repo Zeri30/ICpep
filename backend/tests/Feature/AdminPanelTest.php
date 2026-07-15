@@ -58,11 +58,33 @@ class AdminPanelTest extends TestCase
         $this->makeApplication(['year_level' => '4th Year']);
         $this->actingAs($this->admin());
 
-        // 2 members × ₱50 fee = ₱100.00 expected revenue.
+        // Revenue counts fees actually collected, so two unpaid members are ₱0.
         Livewire::test(StatsOverview::class)
             ->assertSee('Members')
-            ->assertSee('Expected revenue')
-            ->assertSee('₱100.00');
+            ->assertSee('Revenue collected')
+            ->assertSee('₱0.00')
+            ->assertSee('0 of 2 paid');
+    }
+
+    public function test_revenue_follows_who_has_paid(): void
+    {
+        $paid = $this->makeApplication(['year_level' => '3rd Year']);
+        $this->makeApplication(['year_level' => '4th Year']);
+        $this->actingAs($this->admin());
+
+        $paid->update(['paid_at' => now()]);
+
+        // 1 of 2 paid × ₱50 = ₱50.00 collected, ₱50 still pending.
+        Livewire::test(StatsOverview::class)
+            ->assertSee('₱50.00')
+            ->assertSee('1 of 2 paid');
+
+        // Reverting the payment takes the fee back out of the total.
+        $paid->update(['paid_at' => null]);
+
+        Livewire::test(StatsOverview::class)
+            ->assertSee('₱0.00')
+            ->assertSee('0 of 2 paid');
     }
 
     public function test_applications_list_renders(): void
