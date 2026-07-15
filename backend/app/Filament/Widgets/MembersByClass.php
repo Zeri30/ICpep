@@ -11,7 +11,7 @@ class MembersByClass extends ChartWidget
 
     protected static ?string $description = 'Live headcount per class (3A / 3B / 4A / 4B).';
 
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 3;
 
     protected static ?string $pollingInterval = '30s';
 

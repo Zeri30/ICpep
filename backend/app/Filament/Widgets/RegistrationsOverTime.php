@@ -12,7 +12,7 @@ class RegistrationsOverTime extends ChartWidget
 
     protected static ?string $description = 'New members per month (last 6 months).';
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 4;
 
     protected static ?string $pollingInterval = '30s';
 

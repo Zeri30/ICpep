@@ -7,6 +7,7 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use App\Filament\Widgets\MembersByClass;
+use App\Filament\Widgets\PaymentSummary;
 use App\Filament\Widgets\RegistrationsOverTime;
 use App\Filament\Widgets\StatsOverview;
 use Filament\Enums\ThemeMode;
@@ -67,8 +68,14 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 Dashboard::class,
             ])
+            // Registering a widget here also registers it as a Livewire
+            // component. A widget used only as a page's header widget still has
+            // to be listed: without it Livewire cannot resolve the component on
+            // its lazy-load request and reports the failure as a 419, which the
+            // browser shows as "This page has expired".
             ->widgets([
                 StatsOverview::class,
+                PaymentSummary::class,
                 MembersByClass::class,
                 RegistrationsOverTime::class,
             ])
