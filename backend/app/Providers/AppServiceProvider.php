@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Http\Responses\LogoutResponse;
 use App\Models\ActivityLog;
+use Filament\Http\Responses\Auth\Contracts\LogoutResponse as LogoutResponseContract;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\URL;
@@ -24,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
         // the panel — resolving its brand logo and favicon through asset() — in
         // its own register(), which would otherwise happen first.
         URL::forceRootUrl(config('app.url'));
+
+        // Sign-out returns to the public landing page rather than /admin/login.
+        $this->app->bind(LogoutResponseContract::class, LogoutResponse::class);
     }
 
     /**
