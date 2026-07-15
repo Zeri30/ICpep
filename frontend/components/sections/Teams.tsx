@@ -206,6 +206,21 @@ function TeamBlock({ team, index }: { team: Team; index: number }) {
   );
 }
 
+/* Soft accent glow centred on the stage — keeps each team's panel from
+   reading as flat black and carries that team's colour behind its content. */
+function TeamBloom({ accent }: { accent: string }) {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
+      <div
+        className="w-2xl aspect-square rounded-full"
+        style={{
+          background: `radial-gradient(circle, ${accent}2b 0%, ${accent}0f 38%, transparent 68%)`,
+        }}
+      />
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Desktop: pinned, sequential showcase — one team at a time, cross-faded by
    scroll (scrub). Mirrors the GSAP pin pattern used by the Events reel.
@@ -213,7 +228,9 @@ function TeamBlock({ team, index }: { team: Team; index: number }) {
 function ShowcasePanel({ team, index }: { team: Team; index: number }) {
   const members = team.roster.slice(0, MEMBERS_PER_TEAM);
   return (
-    <div className="mx-auto w-full max-w-6xl px-10 xl:px-16 grid grid-cols-[1fr_minmax(0,360px)] gap-16 xl:gap-24 items-center">
+    // `relative` so the panel paints above the bloom behind it — both are
+    // auto z-index, so the later positioned sibling wins.
+    <div className="relative mx-auto w-full max-w-6xl px-10 xl:px-16 grid grid-cols-[1fr_minmax(0,360px)] gap-16 xl:gap-24 items-center">
         {/* Identity */}
         <div className="min-w-0">
           <div className="flex items-center gap-4">
@@ -286,18 +303,27 @@ function TeamsShowcase() {
         const go = (target: number) => {
           if (target === index) return;
           const dir = target > index ? 1 : -1;
-          anim?.kill();
-          anim = gsap
-            .timeline()
-            .to(panels[index], { autoAlpha: 0, yPercent: -8 * dir, duration: 0.45, ease: "power3.inOut" }, 0)
-            .fromTo(
-              panels[target],
-              { autoAlpha: 0, yPercent: 8 * dir },
-              { autoAlpha: 1, yPercent: 0, duration: 0.45, ease: "power3.inOut" },
-              0
-            );
+          const from = index;
           index = target;
           setActive(target);
+
+          anim?.kill();
+          // Killing mid-flight freezes panels wherever they were, so any panel
+          // that isn't part of this transition must be forced hidden — otherwise
+          // one stranded at partial autoAlpha keeps painting over the stack.
+          panels.forEach((p, i) => {
+            if (i !== from && i !== target) gsap.set(p, { autoAlpha: 0 });
+          });
+          // Only drop the incoming panel to its offset start if it's fully
+          // hidden; mid-fade it's already on screen and a reset would flash.
+          if (gsap.getProperty(panels[target], "opacity") === 0) {
+            gsap.set(panels[target], { yPercent: 8 * dir });
+          }
+
+          anim = gsap
+            .timeline()
+            .to(panels[from], { autoAlpha: 0, yPercent: -8 * dir, duration: 0.45, ease: "power3.inOut" }, 0)
+            .to(panels[target], { autoAlpha: 1, yPercent: 0, duration: 0.45, ease: "power3.inOut" }, 0);
         };
 
         const st = ScrollTrigger.create({
@@ -344,6 +370,7 @@ function TeamsShowcase() {
             i === 0 ? "opacity-100 visible" : "opacity-0 invisible"
           }`}
         >
+          <TeamBloom accent={team.accent} />
           <ShowcasePanel team={team} index={i} />
         </div>
       ))}

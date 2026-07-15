@@ -26,7 +26,7 @@ export const NAV_LINKS = [
   { id: "board", label: "Board" },
   { id: "teams", label: "Teams" },
   { id: "events", label: "Events" },
-  { id: "gallery", label: "Gallery" },
+  // { id: "gallery", label: "Gallery" },  // hidden — no assets yet
   { id: "membership", label: "Membership" },
   { id: "faqs", label: "FAQs" },
   { id: "contact", label: "Contact" },
