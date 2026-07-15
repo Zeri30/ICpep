@@ -7,10 +7,7 @@ import SectionHeading from "@/components/ui/SectionHeading";
 import PresentationInner from "@/components/ui/PresentationInner";
 import FileDropField, { type FileDropValue } from "@/components/ui/FileDropField";
 import { SECTIONS, YEAR_LEVELS } from "@/lib/data";
-
-/* Base URL of the Laravel API that receives applications.
-   Configure it in .env.local as NEXT_PUBLIC_API_URL (e.g. http://localhost:8000). */
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 type FormStatus = "idle" | "submitting" | "success" | "error";
 

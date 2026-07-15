@@ -1,9 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, ChevronRight, Menu, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, ChevronDown, ChevronRight, LogIn, Menu, PenLine, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import Logo from "@/components/ui/Logo";
+import SignInModal from "@/components/ui/SignInModal";
 import { NAV_LINKS } from "@/lib/data";
 import { useActiveSection } from "@/lib/useActiveSection";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
@@ -14,6 +15,26 @@ export default function Navbar() {
   const active = useActiveSection(SECTION_IDS);
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
+  const joinRef = useRef<HTMLDivElement>(null);
+
+  // Close the Join Us dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!joinOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!joinRef.current?.contains(e.target as Node)) setJoinOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setJoinOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [joinOpen]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -78,14 +99,58 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            <motion.a
-              href="#membership"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              className="hidden sm:inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-xs font-head font-semibold uppercase tracking-widest text-white hover:bg-accent shadow-glow-sm hover:shadow-glow transition-all"
-            >
-              Join Us <ArrowRight size={14} />
-            </motion.a>
+            <div ref={joinRef} className="relative hidden sm:block">
+              <motion.button
+                onClick={() => setJoinOpen((v) => !v)}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                aria-haspopup="menu"
+                aria-expanded={joinOpen}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-xs font-head font-semibold uppercase tracking-widest text-white hover:bg-accent shadow-glow-sm hover:shadow-glow transition-all"
+              >
+                Join Us
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-200 ${joinOpen ? "rotate-180" : ""}`}
+                />
+              </motion.button>
+
+              <AnimatePresence>
+                {joinOpen && (
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.2, ease: easeOutExpo }}
+                    className="absolute right-0 mt-2 w-56 origin-top-right overflow-hidden rounded-md border border-line bg-card shadow-[0_20px_50px_rgba(0,0,0,0.6)]"
+                  >
+                    <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        setJoinOpen(false);
+                        setSignInOpen(true);
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-xs font-head font-semibold uppercase tracking-widest text-secondary-foreground hover:bg-primary/10 hover:text-primary-glow transition-colors"
+                    >
+                      <LogIn size={15} />
+                      Sign In
+                    </button>
+                    <span className="block h-px bg-line" />
+                    <a
+                      role="menuitem"
+                      href="#membership"
+                      onClick={() => setJoinOpen(false)}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-xs font-head font-semibold uppercase tracking-widest text-secondary-foreground hover:bg-primary/10 hover:text-primary-glow transition-colors"
+                    >
+                      <PenLine size={15} />
+                      Fill Form
+                    </a>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <button
               onClick={() => setOpen(true)}
               className="lg:hidden grid place-items-center w-11 h-11 rounded-md border border-line text-foreground hover:border-primary/50 hover:text-primary-glow transition-colors"
@@ -161,19 +226,30 @@ export default function Navbar() {
                   ))}
                 </ul>
               </nav>
-              <div className="p-6 border-t border-line">
+              <div className="p-6 border-t border-line space-y-3">
                 <a
                   href="#membership"
                   onClick={() => setOpen(false)}
                   className="flex items-center justify-center gap-2 w-full rounded-md bg-primary py-4 font-head font-semibold uppercase tracking-widest text-sm text-white shadow-glow"
                 >
-                  Join Us <ArrowRight size={16} />
+                  Fill Form <ArrowRight size={16} />
                 </a>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setSignInOpen(true);
+                  }}
+                  className="flex items-center justify-center gap-2 w-full rounded-md border border-line py-4 font-head font-semibold uppercase tracking-widest text-sm text-secondary-foreground hover:text-primary-glow hover:border-primary/50 transition-colors"
+                >
+                  <LogIn size={16} /> Sign In
+                </button>
               </div>
             </motion.aside>
           </>
         )}
       </AnimatePresence>
+
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
     </>
   );
 }
