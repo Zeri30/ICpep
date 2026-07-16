@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\ActivityLogResource;
 use App\Filament\Resources\ApplicationResource;
+use App\Filament\Resources\ApplicationResource\Pages\ListApplications;
 use App\Filament\Widgets\MembersByClass;
 use App\Filament\Widgets\RegistrationsOverTime;
 use App\Filament\Widgets\StatsOverview;
@@ -154,6 +155,36 @@ class AdminPanelTest extends TestCase
             ->assertDontSee('Removed');
 
         $this->assertSoftDeleted('applications', ['id' => $deleted->id]);
+    }
+
+    public function test_mark_all_as_paid_updates_only_filtered_unpaid_members(): void
+    {
+        Storage::fake('supabase');
+
+        // Two unpaid in 3A, one already paid in 3A (10 days ago), one in 4A.
+        $unpaidA = $this->makeApplication(['surname' => 'Aquino', 'email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A']);
+        $unpaidB = $this->makeApplication(['surname' => 'Bautista', 'email' => 'b@example.com', 'year_level' => '3rd Year', 'section' => 'Section A']);
+        $alreadyPaid = $this->makeApplication(['surname' => 'Cruz', 'email' => 'c@example.com', 'year_level' => '3rd Year', 'section' => 'Section A', 'paid_at' => now()->subDays(10)]);
+        $otherClass = $this->makeApplication(['surname' => 'Diaz', 'email' => 'd@example.com', 'year_level' => '4th Year', 'section' => 'Section A']);
+
+        $this->actingAs($this->admin());
+
+        Livewire::test(ListApplications::class)
+            ->filterTable('class', '3A')
+            ->callAction('mark_all_paid')
+            ->assertNotified('All filtered members marked as paid');
+
+        // Filtered unpaid members are now paid.
+        $this->assertNotNull($unpaidA->fresh()->paid_at);
+        $this->assertNotNull($unpaidB->fresh()->paid_at);
+        // Existing payment date is preserved, not rewritten to today.
+        $this->assertTrue($alreadyPaid->fresh()->paid_at->isSameDay(now()->subDays(10)));
+        // A member outside the active filter is untouched.
+        $this->assertNull($otherClass->fresh()->paid_at);
+        // Each change flows through the payment-logging path (a 'paid' entry +
+        // a ledger row), just like an individual toggle — not a silent mass update.
+        $this->assertDatabaseHas('activity_logs', ['action' => 'paid']);
+        $this->assertSame(2, \App\Models\PaymentTransaction::where('action', 'paid')->count());
     }
 
     public function test_deleted_member_can_be_restored(): void
