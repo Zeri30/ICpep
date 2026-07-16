@@ -16,17 +16,16 @@ const nextConfig: NextConfig = {
      public/ still wins. */
   async rewrites() {
     return [
-      { source: "/admin", destination: `${BACKEND}/admin` },
-      { source: "/admin/:path*", destination: `${BACKEND}/admin/:path*` },
+      // Auth (sign-in modal + admin sign-out) and the JSON admin API are proxied
+      // same-origin so the officer session cookie and CSRF token flow as the
+      // login already relies on.
       { source: "/auth/:path*", destination: `${BACKEND}/auth/:path*` },
-      // JSON admin API for the React admin — same-origin so the officer session
-      // cookie and CSRF token flow exactly as the /auth login already relies on.
       { source: "/api/admin/:path*", destination: `${BACKEND}/api/admin/:path*` },
-      { source: "/livewire/:path*", destination: `${BACKEND}/livewire/:path*` },
-      { source: "/js/filament/:path*", destination: `${BACKEND}/js/filament/:path*` },
-      { source: "/css/filament/:path*", destination: `${BACKEND}/css/filament/:path*` },
-      { source: "/images/:path*", destination: `${BACKEND}/images/:path*` },
-      { source: "/storage/:path*", destination: `${BACKEND}/storage/:path*` },
+      // NOTE: /admin is now served by this Next app (the React admin). The old
+      // /admin proxy to Filament was removed — an afterFiles rewrite for
+      // /admin/:path* runs before dynamic routes and would shadow pages like
+      // /admin/members/[id]. Filament stays reachable directly at the backend
+      // origin (localhost:8000/admin) until it's removed.
     ];
   },
 };
