@@ -4,20 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Clock, LayoutDashboard, Users, Wallet } from "lucide-react";
 import Logo from "@/components/ui/Logo";
+import { useAdminResource } from "@/lib/adminApi";
 
-export type NavItem = {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  badge?: number | null;
-};
+type Counts = { members: number; payments: number };
 
-const NAV: NavItem[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/members", label: "Members List", icon: Users },
-  { href: "/admin/payments", label: "Payment History", icon: Wallet },
-  { href: "/admin/activity", label: "Activity Log", icon: Clock },
-];
+const NAV = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null },
+  { href: "/admin/members", label: "Members List", icon: Users, badgeKey: "members" },
+  { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments" },
+  { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: null },
+] as const;
 
 export default function AdminSidebar({
   open,
@@ -27,6 +23,8 @@ export default function AdminSidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  // Live nav counts, refreshed like Filament's badges.
+  const { data: counts } = useAdminResource<Counts>("/counts", { pollMs: 30000 });
 
   const isActive = (href: string) =>
     href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
@@ -46,8 +44,9 @@ export default function AdminSidebar({
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map(({ href, label, icon: Icon, badge }) => {
+        {NAV.map(({ href, label, icon: Icon, badgeKey }) => {
           const active = isActive(href);
+          const badge = badgeKey ? counts?.[badgeKey] : null;
           return (
             <Link
               key={href}
