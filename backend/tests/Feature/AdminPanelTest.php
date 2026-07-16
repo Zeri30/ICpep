@@ -49,7 +49,10 @@ class AdminPanelTest extends TestCase
         $this->actingAs($this->admin())
             ->get('/admin')
             ->assertOk()
-            ->assertSee('Sign out');
+            ->assertSee('Sign out')
+            // The confirmation modal is rendered at BODY_END (out of the topbar
+            // stacking context); assert its content is on the page.
+            ->assertSee('You\'ll be returned to the sign-in page', false);
     }
 
     public function test_stats_widget_shows_live_numbers_and_revenue(): void

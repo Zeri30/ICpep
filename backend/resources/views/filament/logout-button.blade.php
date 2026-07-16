@@ -1,10 +1,11 @@
 {{-- Top-right of the admin: a greeting for the signed-in officer plus a
-     sign-out button behind a confirmation modal. Filament's own user menu is
-     hidden so there is a single, confirmed way to sign out.
+     sign-out button that opens a confirmation modal.
 
-     The confirmation is Filament's modal component rather than the browser's
-     confirm() — the native dialog is drawn by the OS and ignores the theme
-     entirely, which is exactly what made this corner look bolted on. --}}
+     The button lives in the topbar (USER_MENU_BEFORE), but the modal itself is
+     rendered at BODY_END — see logout-modal.blade.php. The topbar is its own
+     stacking context, so a modal nested here renders *behind* the page content
+     even at z-40; opening it by id from outside the topbar is what keeps it on
+     top. Filament's own user menu is hidden so there's one way to sign out. --}}
 <style>
     .fi-user-menu { display: none !important; }
 </style>
@@ -25,62 +26,13 @@
         </span>
     </div>
 
-    {{-- Lives outside the modal and is submitted by ID, so the confirm button
-         can post it without nesting a form inside the modal's footer. --}}
-    <form
-        id="icpep-logout-form"
-        method="POST"
-        action="{{ route('filament.admin.auth.logout') }}"
-        class="hidden"
-    >
-        @csrf
-    </form>
-
-    <x-filament::modal
-        id="icpep-confirm-logout"
+    <x-filament::button
+        color="gray"
+        size="sm"
         icon="heroicon-o-arrow-right-on-rectangle"
-        icon-color="danger"
-        alignment="center"
-        width="sm"
+        tooltip="Sign out"
+        x-on:click="$dispatch('open-modal', { id: 'icpep-confirm-logout' })"
     >
-        <x-slot name="trigger">
-            <x-filament::button
-                color="gray"
-                size="sm"
-                icon="heroicon-o-arrow-right-on-rectangle"
-                tooltip="Sign out"
-            >
-                Sign out
-            </x-filament::button>
-        </x-slot>
-
-        <x-slot name="heading">
-            Sign out
-        </x-slot>
-
-        <x-slot name="description">
-            You'll be returned to the sign-in page and will need your credentials to get back in.
-        </x-slot>
-
-        <x-slot name="footerActions">
-            {{-- form-id, not form: Filament maps the HTML form attribute from
-                 $formId, while $form is its Livewire loading-indicator target. --}}
-            <x-filament::button
-                type="submit"
-                form-id="icpep-logout-form"
-                color="danger"
-                icon="heroicon-o-arrow-right-on-rectangle"
-            >
-                Yes, sign out
-            </x-filament::button>
-
-            <x-filament::button
-                color="gray"
-                outlined
-                x-on:click="$dispatch('close-modal', { id: 'icpep-confirm-logout' })"
-            >
-                Cancel
-            </x-filament::button>
-        </x-slot>
-    </x-filament::modal>
+        Sign out
+    </x-filament::button>
 </div>
