@@ -110,10 +110,13 @@ export interface Officer {
   /** Optional designed portrait card (4:5). Falls back to the initials
       monogram when absent. */
   photo?: string;
+  /** Set when `photo` is a bare studio portrait rather than a designed card —
+      it carries no name/role artwork, so the board deck draws its own. */
+  plainPortrait?: boolean;
 }
 
 export const OFFICERS: Officer[] = [
-  { name: "Engr. Amanda Fe H. Abelardo", role: "Organization Adviser", detail: "Faculty Adviser · CCpE, MSCpE", initials: "AA", featured: true, photo: "/board/amanda-abelardo-photo.jpg" },
+  { name: "Engr. Amanda Fe H. Abelardo", role: "Organization Adviser", detail: "Faculty Adviser · CCpE, MSCpE", initials: "AA", featured: true, photo: "/board/amanda-abelardo-photo.jpg", plainPortrait: true },
   { name: "Archie R. Baltazar", role: "President", detail: "BS Computer Engineering – 4th Year", initials: "AB", photo: "/board/archie-baltazar.jpg" },
   { name: "Julia Mae D. Narne", role: "Vice President – External", detail: "BS Computer Engineering – 3rd Year", initials: "JN", photo: "/board/julia-mae-narne.jpg" },
   { name: "John Quelvin B. Rosales", role: "Vice President – Internal", detail: "BS Computer Engineering – 3rd Year", initials: "JR", photo: "/board/john-quelvin-rosales.jpg" },
