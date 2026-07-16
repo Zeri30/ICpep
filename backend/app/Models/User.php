@@ -16,13 +16,20 @@ class User extends Authenticatable implements FilamentUser
     use HasFactory, Notifiable;
 
     /**
-     * Only the configured admin email may access the Filament admin panel.
+     * Only the configured admin email may access the admin. The one rule lives
+     * here so Filament's panel gate and the JSON admin API agree on who's in.
      */
-    public function canAccessPanel(Panel $panel): bool
+    public function canAccessAdmin(): bool
     {
         $adminEmail = env('ADMIN_EMAIL');
 
         return $adminEmail ? $this->email === $adminEmail : true;
+    }
+
+    /** Filament's panel gate — defers to the single admin-access rule. */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->canAccessAdmin();
     }
 
     /**

@@ -12,3 +12,4 @@ Route::get('/', function () {
 // and the frontend reaches them through the /auth rewrites in next.config.ts.
 Route::get('/auth/csrf', [AdminAuthController::class, 'csrf']);
 Route::post('/auth/admin/login', [AdminAuthController::class, 'login']);
+Route::post('/auth/admin/logout', [AdminAuthController::class, 'logout']);

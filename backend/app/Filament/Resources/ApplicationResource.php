@@ -36,19 +36,6 @@ class ApplicationResource extends Resource
 
     protected static ?int $navigationSort = 1;
 
-    /** Year levels / sections offered on the public membership form. */
-    protected const YEAR_LEVELS = ['3rd Year', '4th Year'];
-
-    protected const SECTIONS = ['Section A', 'Section B'];
-
-    /** Combined "Year & Section" options (e.g. 3A) → [year_level, section]. */
-    protected const CLASS_MAP = [
-        '3A' => ['3rd Year', 'Section A'],
-        '3B' => ['3rd Year', 'Section B'],
-        '4A' => ['4th Year', 'Section A'],
-        '4B' => ['4th Year', 'Section B'],
-    ];
-
     /** Members are created by the public website form, never in the admin. */
     public static function canCreate(): bool
     {
@@ -121,11 +108,11 @@ class ApplicationResource extends Resource
                             ->maxLength(1),
                         Forms\Components\Select::make('year_level')
                             ->label('Year Level')
-                            ->options(array_combine(self::YEAR_LEVELS, self::YEAR_LEVELS))
+                            ->options(array_combine(Application::YEAR_LEVELS, Application::YEAR_LEVELS))
                             ->required(),
                         Forms\Components\Select::make('section')
                             ->label('Section')
-                            ->options(array_combine(self::SECTIONS, self::SECTIONS))
+                            ->options(array_combine(Application::SECTIONS, Application::SECTIONS))
                             ->required(),
                         Forms\Components\DatePicker::make('birthday')
                             ->label('Birthday')
@@ -226,15 +213,11 @@ class ApplicationResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('class')
                     ->label('Year & Section')
-                    ->options(array_combine(array_keys(self::CLASS_MAP), array_keys(self::CLASS_MAP)))
+                    ->options(array_combine(array_keys(Application::CLASS_MAP), array_keys(Application::CLASS_MAP)))
                     ->query(function (Builder $query, array $data): Builder {
                         $value = $data['value'] ?? null;
-                        if (! $value || ! isset(self::CLASS_MAP[$value])) {
-                            return $query;
-                        }
-                        [$year, $section] = self::CLASS_MAP[$value];
 
-                        return $query->where('year_level', $year)->where('section', $section);
+                        return $value ? $query->inClass($value) : $query;
                     }),
                 Tables\Filters\SelectFilter::make('payment')
                     ->label('Payment')

@@ -15,17 +15,9 @@ class MembersByClass extends ChartWidget
 
     protected static ?string $pollingInterval = '30s';
 
-    /** Year & section combinations, matching the Members List filter. */
-    private const CLASS_MAP = [
-        '3A' => ['3rd Year', 'Section A'],
-        '3B' => ['3rd Year', 'Section B'],
-        '4A' => ['4th Year', 'Section A'],
-        '4B' => ['4th Year', 'Section B'],
-    ];
-
     protected function getData(): array
     {
-        $counts = collect(self::CLASS_MAP)->map(
+        $counts = collect(Application::CLASS_MAP)->map(
             fn (array $c): int => Application::where('year_level', $c[0])
                 ->where('section', $c[1])
                 ->count()
@@ -40,7 +32,7 @@ class MembersByClass extends ChartWidget
                     'borderRadius' => 6,
                 ],
             ],
-            'labels' => array_keys(self::CLASS_MAP),
+            'labels' => array_keys(Application::CLASS_MAP),
         ];
     }
 

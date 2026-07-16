@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentTransactionResource\Pages;
+use App\Models\Application;
 use App\Models\PaymentTransaction;
 use Filament\Forms;
 use Filament\Resources\Resource;
@@ -25,9 +26,6 @@ class PaymentTransactionResource extends Resource
     protected static ?string $pluralModelLabel = 'payment history';
 
     protected static ?int $navigationSort = 2;
-
-    /** Year & Section options offered on the public membership form. */
-    protected const SECTIONS = ['Section A', 'Section B'];
 
     /**
      * The ledger is written by Application's model events. Letting it be created,
@@ -150,7 +148,7 @@ class PaymentTransactionResource extends Resource
 
                 Tables\Filters\SelectFilter::make('section')
                     ->label('Section')
-                    ->options(array_combine(self::SECTIONS, self::SECTIONS)),
+                    ->options(array_combine(Application::SECTIONS, Application::SECTIONS)),
 
                 Tables\Filters\Filter::make('date_range')
                     ->form([

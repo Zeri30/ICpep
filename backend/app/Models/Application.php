@@ -13,6 +13,19 @@ class Application extends Model
 {
     use SoftDeletes;
 
+    /** Year levels / sections offered on the public membership form. */
+    public const YEAR_LEVELS = ['3rd Year', '4th Year'];
+
+    public const SECTIONS = ['Section A', 'Section B'];
+
+    /** Combined "Year & Section" codes (e.g. 3A) → [year_level, section]. */
+    public const CLASS_MAP = [
+        '3A' => ['3rd Year', 'Section A'],
+        '3B' => ['3rd Year', 'Section B'],
+        '4A' => ['4th Year', 'Section A'],
+        '4B' => ['4th Year', 'Section B'],
+    ];
+
     /** Log activity on key lifecycle events, and clean up files on permanent delete. */
     protected static function booted(): void
     {
@@ -136,6 +149,23 @@ class Application extends Model
             'section' => $this->section,
             'note' => $note,
         ]);
+    }
+
+    /**
+     * Narrow to a combined year+section code (e.g. "3A"). An unknown code is a
+     * no-op, so a bad filter value never silently empties the list.
+     *
+     * @param  Builder<Application>  $query
+     */
+    public function scopeInClass(Builder $query, string $code): Builder
+    {
+        if (! isset(self::CLASS_MAP[$code])) {
+            return $query;
+        }
+
+        [$year, $section] = self::CLASS_MAP[$code];
+
+        return $query->where('year_level', $year)->where('section', $section);
     }
 
     /** @param  Builder<Application>  $query */

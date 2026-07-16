@@ -69,6 +69,20 @@ class AdminAuthController extends Controller
         return response()->json(['redirect' => Filament::getPanel('admin')->getUrl()]);
     }
 
+    /**
+     * Sign the officer out and hand back the landing-page URL, mirroring the
+     * Filament panel's logout (session invalidated, CSRF token regenerated,
+     * returned to the public site). Safe to call even without a live session.
+     */
+    public function logout(Request $request): JsonResponse
+    {
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['redirect' => config('app.frontend_url')]);
+    }
+
     private function throttleKey(Request $request, string $email): string
     {
         return 'admin-login|'.Str::lower($email).'|'.$request->ip();
