@@ -26,20 +26,21 @@ function FeaturedEvent() {
               <Zap size={12} /> Featured Event
             </Badge>
             <h3 className="font-display font-black text-3xl md:text-4xl uppercase leading-tight">
-              ICPEP Programming <span className="text-primary text-glow-red">Month 2025</span>
+              ICPEP <span className="text-primary text-glow-red">CPE Week 2025</span>
             </h3>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <span className="flex items-center gap-2 text-foreground">
-                <Calendar size={16} className="text-primary" /> November 3–28, 2025
+                <Calendar size={16} className="text-primary" /> November 3–7, 2025
               </span>
               <span className="flex items-center gap-2 text-foreground">
                 <MapPin size={16} className="text-primary" /> BulSU Meneses Campus
               </span>
             </div>
             <p className="mt-5 text-secondary-foreground leading-relaxed max-w-xl">
-              A month-long arena of code: weekly workshops, a campus-wide hackathon, the Algorithm Arena
-              finals, and an awarding night celebrating the best builds of the year. Open to all Computer
-              Engineering students — beginners get trained, veterans get challenged.
+              A week-long celebration showcasing the skills, talents, and creativity of Computer
+              Engineering students through a lineup of activities and competitions. It closes with CPE
+              Night — a themed social celebration exclusively for CPE students, with a fresh theme each
+              year — building camaraderie, school spirit, and student engagement.
             </p>
             <div className="mt-7">
               <CtaButton href="#membership">
@@ -227,7 +228,7 @@ export default function Events() {
         <SectionHeading
           kicker="What's Happening"
           title="Events"
-          sub="From weekly workshops to campus-wide competitions — there is always something on the ICPEP calendar."
+          sub="Throughout the academic year, ICPEP hosts seminars, competitions, workshops, and special celebrations that promote learning, engagement, and community within the Computer Engineering program."
         />
         <FeaturedEvent />
       </div>
