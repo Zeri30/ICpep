@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Public Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | The Next.js public site (the landing page). It's a separate origin from
+    | the Laravel admin, so officers are returned here after signing out.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

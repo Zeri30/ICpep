@@ -20,9 +20,9 @@ class LogoutResponse implements Responsable
 {
     public function toResponse($request): RedirectResponse
     {
-        // APP_URL is the origin the site is actually browsed on (the Next
-        // frontend, which proxies /admin through), so this lands on the
-        // landing page in both dev and production.
-        return redirect()->to(config('app.url'));
+        // The public landing page lives on the Next frontend, a separate origin
+        // from the admin — so send officers there, not to APP_URL (the Laravel
+        // backend, whose "/" is just the framework welcome page).
+        return redirect()->to(config('app.frontend_url'));
     }
 }
