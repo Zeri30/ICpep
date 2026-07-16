@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\PaymentTransaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
 
@@ -21,6 +22,15 @@ class DashboardController extends Controller
             'paymentSummary' => $this->paymentSummary(),
             'membersByClass' => $this->membersByClass(),
             'registrationsOverTime' => $this->registrationsOverTime(),
+        ]);
+    }
+
+    /** Live counts for the sidebar nav badges (members, payment records). */
+    public function counts(): JsonResponse
+    {
+        return response()->json([
+            'members' => Application::count(),
+            'payments' => PaymentTransaction::count(),
         ]);
     }
 

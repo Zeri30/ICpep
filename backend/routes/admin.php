@@ -22,6 +22,7 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/me', [MeController::class, 'show'])->name('me');
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
 
     Route::get('/members', [MemberController::class, 'index'])->name('members.index');
     Route::post('/members/bulk', [MemberController::class, 'bulk'])->name('members.bulk');

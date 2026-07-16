@@ -65,6 +65,16 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('meta.classOptions', ['3A', '3B', '4A', '4B']);
     }
 
+    public function test_login_returns_the_react_admin_url(): void
+    {
+        $admin = $this->admin();
+        $admin->forceFill(['password' => bcrypt('secret1234')])->save();
+
+        $this->postJson('/auth/admin/login', ['email' => $admin->email, 'password' => 'secret1234'])
+            ->assertOk()
+            ->assertJsonPath('redirect', rtrim(config('app.frontend_url'), '/').'/admin');
+    }
+
     public function test_logout_clears_the_session_and_returns_landing(): void
     {
         $this->actingAs($this->admin())

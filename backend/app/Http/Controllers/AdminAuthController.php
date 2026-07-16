@@ -66,7 +66,8 @@ class AdminAuthController extends Controller
         RateLimiter::clear($key);
         $request->session()->regenerate();
 
-        return response()->json(['redirect' => Filament::getPanel('admin')->getUrl()]);
+        // Land officers in the React admin on the public site's own origin.
+        return response()->json(['redirect' => rtrim(config('app.frontend_url'), '/').'/admin']);
     }
 
     /**
