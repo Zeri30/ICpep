@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Hash;
 class AdminUserSeeder extends Seeder
 {
     /**
-     * Create (or update) the admin account used to log into the Filament admin
-     * panel. Credentials come from .env (ADMIN_EMAIL / ADMIN_PASSWORD) so they
-     * are never committed to source control.
+     * Create (or update) the admin account used to sign into the admin.
+     * Credentials come from .env (ADMIN_EMAIL / ADMIN_PASSWORD) so they are
+     * never committed to source control.
      */
     public function run(): void
     {

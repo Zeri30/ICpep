@@ -4,32 +4,24 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
-use Filament\Models\Contracts\FilamentUser;
-use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
-     * Only the configured admin email may access the admin. The one rule lives
-     * here so Filament's panel gate and the JSON admin API agree on who's in.
+     * Only the configured admin email may access the admin — enforced by the
+     * EnsureAdmin middleware on the JSON admin API.
      */
     public function canAccessAdmin(): bool
     {
         $adminEmail = env('ADMIN_EMAIL');
 
         return $adminEmail ? $this->email === $adminEmail : true;
-    }
-
-    /** Filament's panel gate — defers to the single admin-access rule. */
-    public function canAccessPanel(Panel $panel): bool
-    {
-        return $this->canAccessAdmin();
     }
 
     /**

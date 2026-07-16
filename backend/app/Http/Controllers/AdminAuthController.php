@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Filament\Facades\Filament;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -52,10 +51,10 @@ class AdminAuthController extends Controller
             return response()->json(['message' => 'Those credentials do not match our records.'], 422);
         }
 
-        // Mirror the panel's own gate: a valid password is not enough if the
-        // account is not permitted into the admin. Without this we would leave
-        // behind a signed-in session for someone Filament would turn away.
-        if (! Auth::user()->canAccessPanel(Filament::getPanel('admin'))) {
+        // A valid password is not enough if the account is not permitted into
+        // the admin — otherwise we would leave a signed-in session behind for
+        // someone EnsureAdmin would turn away on the next request.
+        if (! Auth::user()->canAccessAdmin()) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             RateLimiter::hit($key, self::DECAY_SECONDS);
