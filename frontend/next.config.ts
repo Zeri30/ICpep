@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
       { source: "/admin", destination: `${BACKEND}/admin` },
       { source: "/admin/:path*", destination: `${BACKEND}/admin/:path*` },
       { source: "/auth/:path*", destination: `${BACKEND}/auth/:path*` },
+      // JSON admin API for the React admin — same-origin so the officer session
+      // cookie and CSRF token flow exactly as the /auth login already relies on.
+      { source: "/api/admin/:path*", destination: `${BACKEND}/api/admin/:path*` },
       { source: "/livewire/:path*", destination: `${BACKEND}/livewire/:path*` },
       { source: "/js/filament/:path*", destination: `${BACKEND}/js/filament/:path*` },
       { source: "/css/filament/:path*", destination: `${BACKEND}/css/filament/:path*` },
