@@ -174,4 +174,83 @@ class AdminApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.action', 'registered');
     }
+
+    /* ---------------------------------------------------------- member writes */
+
+    public function test_toggle_paid_flips_state_and_logs(): void
+    {
+        $member = $this->makeApplication();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
+        $this->assertNotNull($member->fresh()->paid_at);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'paid']);
+        $this->assertDatabaseHas('payment_transactions', ['application_id' => $member->id, 'action' => 'paid']);
+
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
+        $this->assertNull($member->fresh()->paid_at);
+    }
+
+    public function test_update_edits_details_and_logs_an_update(): void
+    {
+        $member = $this->makeApplication();
+
+        $this->actingAs($this->admin())
+            ->patchJson("/api/admin/members/{$member->id}", [
+                'surname' => 'Reyes',
+                'givenName' => 'Ana',
+                'middleInitial' => null,
+                'yearLevel' => '4th Year',
+                'section' => 'Section B',
+                'birthday' => '2003-05-05',
+                'address' => '9 New St',
+                'email' => 'ana@example.com',
+                'phone' => '09990001111',
+                'paidAt' => null,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.fullName', 'Reyes, Ana');
+
+        $this->assertDatabaseHas('activity_logs', ['action' => 'updated']);
+    }
+
+    public function test_delete_soft_deletes_and_restore_brings_back(): void
+    {
+        $member = $this->makeApplication();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->deleteJson("/api/admin/members/{$member->id}")->assertOk();
+        $this->assertSoftDeleted('applications', ['id' => $member->id]);
+
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/restore")->assertOk();
+        $this->assertNotSoftDeleted('applications', ['id' => $member->id]);
+    }
+
+    public function test_bulk_mark_paid_preserves_existing_dates(): void
+    {
+        $unpaid = $this->makeApplication(['email' => 'u@example.com']);
+        $paid = $this->makeApplication(['email' => 'p@example.com', 'paid_at' => now()->subDays(5)]);
+
+        $this->actingAs($this->admin())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'paid'])
+            ->assertOk()
+            ->assertJsonPath('count', 2);
+
+        $this->assertNotNull($unpaid->fresh()->paid_at);
+        $this->assertTrue($paid->fresh()->paid_at->isSameDay(now()->subDays(5)));
+    }
+
+    public function test_mark_all_paid_respects_posted_filters(): void
+    {
+        $a = $this->makeApplication(['email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A']);
+        $other = $this->makeApplication(['email' => 'o@example.com', 'year_level' => '4th Year', 'section' => 'Section A']);
+
+        $this->actingAs($this->admin())
+            ->postJson('/api/admin/members/mark-all-paid', ['class' => '3A'])
+            ->assertOk()
+            ->assertJsonPath('count', 1);
+
+        $this->assertNotNull($a->fresh()->paid_at);
+        $this->assertNull($other->fresh()->paid_at);
+    }
 }
