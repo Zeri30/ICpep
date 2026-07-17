@@ -24,7 +24,7 @@ function StatsBar() {
               }`}
             >
               <p className="font-display font-bold text-3xl md:text-4xl text-primary text-glow-red tabular-nums">
-                <CountUp end={s.end} suffix={s.suffix} prefix={s.prefix} />
+                <CountUp end={s.end} suffix={s.suffix} prefix={s.prefix} grouped={s.grouped} />
               </p>
               <p className="mt-2 font-head uppercase tracking-[0.25em] text-xs text-secondary-foreground">
                 {s.label}

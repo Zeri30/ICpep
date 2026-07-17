@@ -7,6 +7,8 @@ interface CountUpProps {
   suffix?: string;
   prefix?: string;
   duration?: number;
+  /** Group thousands with separators (e.g. 2,019). Off for years. */
+  grouped?: boolean;
 }
 
 /** Animates from 0 to `end` when scrolled into view (once). */
@@ -15,6 +17,7 @@ export default function CountUp({
   suffix = "",
   prefix = "",
   duration = 2000,
+  grouped = true,
 }: CountUpProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const started = useRef(false);
@@ -49,7 +52,7 @@ export default function CountUp({
   return (
     <span ref={ref}>
       {prefix}
-      {val.toLocaleString()}
+      {grouped ? val.toLocaleString() : String(val)}
       {suffix}
     </span>
   );

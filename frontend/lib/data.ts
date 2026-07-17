@@ -39,12 +39,13 @@ export const STATS: {
   end: number;
   suffix?: string;
   prefix?: string;
+  grouped?: boolean;
   label: string;
 }[] = [
   { end: 215, label: "Members" },
   { end: 6, label: "Teams" },
   { end: 20, suffix: "+", label: "Events" },
-  { end: 2019, prefix: "Est. ", label: "Established" },
+  { end: 2019, grouped: false, label: "Established" },
 ];
 
 /* ---------------------------------------------------------------------------
