@@ -14,9 +14,11 @@ export default function SignOutButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-md border border-line px-3.5 py-2 font-head text-xs font-semibold uppercase tracking-widest text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+        aria-label="Sign out"
+        title="Sign out"
+        className="grid size-10 place-items-center rounded-md border border-line text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground"
       >
-        <LogOut size={14} /> Sign out
+        <LogOut size={16} />
       </button>
 
       <ConfirmDialog

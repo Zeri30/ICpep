@@ -48,11 +48,28 @@ export type PaymentRow = {
   note: string | null;
 };
 
+export type AdminUser = {
+  id: number;
+  name: string;
+  username: string | null;
+  email: string;
+  role: string | null;
+  roleLabel: string | null;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string | null;
+  /** True on the signed-in officer's own row — used to disable self-actions. */
+  isSelf: boolean;
+};
+
 export type ActivityRow = {
   id: number;
   action: string;
   description: string;
   actor: string | null;
+  actorRole: string | null;
+  actorRoleLabel: string | null;
+  ipAddress: string | null;
   applicant: string | null;
   createdAt: string | null;
 };
@@ -66,10 +83,13 @@ export type DashboardData = {
     fourthYear: number;
     paid: number;
     unpaid: number;
-    revenue: number;
-    pendingRevenue: number;
+    // Peso figures are null for roles without finance access.
+    revenue: number | null;
+    pendingRevenue: number | null;
   };
-  paymentSummary: { today: SummaryCell; week: SummaryCell; month: SummaryCell };
+  // Null for non-finance roles.
+  paymentSummary: { today: SummaryCell; week: SummaryCell; month: SummaryCell } | null;
   membersByClass: { labels: string[]; data: number[] };
   registrationsOverTime: { labels: string[]; data: number[] };
+  canViewFinance: boolean;
 };

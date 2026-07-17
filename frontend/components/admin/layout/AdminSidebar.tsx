@@ -2,18 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clock, LayoutDashboard, Users, Wallet } from "lucide-react";
+import { Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from "lucide-react";
 import Logo from "@/components/ui/Logo";
+import { useAdmin } from "@/components/admin/AdminProvider";
 import { useAdminResource } from "@/lib/adminApi";
 
-type Counts = { members: number; payments: number };
+import type { Permission } from "@/lib/adminApi";
 
+type Counts = { members: number; payments: number; users: number };
+
+// `need` is the permission required to see the item (null = any active admin).
 const NAV = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null },
-  { href: "/admin/members", label: "Members List", icon: Users, badgeKey: "members" },
-  { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments" },
-  { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: null },
-] as const;
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null, need: null },
+  { href: "/admin/members", label: "Members List", icon: Users, badgeKey: "members", need: "members.view" },
+  { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments", need: "finance.view" },
+  { href: "/admin/users", label: "User Management", icon: ShieldCheck, badgeKey: "users", need: "users.manage" },
+  { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: null, need: null },
+] as const satisfies ReadonlyArray<{
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  badgeKey: "members" | "payments" | "users" | null;
+  need: Permission | null;
+}>;
 
 export default function AdminSidebar({
   open,
@@ -23,8 +34,13 @@ export default function AdminSidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const { can } = useAdmin();
   // Live nav counts, refreshed like Filament's badges.
   const { data: counts } = useAdminResource<Counts>("/counts", { pollMs: 30000 });
+
+  // Only show modules the officer's role can reach; the backend enforces the
+  // same rule regardless, so hidden modules are also inaccessible by URL.
+  const nav = NAV.filter((item) => item.need === null || can(item.need));
 
   const isActive = (href: string) =>
     href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
@@ -44,7 +60,7 @@ export default function AdminSidebar({
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map(({ href, label, icon: Icon, badgeKey }) => {
+        {nav.map(({ href, label, icon: Icon, badgeKey }) => {
           const active = isActive(href);
           const badge = badgeKey ? counts?.[badgeKey] : null;
           return (

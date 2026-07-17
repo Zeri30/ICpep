@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -51,6 +52,8 @@ class MemberController extends Controller
 
     public function update(Request $request, Application $application): MemberResource
     {
+        Gate::authorize('members.edit');
+
         $data = $request->validate([
             'surname' => ['required', 'string', 'max:100'],
             'givenName' => ['required', 'string', 'max:100'],
@@ -64,7 +67,7 @@ class MemberController extends Controller
             'paidAt' => ['nullable', 'date'],
         ]);
 
-        $application->update([
+        $attributes = [
             'surname' => $data['surname'],
             'given_name' => $data['givenName'],
             'middle_initial' => $data['middleInitial'] ?? null,
@@ -74,8 +77,16 @@ class MemberController extends Controller
             'address' => $data['address'],
             'email' => $data['email'],
             'phone' => $data['phone'],
-            'paid_at' => $data['paidAt'] ?? null,
-        ]);
+        ];
+
+        // Payment status is a separate, financial permission. An editor without
+        // it can't change paid state through the edit form — the existing date
+        // is preserved regardless of what the payload carries.
+        if (Gate::allows('members.payment')) {
+            $attributes['paid_at'] = $data['paidAt'] ?? null;
+        }
+
+        $application->update($attributes);
 
         return (new MemberResource($application->fresh()))->withFiles();
     }
@@ -83,6 +94,8 @@ class MemberController extends Controller
     /** Flip paid state. Marking records today; unmarking clears the date. */
     public function togglePaid(Application $application): MemberResource
     {
+        Gate::authorize('members.payment');
+
         $application->update(['paid_at' => $application->is_paid ? null : now()]);
 
         return new MemberResource($application->fresh());
@@ -90,6 +103,8 @@ class MemberController extends Controller
 
     public function destroy(Application $application): JsonResponse
     {
+        Gate::authorize('members.edit');
+
         $application->delete();
 
         return response()->json(['ok' => true]);
@@ -97,6 +112,8 @@ class MemberController extends Controller
 
     public function restore(Application $application): MemberResource
     {
+        Gate::authorize('members.edit');
+
         if ($application->trashed()) {
             $application->restore();
         }
@@ -112,6 +129,9 @@ class MemberController extends Controller
             'ids.*' => ['integer'],
             'action' => ['required', Rule::in(['paid', 'unpaid', 'delete', 'restore'])],
         ]);
+
+        // Payment actions and edit actions are separate permissions.
+        Gate::authorize(in_array($data['action'], ['paid', 'unpaid'], true) ? 'members.payment' : 'members.edit');
 
         $members = Application::withTrashed()->whereIn('id', $data['ids'])->get();
 
@@ -130,6 +150,8 @@ class MemberController extends Controller
     /** Mark every member the current filters are showing (and still unpaid) as paid. */
     public function markAllPaid(Request $request): JsonResponse
     {
+        Gate::authorize('members.payment');
+
         $members = $this->filtered($request)->whereNull('paid_at')->get();
         $count = $members->count();
         $members->each->update(['paid_at' => now()]);

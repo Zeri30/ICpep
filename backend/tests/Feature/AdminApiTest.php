@@ -16,9 +16,16 @@ class AdminApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** The bootstrap Programming Team account (full non-financial + user mgmt). */
     private function admin(): User
     {
-        return User::factory()->create(['email' => env('ADMIN_EMAIL', 'admin@example.com')]);
+        return User::factory()->programmingTeam()->create(['email' => env('ADMIN_EMAIL', 'admin@example.com')]);
+    }
+
+    /** A Treasurer — the role that may touch payments and financial modules. */
+    private function treasurer(): User
+    {
+        return User::factory()->treasurer()->create();
     }
 
     private function makeApplication(array $overrides = []): Application
@@ -47,11 +54,11 @@ class AdminApiTest extends TestCase
         $this->getJson('/api/admin/members')->assertUnauthorized();
     }
 
-    public function test_non_admin_account_is_forbidden(): void
+    public function test_deactivated_account_is_forbidden(): void
     {
-        $outsider = User::factory()->create(['email' => 'someone-else@example.com']);
+        $deactivated = User::factory()->inactive()->create(['email' => 'someone-else@example.com']);
 
-        $this->actingAs($outsider)->getJson('/api/admin/me')->assertForbidden();
+        $this->actingAs($deactivated)->getJson('/api/admin/me')->assertForbidden();
     }
 
     public function test_me_returns_officer_and_meta(): void
@@ -92,7 +99,8 @@ class AdminApiTest extends TestCase
         $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now()]);
         $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year']);
 
-        $this->actingAs($this->admin())
+        // Revenue is only returned to finance roles.
+        $this->actingAs($this->treasurer())
             ->getJson('/api/admin/dashboard')
             ->assertOk()
             ->assertJsonPath('stats.members', 2)
@@ -167,7 +175,8 @@ class AdminApiTest extends TestCase
         // Marking paid writes a 'paid' ledger row via the model event.
         $this->makeApplication(['section' => 'Section A'])->update(['paid_at' => now()]);
 
-        $this->actingAs($this->admin())
+        // Payment History is a financial module — Treasurer roles only.
+        $this->actingAs($this->treasurer())
             ->getJson('/api/admin/payments?action=paid')
             ->assertOk()
             ->assertJsonCount(1, 'data')
@@ -190,7 +199,7 @@ class AdminApiTest extends TestCase
     public function test_toggle_paid_flips_state_and_logs(): void
     {
         $member = $this->makeApplication();
-        $admin = $this->admin();
+        $admin = $this->treasurer();
 
         $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
         $this->assertNotNull($member->fresh()->paid_at);
@@ -241,7 +250,7 @@ class AdminApiTest extends TestCase
         $unpaid = $this->makeApplication(['email' => 'u@example.com']);
         $paid = $this->makeApplication(['email' => 'p@example.com', 'paid_at' => now()->subDays(5)]);
 
-        $this->actingAs($this->admin())
+        $this->actingAs($this->treasurer())
             ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'paid'])
             ->assertOk()
             ->assertJsonPath('count', 2);
@@ -255,7 +264,7 @@ class AdminApiTest extends TestCase
         $a = $this->makeApplication(['email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A']);
         $other = $this->makeApplication(['email' => 'o@example.com', 'year_level' => '4th Year', 'section' => 'Section A']);
 
-        $this->actingAs($this->admin())
+        $this->actingAs($this->treasurer())
             ->postJson('/api/admin/members/mark-all-paid', ['class' => '3A'])
             ->assertOk()
             ->assertJsonPath('count', 1);

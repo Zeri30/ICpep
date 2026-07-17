@@ -15,6 +15,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // The real Programming Team account, from .env credentials.
         $this->call(AdminUserSeeder::class);
+        // One ready-to-use account per role (shared default password).
+        $this->call(RoleAccountsSeeder::class);
     }
 }

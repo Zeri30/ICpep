@@ -8,9 +8,6 @@ export type MemberFilters = {
   class: string;
   payment: string;
   trashed: string;
-  dateField: string;
-  from: string;
-  until: string;
 };
 
 export const EMPTY_FILTERS: MemberFilters = {
@@ -18,9 +15,6 @@ export const EMPTY_FILTERS: MemberFilters = {
   class: "",
   payment: "",
   trashed: "",
-  dateField: "created_at",
-  from: "",
-  until: "",
 };
 
 const selectCls =
@@ -36,8 +30,7 @@ export default function MembersFilters({
   const { meta } = useAdmin();
   const set = (patch: Partial<MemberFilters>) => onChange({ ...value, ...patch });
 
-  const dirty =
-    value.search || value.class || value.payment || value.trashed || value.from || value.until;
+  const dirty = value.search || value.class || value.payment || value.trashed;
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
@@ -59,27 +52,15 @@ export default function MembersFilters({
       </select>
 
       <select value={value.payment} onChange={(e) => set({ payment: e.target.value })} className={selectCls} aria-label="Payment">
-        <option value="">Any payment</option>
+        <option value="">All payment</option>
         <option value="paid">Paid</option>
         <option value="unpaid">Unpaid</option>
       </select>
 
       <select value={value.trashed} onChange={(e) => set({ trashed: e.target.value })} className={selectCls} aria-label="Trashed">
         <option value="">Active members</option>
-        <option value="with">With deleted</option>
-        <option value="only">Only deleted</option>
+        <option value="only">Deleted members</option>
       </select>
-
-      <div className="flex items-center gap-1.5">
-        <select value={value.dateField} onChange={(e) => set({ dateField: e.target.value })} className={selectCls} aria-label="Date field">
-          <option value="created_at">Registered</option>
-          <option value="paid_at">Paid</option>
-          <option value="birthday">Birthday</option>
-        </select>
-        <input type="date" value={value.from} onChange={(e) => set({ from: e.target.value })} className={selectCls} aria-label="From" />
-        <span className="text-muted-foreground">–</span>
-        <input type="date" value={value.until} onChange={(e) => set({ until: e.target.value })} className={selectCls} aria-label="Until" />
-      </div>
 
       {dirty && (
         <button

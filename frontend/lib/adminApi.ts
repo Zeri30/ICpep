@@ -12,7 +12,27 @@ import { useCallback, useEffect, useState } from "react";
 
 const API_BASE = "/api/admin";
 
-export type Officer = { name: string; email: string };
+export type RoleOption = { value: string; label: string };
+
+/** The ability strings the backend Gates on (see App\Enums\Permission). */
+export type Permission =
+  | "members.view"
+  | "members.edit"
+  | "members.payment"
+  | "finance.view"
+  | "users.manage";
+
+export type Officer = {
+  name: string;
+  username: string | null;
+  email: string;
+  role: string | null;
+  roleLabel: string | null;
+  /** True for roles allowed into User Management (Programming Team / President). */
+  canManageUsers: boolean;
+  /** The abilities this officer's role grants — the UI gates modules/actions on these. */
+  permissions: Permission[];
+};
 
 export type AdminMeta = {
   fee: number;
@@ -20,6 +40,7 @@ export type AdminMeta = {
   classOptions: string[];
   sections: string[];
   yearLevels: string[];
+  roles: RoleOption[];
 };
 
 export type Me = { user: Officer; meta: AdminMeta };

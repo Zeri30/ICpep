@@ -5,7 +5,7 @@
    server layout's /api/admin/me fetch, so the client never re-requests them. */
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import type { AdminMeta, Officer } from "@/lib/adminApi";
+import type { AdminMeta, Officer, Permission } from "@/lib/adminApi";
 import Toaster, { type Toast, type ToastTone } from "@/components/admin/ui/Toaster";
 
 type AdminContextValue = {
@@ -13,6 +13,8 @@ type AdminContextValue = {
   meta: AdminMeta;
   /** Format an amount with the configured currency symbol. */
   money: (amount: number) => string;
+  /** Does the signed-in officer hold the given ability? Mirrors the backend Gates. */
+  can: (permission: Permission) => boolean;
   notify: (title: string, opts?: { body?: string; tone?: ToastTone }) => void;
 };
 
@@ -51,9 +53,14 @@ export default function AdminProvider({
     [meta.currency],
   );
 
+  const can = useCallback<AdminContextValue["can"]>(
+    (permission) => officer.permissions.includes(permission),
+    [officer.permissions],
+  );
+
   const value = useMemo(
-    () => ({ officer, meta, money, notify }),
-    [officer, meta, money, notify],
+    () => ({ officer, meta, money, can, notify }),
+    [officer, meta, money, can, notify],
   );
 
   return (

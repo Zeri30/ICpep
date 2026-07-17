@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\PaymentTransaction;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * The dashboard's four widgets in one payload: headline stats, the
@@ -17,11 +19,17 @@ class DashboardController extends Controller
 {
     public function index(): JsonResponse
     {
+        // Money figures (revenue and the payment summary) are only returned to
+        // roles that may access the financial modules; everyone else gets the
+        // membership counts and charts. The frontend hides the same cards.
+        $canFinance = Gate::allows('finance.view');
+
         return response()->json([
-            'stats' => $this->stats(),
-            'paymentSummary' => $this->paymentSummary(),
+            'stats' => $this->stats($canFinance),
+            'paymentSummary' => $canFinance ? $this->paymentSummary() : null,
             'membersByClass' => $this->membersByClass(),
             'registrationsOverTime' => $this->registrationsOverTime(),
+            'canViewFinance' => $canFinance,
         ]);
     }
 
@@ -31,11 +39,12 @@ class DashboardController extends Controller
         return response()->json([
             'members' => Application::count(),
             'payments' => PaymentTransaction::count(),
+            'users' => User::count(),
         ]);
     }
 
     /** Members / 3rd / 4th / revenue — derived from current state, never accumulated. */
-    private function stats(): array
+    private function stats(bool $canFinance): array
     {
         $fee = (float) config('icpep.membership_fee');
 
@@ -48,8 +57,9 @@ class DashboardController extends Controller
             'fourthYear' => Application::where('year_level', '4th Year')->count(),
             'paid' => $paid,
             'unpaid' => $live - $paid,
-            'revenue' => $paid * $fee,
-            'pendingRevenue' => ($live - $paid) * $fee,
+            // Peso figures are financial — null them out for non-finance roles.
+            'revenue' => $canFinance ? $paid * $fee : null,
+            'pendingRevenue' => $canFinance ? ($live - $paid) * $fee : null,
         ];
     }
 

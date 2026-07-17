@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +22,17 @@ class MeController extends Controller
         return response()->json([
             'user' => [
                 'name' => $user->name,
+                'username' => $user->username,
                 'email' => $user->email,
+                'role' => $user->role?->value,
+                'roleLabel' => $user->role?->label(),
+                'canManageUsers' => $user->canManageUsers(),
+                // The ability strings the UI gates modules and actions on — the
+                // same values the backend Gates enforce.
+                'permissions' => array_map(
+                    fn ($p): string => $p->value,
+                    $user->role?->permissions() ?? [],
+                ),
             ],
             'meta' => [
                 'fee' => (float) config('icpep.membership_fee'),
@@ -29,6 +40,7 @@ class MeController extends Controller
                 'classOptions' => array_keys(Application::CLASS_MAP),
                 'sections' => Application::SECTIONS,
                 'yearLevels' => Application::YEAR_LEVELS,
+                'roles' => UserRole::options(),
             ],
         ]);
     }

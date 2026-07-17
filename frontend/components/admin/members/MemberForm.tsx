@@ -53,7 +53,8 @@ export default function MemberForm({ id }: { id: string }) {
 
 function EditForm({ id, member }: { id: string; member: Member }) {
   const router = useRouter();
-  const { meta, notify } = useAdmin();
+  const { meta, notify, can } = useAdmin();
+  const canPay = can("members.payment");
   const [form, setForm] = useState<FormState>(() => ({
     surname: member.surname,
     givenName: member.givenName,
@@ -133,6 +134,7 @@ function EditForm({ id, member }: { id: string; member: Member }) {
           </div>
         </section>
 
+        {canPay && (
         <section className="rounded-xl border border-line bg-card p-6">
           <h2 className="mb-5 font-display text-sm font-bold uppercase tracking-widest text-primary">Membership Fee</h2>
           <label className="flex items-center gap-3">
@@ -149,6 +151,7 @@ function EditForm({ id, member }: { id: string; member: Member }) {
             </div>
           )}
         </section>
+        )}
 
         {formError && <p className="text-sm text-red-400">{formError}</p>}
 

@@ -16,7 +16,11 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 class ActivityController extends Controller
 {
-    private const ACTIONS = ['registered', 'updated', 'deleted', 'restored', 'login'];
+    private const ACTIONS = [
+        'registered', 'updated', 'deleted', 'restored', 'login', 'paid', 'unpaid',
+        // User Management.
+        'user_created', 'user_updated', 'user_activated', 'user_deactivated', 'user_deleted', 'password_reset',
+    ];
 
     public function index(Request $request): AnonymousResourceCollection
     {

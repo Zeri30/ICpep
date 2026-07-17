@@ -48,7 +48,10 @@ function PaymentPill({ paid }: { paid: boolean }) {
 }
 
 export default function MembersList() {
-  const { notify } = useAdmin();
+  const { notify, can } = useAdmin();
+  const canEdit = can("members.edit");
+  const canPay = can("members.payment");
+  const canSelect = canEdit || canPay; // any bulk action needs one of these
 
   const [filters, setFilters] = useState<MemberFilters>(EMPTY_FILTERS);
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -70,11 +73,6 @@ export default function MembersList() {
     if (filters.class) p.set("class", filters.class);
     if (filters.payment) p.set("payment", filters.payment);
     if (filters.trashed) p.set("trashed", filters.trashed);
-    if (filters.from || filters.until) {
-      p.set("dateField", filters.dateField);
-      if (filters.from) p.set("from", filters.from);
-      if (filters.until) p.set("until", filters.until);
-    }
     if (sort) {
       p.set("sort", sort.key);
       p.set("direction", sort.direction);
@@ -103,9 +101,6 @@ export default function MembersList() {
     class: filters.class,
     payment: filters.payment,
     trashed: filters.trashed,
-    dateField: filters.dateField,
-    from: filters.from,
-    until: filters.until,
     search: debouncedSearch,
   });
 
@@ -165,19 +160,23 @@ export default function MembersList() {
   /* ------------------------------------------------------------- columns */
 
   const columns: Column<Member>[] = [
-    {
-      key: "select",
-      header: "",
-      render: (m) => (
-        <input
-          type="checkbox"
-          checked={selected.has(m.id)}
-          onChange={() => toggleOne(m.id)}
-          className="size-4 accent-primary"
-          aria-label={`Select ${m.fullName}`}
-        />
-      ),
-    },
+    ...(canSelect
+      ? [
+          {
+            key: "select",
+            header: "",
+            render: (m: Member) => (
+              <input
+                type="checkbox"
+                checked={selected.has(m.id)}
+                onChange={() => toggleOne(m.id)}
+                className="size-4 accent-primary"
+                aria-label={`Select ${m.fullName}`}
+              />
+            ),
+          },
+        ]
+      : []),
     {
       key: "photo",
       header: "Photo",
@@ -214,27 +213,32 @@ export default function MembersList() {
       align: "right",
       render: (m) =>
         m.deletedAt ? (
-          <button
-            onClick={() => setConfirm({ kind: "restore", member: m })}
-            title="Undo delete"
-            className="grid size-8 place-items-center rounded-md text-green-400 transition-colors hover:bg-green-500/10"
-          >
-            <RotateCcw size={16} />
-          </button>
+          canEdit ? (
+            <button
+              onClick={() => setConfirm({ kind: "restore", member: m })}
+              title="Undo delete"
+              className="grid size-8 place-items-center rounded-md text-green-400 transition-colors hover:bg-green-500/10"
+            >
+              <RotateCcw size={16} />
+            </button>
+          ) : null
         ) : (
           <div className="flex items-center justify-end gap-1">
-            <button
-              onClick={() => togglePaid(m)}
-              title={m.isPaid ? "Mark as unpaid" : "Mark as paid"}
-              className={`grid size-8 place-items-center rounded-md transition-colors ${m.isPaid ? "text-muted-foreground hover:bg-white/5" : "text-green-400 hover:bg-green-500/10"}`}
-            >
-              {m.isPaid ? <RotateCcw size={16} /> : <Banknote size={16} />}
-            </button>
+            {canPay && (
+              <button
+                onClick={() => togglePaid(m)}
+                title={m.isPaid ? "Mark as unpaid" : "Mark as paid"}
+                className={`grid size-8 place-items-center rounded-md transition-colors ${m.isPaid ? "text-muted-foreground hover:bg-white/5" : "text-green-400 hover:bg-green-500/10"}`}
+              >
+                {m.isPaid ? <RotateCcw size={16} /> : <Banknote size={16} />}
+              </button>
+            )}
             <RowMenu
               open={menuFor === m.id}
               onOpen={() => setMenuFor(m.id)}
               onClose={() => setMenuFor(null)}
               member={m}
+              canEdit={canEdit}
               onDelete={() => setConfirm({ kind: "delete", member: m })}
             />
           </div>
@@ -246,12 +250,14 @@ export default function MembersList() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Members List</h1>
-        <button
-          onClick={() => setConfirm({ kind: "markAll" })}
-          className="inline-flex items-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-3.5 py-2 text-sm font-semibold text-green-400 transition-colors hover:bg-green-500/20"
-        >
-          <Banknote size={16} /> Mark all as paid
-        </button>
+        {canPay && (
+          <button
+            onClick={() => setConfirm({ kind: "markAll" })}
+            className="inline-flex items-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-3.5 py-2 text-sm font-semibold text-green-400 transition-colors hover:bg-green-500/20"
+          >
+            <Banknote size={16} /> Mark all as paid
+          </button>
+        )}
       </div>
 
       <MembersFilters value={filters} onChange={changeFilters} />
@@ -260,20 +266,22 @@ export default function MembersList() {
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm">
           <span className="font-medium text-foreground">{selected.size} selected</span>
           <div className="mx-1 h-4 w-px bg-line" />
-          <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "paid" })}>Mark paid</BulkBtn>
-          <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "unpaid" })}>Mark unpaid</BulkBtn>
-          <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "delete" })} tone="danger">Delete</BulkBtn>
-          {showRestoreBulk && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "restore" })}>Undo delete</BulkBtn>}
+          {canPay && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "paid" })}>Mark paid</BulkBtn>}
+          {canPay && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "unpaid" })}>Mark unpaid</BulkBtn>}
+          {canEdit && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "delete" })} tone="danger">Delete</BulkBtn>}
+          {canEdit && showRestoreBulk && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "restore" })}>Undo delete</BulkBtn>}
           <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-muted-foreground hover:text-foreground">
             Clear
           </button>
         </div>
       )}
 
-      <div className="flex items-center gap-2 px-1">
-        <input type="checkbox" checked={allChecked} onChange={toggleAll} className="size-4 accent-primary" aria-label="Select all" />
-        <span className="text-xs text-muted-foreground">Select all on this page</span>
-      </div>
+      {canSelect && (
+        <div className="flex items-center gap-2 px-1">
+          <input type="checkbox" checked={allChecked} onChange={toggleAll} className="size-4 accent-primary" aria-label="Select all" />
+          <span className="text-xs text-muted-foreground">Select all on this page</span>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -350,12 +358,14 @@ function RowMenu({
   onOpen,
   onClose,
   member,
+  canEdit,
   onDelete,
 }: {
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
   member: Member;
+  canEdit: boolean;
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -380,18 +390,22 @@ function RowMenu({
           <Link href={`/admin/members/${member.id}`} className={item} onClick={onClose}>
             <Eye size={15} /> View
           </Link>
-          <Link href={`/admin/members/${member.id}/edit`} className={item} onClick={onClose}>
-            <Pencil size={15} /> Edit
-          </Link>
+          {canEdit && (
+            <Link href={`/admin/members/${member.id}/edit`} className={item} onClick={onClose}>
+              <Pencil size={15} /> Edit
+            </Link>
+          )}
           <a href={`/api/admin/members/${member.id}/download/picture`} className={item} onClick={onClose}>
             <Download size={15} /> Download photo
           </a>
           <a href={`/api/admin/members/${member.id}/download/signature`} className={item} onClick={onClose}>
             <Download size={15} /> Download signature
           </a>
-          <button onClick={() => { onClose(); onDelete(); }} className={`${item} text-red-400 hover:text-red-300`}>
-            <Trash2 size={15} /> Delete
-          </button>
+          {canEdit && (
+            <button onClick={() => { onClose(); onDelete(); }} className={`${item} text-red-400 hover:text-red-300`}>
+              <Trash2 size={15} /> Delete
+            </button>
+          )}
         </div>
       )}
     </div>

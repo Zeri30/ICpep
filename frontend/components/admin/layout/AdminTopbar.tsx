@@ -20,7 +20,7 @@ export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
       <div className="ml-auto flex items-center gap-4">
         <div className="hidden flex-col items-end leading-tight sm:flex">
           <span className="font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Welcome back
+            {officer.roleLabel ?? "Welcome back"}
           </span>
           <span className="text-sm font-semibold text-foreground">{officer.name}</span>
         </div>

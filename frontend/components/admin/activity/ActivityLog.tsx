@@ -22,6 +22,13 @@ const ACTION_CLS: Record<string, string> = {
   deleted: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
   updated: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   login: "border-line bg-white/5 text-secondary-foreground",
+  // User Management.
+  user_created: "border-green-500/30 bg-green-500/10 text-green-400",
+  user_activated: "border-green-500/30 bg-green-500/10 text-green-400",
+  user_updated: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+  password_reset: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+  user_deactivated: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
+  user_deleted: "border-red-500/30 bg-red-500/10 text-red-400",
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -55,7 +62,17 @@ export default function ActivityLog() {
     { key: "when", header: "When", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.createdAt)}</span> },
     { key: "action", header: "Action", render: (r) => <ActionBadge action={r.action} /> },
     { key: "description", header: "Description", render: (r) => <span className="text-foreground">{r.description}</span> },
-    { key: "actor", header: "By", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "—"}</span> },
+    {
+      key: "actor",
+      header: "By",
+      render: (r) => (
+        <div className="leading-tight">
+          <p className="text-secondary-foreground">{r.actor ?? "—"}</p>
+          {r.actorRoleLabel && <p className="text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
+        </div>
+      ),
+    },
+    { key: "ip", header: "IP", render: (r) => <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{r.ipAddress ?? "—"}</span> },
   ];
 
   return (
@@ -69,10 +86,22 @@ export default function ActivityLog() {
         </div>
         <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className={selectCls} aria-label="Action">
           <option value="">All actions</option>
-          <option value="registered">Registered</option>
-          <option value="updated">Edited</option>
-          <option value="deleted">Deleted</option>
-          <option value="restored">Restored</option>
+          <optgroup label="Members">
+            <option value="registered">Registered</option>
+            <option value="updated">Edited</option>
+            <option value="deleted">Deleted</option>
+            <option value="restored">Restored</option>
+            <option value="paid">Paid</option>
+            <option value="unpaid">Unpaid</option>
+          </optgroup>
+          <optgroup label="User management">
+            <option value="user_created">User created</option>
+            <option value="user_updated">User edited</option>
+            <option value="user_activated">User activated</option>
+            <option value="user_deactivated">User deactivated</option>
+            <option value="user_deleted">User deleted</option>
+            <option value="password_reset">Password reset</option>
+          </optgroup>
           <option value="login">Login</option>
         </select>
       </div>
