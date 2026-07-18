@@ -9,10 +9,12 @@ import type { Me } from "@/lib/adminApi";
    page unless it comes back OK — so unauthenticated visitors never see the
    admin, with no client-side flash. Force IPv4 for the server-to-server call
    so it doesn't stall on an IPv6 localhost that the dev server isn't bound to. */
-const BACKEND = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(
-  "localhost",
-  "127.0.0.1",
-);
+const BACKEND = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000")
+  .replace("localhost", "127.0.0.1")
+  // Trim any trailing slash so `${BACKEND}/api/...` can't produce a `//api/...`
+  // path — the backend 404s the double slash, which would bounce every signed-in
+  // officer back to the landing page.
+  .replace(/\/+$/, "");
 
 export const dynamic = "force-dynamic";
 

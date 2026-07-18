@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
-/* Origin of the Laravel app that actually renders the admin. */
-const BACKEND = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/* Origin of the Laravel app that actually renders the admin. Trailing slashes are
+   trimmed so rewrite destinations can't become `//auth/...` or `//api/...`. */
+const BACKEND = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(
+  /\/+$/,
+  "",
+);
 
 const nextConfig: NextConfig = {
   /* Serve the Laravel/Filament admin under this origin, so /admin stays on the
