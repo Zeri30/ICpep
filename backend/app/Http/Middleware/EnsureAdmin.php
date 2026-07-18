@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,11 +18,14 @@ class EnsureAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! Auth::guard('web')->check()) {
+        /** @var User|null $user */
+        $user = Auth::guard('web')->user();
+
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        if (! Auth::guard('web')->user()->canAccessAdmin()) {
+        if (! $user->canAccessAdmin()) {
             return response()->json(['message' => 'This account cannot access the admin.'], 403);
         }
 
