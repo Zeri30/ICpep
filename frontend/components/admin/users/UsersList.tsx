@@ -21,6 +21,7 @@ import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import UsersFilters, { EMPTY_USER_FILTERS, type UserFilters } from "@/components/admin/users/UsersFilters";
+import NewUserModal from "@/components/admin/users/NewUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -32,7 +33,9 @@ type Confirm =
   | null;
 
 // The two roles that can manage administrator accounts get the accent badge.
-const MANAGER_ROLES = new Set(["programming_team", "president"]);
+/* Roles that can manage accounts, highlighted in the table. Mirrors the
+   users.manage grant in App\Enums\UserRole. */
+const MANAGER_ROLES = new Set(["programming_team"]);
 
 function RoleBadge({ user }: { user: AdminUser }) {
   const isManager = user.role ? MANAGER_ROLES.has(user.role) : false;
@@ -65,6 +68,7 @@ function StatusPill({ active }: { active: boolean }) {
 export default function UsersList() {
   const { notify } = useAdmin();
 
+  const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState<UserFilters>(EMPTY_USER_FILTERS);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "createdAt", direction: "desc" });
@@ -184,23 +188,27 @@ export default function UsersList() {
   ];
 
   return (
-    <div className="space-y-5">
+    // Fills the space below the topbar and scrolls rows internally — see
+    // MembersList for the height maths.
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">User Management</h1>
           <p className="mt-1 text-sm text-muted-foreground">Administrator accounts and their access.</p>
         </div>
-        <Link
-          href="/admin/users/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent"
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent sm:w-auto"
         >
           <UserPlus size={16} /> New administrator
-        </Link>
+        </button>
       </div>
 
       <UsersFilters value={filters} onChange={changeFilters} />
 
       <DataTable
+        fill
         columns={columns}
         rows={rows}
         rowKey={(u) => u.id}
@@ -210,9 +218,8 @@ export default function UsersList() {
         onSort={onSort}
         emptyHeading="No administrators found"
         emptyDescription="Try clearing the filters, or add a new administrator account."
+        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
       />
-
-      {data && <Pagination meta={data.meta} onPage={setPage} />}
 
       {/* Confirmations */}
       <ConfirmDialog
@@ -242,6 +249,12 @@ export default function UsersList() {
         tone="danger"
         onConfirm={confirmAction}
         onClose={() => setConfirm(null)}
+      />
+
+      <NewUserModal
+        open={creating}
+        onCreated={refresh}
+        onClose={() => setCreating(false)}
       />
 
       <ResetPasswordModal
