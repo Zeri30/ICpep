@@ -57,12 +57,15 @@ class RbacTest extends TestCase
         }
     }
 
-    public function test_only_managers_reach_user_management(): void
+    public function test_only_the_programming_team_reaches_user_management(): void
     {
         $this->actingAs($this->acting(UserRole::ProgrammingTeam))->getJson('/api/admin/users')->assertOk();
-        $this->actingAs($this->acting(UserRole::President))->getJson('/api/admin/users')->assertOk();
 
-        foreach ([UserRole::Adviser, UserRole::Treasurer, UserRole::Secretary, UserRole::Bod] as $role) {
+        foreach (UserRole::cases() as $role) {
+            if ($role === UserRole::ProgrammingTeam) {
+                continue;
+            }
+
             $this->actingAs($this->acting($role))->getJson('/api/admin/users')->assertForbidden();
         }
     }

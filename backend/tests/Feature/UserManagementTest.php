@@ -17,7 +17,7 @@ class UserManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Programming Team — one of the two roles that may manage accounts. */
+    /** Programming Team — the only role that may manage accounts. */
     private function manager(): User
     {
         return User::factory()->programmingTeam()->create();

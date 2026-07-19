@@ -28,6 +28,12 @@ enum Permission: string
     /** Reach User Management and manage administrator accounts. */
     case ManageUsers = 'users.manage';
 
+    /**
+     * Roll the membership cycle over: create a semester's membership list, make
+     * one the current list, and open or close the public registration form.
+     */
+    case ManageTerms = 'terms.manage';
+
     public function label(): string
     {
         return match ($this) {
@@ -36,6 +42,7 @@ enum Permission: string
             self::UpdatePayment => 'Update payment status',
             self::AccessFinance => 'Access financial modules',
             self::ManageUsers => 'Manage administrator accounts',
+            self::ManageTerms => 'Manage membership lists and registration',
         };
     }
 }

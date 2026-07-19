@@ -30,8 +30,8 @@ class AdminUserSeeder extends Seeder
                 'name' => env('ADMIN_NAME', 'ICpEP.SE Admin'),
                 'username' => env('ADMIN_USERNAME', 'admin'),
                 'password' => Hash::make($password),
-                // The bootstrap account belongs to the Programming Team — one of
-                // the two roles that can manage the other officer accounts.
+                // The bootstrap account belongs to the Programming Team — the
+                // only role that can manage the other officer accounts.
                 'role' => \App\Enums\UserRole::ProgrammingTeam,
                 'is_active' => true,
                 'email_verified_at' => now(),

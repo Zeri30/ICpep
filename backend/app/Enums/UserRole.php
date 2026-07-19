@@ -49,15 +49,27 @@ enum UserRole: string
     public function permissions(): array
     {
         return match ($this) {
-            // Full non-financial access, plus managing officer accounts.
-            self::ProgrammingTeam, self::President => [
+            // Full non-financial access, plus managing officer accounts. Account
+            // management is deliberately limited to this one role: officers who
+            // need an account created, edited or reset go through them.
+            self::ProgrammingTeam => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
                 Permission::ManageUsers,
+                Permission::ManageTerms,
             ],
-            // Full non-financial access; cannot manage accounts.
-            self::Adviser, self::Vpea, self::Vpia,
-            self::Secretary, self::AssistantSecretary => [
+            // The executive roles. Same member access as the other editors, plus
+            // control of the membership cycle — creating each semester's list and
+            // opening/closing the public registration form. The Programming Team
+            // shares it so a technical fault can be acted on without waiting for
+            // an officer.
+            self::President, self::Vpea, self::Vpia => [
+                Permission::ViewMembers,
+                Permission::EditMembers,
+                Permission::ManageTerms,
+            ],
+            // Full non-financial access; cannot manage accounts or the cycle.
+            self::Adviser, self::Secretary, self::AssistantSecretary => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
             ],
