@@ -67,22 +67,23 @@ export default function ActivityLog() {
       header: "By",
       render: (r) => (
         <div className="leading-tight">
-          <p className="text-secondary-foreground">{r.actor ?? "—"}</p>
+          <p className="whitespace-nowrap font-medium text-foreground">{r.actorName ?? r.actor ?? "—"}</p>
           {r.actorRoleLabel && <p className="text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
         </div>
       ),
     },
-    { key: "ip", header: "IP", render: (r) => <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{r.ipAddress ?? "—"}</span> },
   ];
 
   return (
-    <div className="space-y-5">
+    // Fills the space below the topbar and scrolls rows internally — see
+    // MembersList for the height maths.
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
       <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Activity Log</h1>
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search description or officer…" className={`${selectCls} w-64 pl-9`} />
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search description or officer…" className={`${selectCls} w-full pl-9 sm:w-64`} />
         </div>
         <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className={selectCls} aria-label="Action">
           <option value="">All actions</option>
@@ -107,14 +108,15 @@ export default function ActivityLog() {
       </div>
 
       <DataTable
+        fill
         columns={columns}
         rows={data?.data ?? []}
         rowKey={(r) => r.id}
         loading={loading && !data}
         error={error}
         emptyHeading="No activity yet"
+        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
       />
-      {data && <Pagination meta={data.meta} onPage={setPage} />}
     </div>
   );
 }

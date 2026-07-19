@@ -37,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(Login::class, function (Login $event): void {
             ActivityLog::create([
                 'actor' => $event->user->email ?? null,
+                'actor_name' => $event->user->name ?? null,
                 'actor_role' => $event->user->role?->value,
                 'ip_address' => request()?->ip(),
                 'action' => 'login',

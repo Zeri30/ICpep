@@ -33,12 +33,15 @@ class ActivityController extends Controller
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('description', 'like', "%{$search}%")
+                    // The name is what the table shows, so it has to be what
+                    // the search matches; email stays searchable behind it.
+                    ->orWhere('actor_name', 'like', "%{$search}%")
                     ->orWhere('actor', 'like', "%{$search}%");
             });
         }
 
-        $perPage = (int) $request->integer('perPage', 25);
-        $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
+        $perPage = (int) $request->integer('perPage', 20);
+        $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 20;
 
         return ActivityLogResource::collection($query->paginate($perPage)->withQueryString());
     }
