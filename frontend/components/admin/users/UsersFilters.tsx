@@ -27,13 +27,13 @@ export default function UsersFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
-      <div className="relative">
+      <div className="relative w-full sm:w-auto">
         <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <input
           value={value.search}
           onChange={(e) => set({ search: e.target.value })}
           placeholder="Search name, username or email…"
-          className={`${selectCls} w-64 pl-9`}
+          className={`${selectCls} w-full pl-9 sm:w-64`}
         />
       </div>
 

@@ -155,7 +155,7 @@ function EditForm({ id, member }: { id: string; member: Member }) {
 
         {formError && <p className="text-sm text-red-400">{formError}</p>}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent disabled:opacity-70">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save changes
           </button>

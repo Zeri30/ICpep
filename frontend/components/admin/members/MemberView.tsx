@@ -82,7 +82,7 @@ export default function MemberView({ id }: { id: string }) {
         <Link href="/admin/members" className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft size={16} /> Members List
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href={`/admin/members/${m.id}/edit`} className="inline-flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground">
             <Pencil size={15} /> Edit
           </Link>

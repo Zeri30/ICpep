@@ -75,41 +75,46 @@ export default function ConfirmDialog({
             onClick={() => !busy && onClose()}
             className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm"
           />
-          <div className="fixed inset-0 z-[120] grid place-items-center p-4">
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              initial={{ opacity: 0, y: 20, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: easeOutExpo }}
-              className="w-full max-w-sm rounded-xl border border-line bg-card p-6 text-center shadow-[0_24px_70px_rgba(0,0,0,0.7)]"
-            >
-              {icon && <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-secondary">{icon}</div>}
-              <h2 className="font-display text-xl font-black uppercase tracking-wide text-foreground">
-                {title}
-              </h2>
-              {description && (
-                <div className="mt-3 text-sm leading-relaxed text-muted-foreground">{description}</div>
-              )}
-              <div className="mt-6 flex items-center justify-center gap-3">
-                <button
-                  onClick={handleConfirm}
-                  disabled={busy}
-                  className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-70 ${toneBtn[tone]}`}
-                >
-                  {busy && <Loader2 size={15} className="animate-spin" />}
-                  {confirmLabel}
-                </button>
-                <button
-                  onClick={onClose}
-                  disabled={busy}
-                  className="rounded-lg border border-line px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-70"
-                >
-                  {cancelLabel}
-                </button>
-              </div>
-            </motion.div>
+          {/* Scrolls rather than centring out of view: a long description on a
+              short screen (or a landscape phone) must not put the buttons
+              somewhere unreachable. */}
+          <div className="fixed inset-0 z-[120] overflow-y-auto p-4">
+            <div className="flex min-h-full items-center justify-center">
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                transition={{ duration: 0.3, ease: easeOutExpo }}
+                className="w-full max-w-sm rounded-xl border border-line bg-card p-6 text-center shadow-[0_24px_70px_rgba(0,0,0,0.7)]"
+              >
+                {icon && <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-secondary">{icon}</div>}
+                <h2 className="font-display text-xl font-black uppercase tracking-wide text-foreground">
+                  {title}
+                </h2>
+                {description && (
+                  <div className="mt-3 text-sm leading-relaxed text-muted-foreground">{description}</div>
+                )}
+                <div className="mt-6 flex items-center justify-center gap-3">
+                  <button
+                    onClick={handleConfirm}
+                    disabled={busy}
+                    className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-70 ${toneBtn[tone]}`}
+                  >
+                    {busy && <Loader2 size={15} className="animate-spin" />}
+                    {confirmLabel}
+                  </button>
+                  <button
+                    onClick={onClose}
+                    disabled={busy}
+                    className="rounded-lg border border-line px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-70"
+                  >
+                    {cancelLabel}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           </div>
         </>
       )}

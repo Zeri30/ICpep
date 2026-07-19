@@ -88,7 +88,10 @@ function ResetDialog({
         onClick={() => !busy && onClose()}
         className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm"
       />
-      <div className="fixed inset-0 z-[120] grid place-items-center p-4">
+      {/* Scrolls rather than centring out of view, so the buttons stay
+          reachable on a short screen. */}
+      <div className="fixed inset-0 z-[120] overflow-y-auto p-4">
+        <div className="flex min-h-full items-center justify-center">
         <motion.form
           onSubmit={handleSubmit}
           role="dialog"
@@ -165,6 +168,7 @@ function ResetDialog({
             </button>
           </div>
         </motion.form>
+        </div>
       </div>
     </>
   );
