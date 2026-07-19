@@ -24,7 +24,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
       <div className="lg:pl-64">
         <AdminTopbar onMenu={() => setMenuOpen((v) => !v)} />
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>
+        {/* The cap is generous so wide tables use the screen instead of being
+            squeezed into a column and scrolled sideways; it only bites on
+            ultrawide displays, where full-bleed text would be unreadable. */}
+        <main className="mx-auto w-full max-w-[120rem] px-4 py-8 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

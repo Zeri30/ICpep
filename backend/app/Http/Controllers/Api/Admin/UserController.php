@@ -63,8 +63,8 @@ class UserController extends Controller
         $direction = $request->query('direction') === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sort, $direction);
 
-        $perPage = (int) $request->integer('perPage', 25);
-        $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
+        $perPage = (int) $request->integer('perPage', 20);
+        $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 20;
 
         return UserResource::collection($query->paginate($perPage)->withQueryString());
     }
