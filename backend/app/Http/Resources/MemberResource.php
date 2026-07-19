@@ -62,8 +62,13 @@ class MemberResource extends JsonResource
             return null;
         }
 
+        // See MemberController::download — temporaryUrl() lives on the concrete
+        // adapter, not on the Filesystem contract Storage::disk() advertises.
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = Storage::disk('supabase');
+
         try {
-            return Storage::disk('supabase')->temporaryUrl($path, now()->addMinutes(10));
+            return $disk->temporaryUrl($path, now()->addMinutes(10));
         } catch (\Throwable $e) {
             return null;
         }

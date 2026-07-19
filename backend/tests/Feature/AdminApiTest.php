@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Application;
+use App\Models\MembershipTerm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -28,9 +29,15 @@ class AdminApiTest extends TestCase
         return User::factory()->treasurer()->create();
     }
 
+    /**
+     * A member of the current membership list — which is where the public form
+     * files everyone, and what the admin modules show by default. Tests that
+     * care about a specific semester pass membership_term_id explicitly.
+     */
     private function makeApplication(array $overrides = []): Application
     {
         return Application::create(array_merge([
+            'membership_term_id' => MembershipTerm::current()?->id,
             'surname' => 'Dela Cruz',
             'given_name' => 'Juan',
             'middle_initial' => 'S',
@@ -253,23 +260,32 @@ class AdminApiTest extends TestCase
         $this->actingAs($this->treasurer())
             ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'paid'])
             ->assertOk()
+            // `count` is the ids considered, not the rows changed — the admin
+            // reports its own figure for what actually moved.
             ->assertJsonPath('count', 2);
 
         $this->assertNotNull($unpaid->fresh()->paid_at);
+        // Already paid: the original date stands, and no second fee is recorded.
         $this->assertTrue($paid->fresh()->paid_at->isSameDay(now()->subDays(5)));
+        $this->assertSame(0, $paid->paymentTransactions()->count());
     }
 
-    public function test_mark_all_paid_respects_posted_filters(): void
+    /**
+     * Payments are only ever applied to an explicit set of ids. The endpoint
+     * that swept every member matching the current filters is gone — a single
+     * click should not be able to rewrite a semester's payment records.
+     */
+    public function test_there_is_no_endpoint_that_pays_the_whole_filtered_set(): void
     {
-        $a = $this->makeApplication(['email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A']);
-        $other = $this->makeApplication(['email' => 'o@example.com', 'year_level' => '4th Year', 'section' => 'Section A']);
+        $this->makeApplication(['email' => 'a@example.com']);
 
-        $this->actingAs($this->treasurer())
-            ->postJson('/api/admin/members/mark-all-paid', ['class' => '3A'])
-            ->assertOk()
-            ->assertJsonPath('count', 1);
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/mark-all-paid', ['class' => '3A']);
 
-        $this->assertNotNull($a->fresh()->paid_at);
-        $this->assertNull($other->fresh()->paid_at);
+        // Rejected — 405 rather than 404, since /members/{application} still
+        // answers PATCH and DELETE on that path. What matters is the outcome:
+        // no request pays a member the caller did not name.
+        $this->assertGreaterThanOrEqual(400, $response->status());
+        $this->assertSame(0, Application::whereNotNull('paid_at')->count());
     }
 }

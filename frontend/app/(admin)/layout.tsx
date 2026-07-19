@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import AdminProvider from "@/components/admin/AdminProvider";
+import MembershipTermProvider from "@/components/admin/MembershipTermProvider";
 import AdminShell from "@/components/admin/layout/AdminShell";
 import type { Me } from "@/lib/adminApi";
 
@@ -32,7 +33,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <AdminProvider officer={me.user} meta={me.meta}>
-      <AdminShell>{children}</AdminShell>
+      <MembershipTermProvider>
+        <AdminShell>{children}</AdminShell>
+      </MembershipTermProvider>
     </AdminProvider>
   );
 }

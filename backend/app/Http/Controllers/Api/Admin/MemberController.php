@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MemberResource;
 use App\Models\Application;
+use App\Models\MembershipTerm;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -147,18 +148,6 @@ class MemberController extends Controller
         return response()->json(['count' => $members->count()]);
     }
 
-    /** Mark every member the current filters are showing (and still unpaid) as paid. */
-    public function markAllPaid(Request $request): JsonResponse
-    {
-        Gate::authorize('members.payment');
-
-        $members = $this->filtered($request)->whereNull('paid_at')->get();
-        $count = $members->count();
-        $members->each->update(['paid_at' => now()]);
-
-        return response()->json(['count' => $count]);
-    }
-
     /** Stream a private file (picture|signature) to the officer as a download. */
     public function download(Application $application, string $which): StreamedResponse
     {
@@ -170,8 +159,16 @@ class MemberController extends Controller
         $ext = pathinfo($path, PATHINFO_EXTENSION);
         $name = str($application->full_name)->slug('_')."_{$which}".($ext ? ".{$ext}" : '');
 
+        // Storage::disk() is annotated as returning the Filesystem contract,
+        // which declares neither download() nor temporaryUrl(); the concrete
+        // FilesystemAdapter it actually returns declares both. Naming the real
+        // type keeps static analysis from flagging a call that is fine at
+        // runtime.
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = Storage::disk('supabase');
+
         try {
-            return Storage::disk('supabase')->download($path, $name);
+            return $disk->download($path, $name);
         } catch (\Throwable $e) {
             abort(404);
         }
@@ -179,11 +176,16 @@ class MemberController extends Controller
 
     /* ---------------------------------------------------------------- helpers */
 
-    /** Apply the list filters + search. Reads from input() so it works whether
-        the params arrive on a GET query string or a POST body (mark-all-paid). */
+    /** Apply the list filters + search to the index query. */
     private function filtered(Request $request): Builder
     {
         $query = Application::query();
+
+        // Every list is one semester's membership list. Without a `term` the
+        // current one is used, so the module opens on the live roster.
+        if ($term = MembershipTerm::resolve($request->input('term'))) {
+            $query->forTerm($term->id);
+        }
 
         match ($request->input('trashed')) {
             'with' => $query->withTrashed(),
@@ -226,10 +228,11 @@ class MemberController extends Controller
             ->when($request->input('until'), fn (Builder $q, $d): Builder => $q->whereDate($field, '<=', $d));
     }
 
+    /** 20 by default — a page the admin table shows without the browser scrolling. */
     private function perPage(Request $request): int
     {
-        $perPage = (int) $request->integer('perPage', 25);
+        $perPage = (int) $request->integer('perPage', 20);
 
-        return in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
+        return in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 20;
     }
 }

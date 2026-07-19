@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentTransactionResource;
+use App\Models\MembershipTerm;
 use App\Models\PaymentTransaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -20,6 +21,12 @@ class PaymentController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = PaymentTransaction::query()->latest();
+
+        // Scoped to one semester's membership list, so a term's ledger and its
+        // member count describe the same set of people.
+        if ($term = MembershipTerm::resolve($request->query('term'))) {
+            $query->forTerm($term->id);
+        }
 
         if ($action = $request->query('action')) {
             if (in_array($action, [PaymentTransaction::PAID, PaymentTransaction::REVOKED, PaymentTransaction::ADJUSTED], true)) {
@@ -44,8 +51,8 @@ class PaymentController extends Controller
             });
         }
 
-        $perPage = (int) $request->integer('perPage', 25);
-        $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
+        $perPage = (int) $request->integer('perPage', 20);
+        $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 20;
 
         return PaymentTransactionResource::collection($query->paginate($perPage)->withQueryString());
     }

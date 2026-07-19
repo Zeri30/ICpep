@@ -13,6 +13,31 @@ export type Paginated<T> = {
   };
 };
 
+/** One semester's membership list. Exactly one is `isCurrent`. */
+export type MembershipTerm = {
+  id: number;
+  schoolYearFrom: number;
+  schoolYearTo: number;
+  semester: number;
+  /** "2026–2027 Semester 1" */
+  label: string;
+  isCurrent: boolean;
+  memberCount?: number;
+  createdAt: string | null;
+};
+
+/** Whether the public membership form is accepting submissions. */
+export type RegistrationStatus = {
+  isOpen: boolean;
+  /** The officer-selected reason, shown to applicants while closed. */
+  reason: string | null;
+  closedAt: string | null;
+  closedBy: string | null;
+  presetReasons: string[];
+  /** Where submissions land — the current list, not the newest one. */
+  currentTerm: { id: number; label: string } | null;
+};
+
 export type Member = {
   id: number;
   surname: string;
@@ -45,7 +70,6 @@ export type PaymentRow = {
   previousEffectiveAt: string | null;
   recordedAt: string | null;
   actor: string | null;
-  note: string | null;
 };
 
 export type AdminUser = {
@@ -66,10 +90,11 @@ export type ActivityRow = {
   id: number;
   action: string;
   description: string;
+  /** The officer's name, falling back to their email for account-less entries. */
+  actorName: string | null;
   actor: string | null;
   actorRole: string | null;
   actorRoleLabel: string | null;
-  ipAddress: string | null;
   applicant: string | null;
   createdAt: string | null;
 };
@@ -92,4 +117,6 @@ export type DashboardData = {
   membersByClass: { labels: string[]; data: number[] };
   registrationsOverTime: { labels: string[]; data: number[] };
   canViewFinance: boolean;
+  /** The membership list these figures describe. */
+  term: { id: number; label: string; isCurrent: boolean } | null;
 };

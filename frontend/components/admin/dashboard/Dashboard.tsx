@@ -13,6 +13,7 @@ import StatCard from "@/components/admin/dashboard/StatCard";
 import BarChart from "@/components/admin/ui/BarChart";
 import LineChart from "@/components/admin/ui/LineChart";
 import { useAdminResource } from "@/lib/adminApi";
+import { useTerms } from "@/components/admin/MembershipTermProvider";
 import type { DashboardData } from "@/lib/adminTypes";
 
 function Panel({
@@ -35,8 +36,14 @@ function Panel({
 
 export default function Dashboard() {
   const { money } = useAdmin();
+  // The figures describe one semester's membership list — the same one the
+  // Members module is showing.
+  const { selected: term, loading: termsLoading } = useTerms();
   // Poll at the tightest Filament interval (stats were 10s).
-  const { data, loading, error } = useAdminResource<DashboardData>("/dashboard", { pollMs: 10000 });
+  const { data, loading, error } = useAdminResource<DashboardData>(
+    termsLoading ? null : `/dashboard${term ? `?term=${term.id}` : ""}`,
+    { pollMs: 10000 },
+  );
 
   if (loading && !data) {
     return (
@@ -55,7 +62,15 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Dashboard</h1>
+      <div>
+        <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Dashboard</h1>
+        {data.term && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {data.term.label}
+            {data.term.isCurrent ? " · current membership list" : " · past membership list"}
+          </p>
+        )}
+      </div>
 
       {/* Headline stats. The revenue tile is finance-only. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

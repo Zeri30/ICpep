@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Send } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Lock, Send } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import Reveal from "@/components/ui/Reveal";
 import SectionHeading from "@/components/ui/SectionHeading";
 import PresentationInner from "@/components/ui/PresentationInner";
@@ -31,6 +31,33 @@ function Label({ htmlFor, children, optional }: { htmlFor: string; children: Rea
   );
 }
 
+/* Shown in place of the form while officers have registration closed. The
+   reason is whatever the administrator selected when closing — passed through
+   verbatim rather than mapped to our own wording, so what an applicant reads
+   matches what the officer chose. */
+function ClosedPanel({ reason }: { reason: string | null }) {
+  return (
+    <div className="rounded-2xl bg-card border border-amber-500/30 p-8 sm:p-12 text-center shadow-[0_0_40px_rgba(0,0,0,0.4)]">
+      <div className="mx-auto grid place-items-center w-16 h-16 rounded-full bg-amber-500/15 text-amber-400 mb-5">
+        <Lock size={30} />
+      </div>
+      <h3 className="font-display font-bold text-2xl uppercase tracking-wide">
+        Membership Registration is Closed
+      </h3>
+      {reason && (
+        <p className="mt-5 inline-block rounded-md border border-line bg-secondary/50 px-4 py-2.5 text-sm">
+          <span className="font-head text-[10px] uppercase tracking-widest text-muted-foreground">Reason</span>
+          <span className="mt-1 block font-medium text-foreground">{reason}</span>
+        </p>
+      )}
+      <p className="mt-5 text-secondary-foreground leading-relaxed max-w-md mx-auto">
+        Please wait until registration opens again. Follow our pages for the announcement — applications will
+        reopen for the next membership period.
+      </p>
+    </div>
+  );
+}
+
 /* Shown after a successful submission. */
 function SuccessPanel({ onReset }: { onReset: () => void }) {
   return (
@@ -54,11 +81,38 @@ function SuccessPanel({ onReset }: { onReset: () => void }) {
   );
 }
 
+type Registration = { isOpen: boolean; reason: string | null };
+
 export default function Membership() {
   const [status, setStatus] = useState<FormStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [signatureFile, setSignatureFile] = useState<FileDropValue>(null);
   const [pictureFile, setPictureFile] = useState<FileDropValue>(null);
+  // null until we know. The form is withheld until then rather than rendered
+  // optimistically, so a closed period never flashes a form the visitor can
+  // start filling in.
+  const [registration, setRegistration] = useState<Registration | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`${API_URL}/api/registration-status`, { headers: { Accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Registration | null) => {
+        if (cancelled) return;
+        // If the check itself fails, fall back to showing the form — the
+        // backend refuses a closed submission anyway, so the worst case is a
+        // clear error instead of a silently hidden form.
+        setRegistration(data ?? { isOpen: true, reason: null });
+      })
+      .catch(() => {
+        if (!cancelled) setRegistration({ isOpen: true, reason: null });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetForm = () => {
     setStatus("idle");
@@ -95,6 +149,13 @@ export default function Membership() {
         let msg = "Something went wrong submitting your application. Please try again.";
         try {
           const data = await res.json();
+          // Registration was closed while this page sat open — replace the form
+          // with the notice rather than reporting a failure the visitor can do
+          // nothing about.
+          if (res.status === 403 && data?.registrationClosed) {
+            setRegistration({ isOpen: false, reason: data.reason ?? null });
+            return;
+          }
           // Laravel returns { message, errors: { field: [msg, ...] } } on 422.
           if (res.status === 422 && data?.errors) {
             const first = Object.values(data.errors)[0];
@@ -134,7 +195,13 @@ export default function Membership() {
         </Reveal>
 
         <Reveal delay={0.1}>
-          {status === "success" ? (
+          {registration === null ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-card py-20 text-sm text-muted-foreground">
+            <Loader2 size={16} className="animate-spin" /> Checking registration…
+          </div>
+          ) : !registration.isOpen ? (
+          <ClosedPanel reason={registration.reason} />
+          ) : status === "success" ? (
           <SuccessPanel onReset={resetForm} />
           ) : (
           <form

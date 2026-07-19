@@ -70,8 +70,11 @@ class PaymentHistoryTest extends TestCase
         $tx = $member->paymentTransactions()->sole();
         $this->assertSame(PaymentTransaction::ADJUSTED, $tx->action);
         $this->assertSame(0.0, (float) $tx->amount);
-        $this->assertNotNull($tx->previous_effective_at);
-        $this->assertStringContainsString('Payment date changed', $tx->note);
+
+        // The row carries the correction itself: where the date moved from and
+        // where it moved to. This is what the dropped note used to restate.
+        $this->assertTrue($tx->previous_effective_at->isToday());
+        $this->assertTrue($tx->effective_at->isSameDay(Carbon::now()->subDays(3)));
     }
 
     public function test_the_audit_trail_outlives_the_payment(): void
@@ -125,7 +128,9 @@ class PaymentHistoryTest extends TestCase
         $tx = PaymentTransaction::where('application_id', $member->id)->sole();
         $this->assertSame(PaymentTransaction::PAID, $tx->action);
         $this->assertSame(config('icpep.membership_fee'), (float) $tx->amount);
-        $this->assertStringContainsString('Opening balance', $tx->note);
+        // A null actor is what marks a row the system wrote rather than an
+        // officer — the backfill's signature now that its note is gone.
+        $this->assertNull($tx->actor);
         $this->assertTrue($tx->effective_at->isSameDay(now()->subMonth()));
     }
 

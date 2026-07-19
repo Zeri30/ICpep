@@ -20,6 +20,7 @@ class PaymentTransaction extends Model
 
     protected $fillable = [
         'application_id',
+        'membership_term_id',
         'action',
         'amount',
         'effective_at',
@@ -27,7 +28,6 @@ class PaymentTransaction extends Model
         'actor',
         'member_name',
         'section',
-        'note',
     ];
 
     protected $casts = [
@@ -39,6 +39,22 @@ class PaymentTransaction extends Model
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);
+    }
+
+    /**
+     * The semester this fee belongs to. Copied onto the row rather than read
+     * through the member, for the same reason member_name and section are: the
+     * member can be force-deleted, and a past semester's figures must not move.
+     */
+    public function membershipTerm(): BelongsTo
+    {
+        return $this->belongsTo(MembershipTerm::class);
+    }
+
+    /** @param  Builder<PaymentTransaction>  $query */
+    public function scopeForTerm(Builder $query, int $termId): Builder
+    {
+        return $query->where('membership_term_id', $termId);
     }
 
     /**

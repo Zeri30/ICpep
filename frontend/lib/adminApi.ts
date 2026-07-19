@@ -20,7 +20,8 @@ export type Permission =
   | "members.edit"
   | "members.payment"
   | "finance.view"
-  | "users.manage";
+  | "users.manage"
+  | "terms.manage";
 
 export type Officer = {
   name: string;
@@ -28,7 +29,7 @@ export type Officer = {
   email: string;
   role: string | null;
   roleLabel: string | null;
-  /** True for roles allowed into User Management (Programming Team / President). */
+  /** True for roles allowed into User Management (Programming Team only). */
   canManageUsers: boolean;
   /** The abilities this officer's role grants — the UI gates modules/actions on these. */
   permissions: Permission[];

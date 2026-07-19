@@ -6,6 +6,7 @@ import { Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from "lucide-react
 import Logo from "@/components/ui/Logo";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import { useAdminResource } from "@/lib/adminApi";
+import { useTerms } from "@/components/admin/MembershipTermProvider";
 
 import type { Permission } from "@/lib/adminApi";
 
@@ -35,8 +36,13 @@ export default function AdminSidebar({
 }) {
   const pathname = usePathname();
   const { can } = useAdmin();
-  // Live nav counts, refreshed like Filament's badges.
-  const { data: counts } = useAdminResource<Counts>("/counts", { pollMs: 30000 });
+  const { selected: term } = useTerms();
+  // Live nav counts, refreshed like Filament's badges. Scoped to the membership
+  // list on screen, so the badge matches the number of rows in the module.
+  const { data: counts } = useAdminResource<Counts>(
+    `/counts${term ? `?term=${term.id}` : ""}`,
+    { pollMs: 30000 },
+  );
 
   // Only show modules the officer's role can reach; the backend enforces the
   // same rule regardless, so hidden modules are also inaccessible by URL.

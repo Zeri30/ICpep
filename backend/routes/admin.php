@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\Admin\ActivityController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\MeController;
 use App\Http\Controllers\Api\Admin\MemberController;
+use App\Http\Controllers\Api\Admin\MembershipTermController;
 use App\Http\Controllers\Api\Admin\PaymentController;
+use App\Http\Controllers\Api\Admin\RegistrationController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +31,17 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');
 
+    // Membership lists and the public form's open/closed state. Reading both is
+    // open to any officer — the Members module shows the list selector and a
+    // registration banner to everyone. Changing either is the semester rollover
+    // and needs terms.manage, authorized in the controllers.
+    Route::get('/terms', [MembershipTermController::class, 'index'])->name('terms.index');
+    Route::post('/terms', [MembershipTermController::class, 'store'])->name('terms.store');
+    Route::post('/terms/{term}/activate', [MembershipTermController::class, 'activate'])->name('terms.activate');
+    Route::get('/registration', [RegistrationController::class, 'show'])->name('registration.show');
+    Route::post('/registration/close', [RegistrationController::class, 'close'])->name('registration.close');
+    Route::post('/registration/open', [RegistrationController::class, 'open'])->name('registration.open');
+
     // Members — reading needs members.view; the writes below gate more tightly.
     Route::middleware('permission:members.view')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->name('members.index');
@@ -41,7 +54,6 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     // bulk endpoint mixes both). members.view still gates reaching them at all.
     Route::middleware('permission:members.view')->group(function () {
         Route::post('/members/bulk', [MemberController::class, 'bulk'])->name('members.bulk');
-        Route::post('/members/mark-all-paid', [MemberController::class, 'markAllPaid'])->name('members.markAllPaid');
         Route::patch('/members/{application}', [MemberController::class, 'update'])->name('members.update');
         Route::delete('/members/{application}', [MemberController::class, 'destroy'])->name('members.destroy');
         Route::post('/members/{application}/toggle-paid', [MemberController::class, 'togglePaid'])->name('members.togglePaid');
@@ -53,7 +65,7 @@ Route::middleware(EnsureAdmin::class)->group(function () {
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
     });
 
-    // User Management — administrator accounts. Programming Team / President only.
+    // User Management — administrator accounts. Programming Team only.
     Route::middleware('permission:users.manage')->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');

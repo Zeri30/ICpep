@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -72,6 +73,7 @@ class Application extends Model
     }
 
     protected $fillable = [
+        'membership_term_id',
         'surname',
         'given_name',
         'middle_initial',
@@ -102,6 +104,23 @@ class Application extends Model
         return $this->hasMany(PaymentTransaction::class);
     }
 
+    /** The semester's membership list this member was registered under. */
+    public function membershipTerm(): BelongsTo
+    {
+        return $this->belongsTo(MembershipTerm::class);
+    }
+
+    /**
+     * Narrow to one semester's membership list. Every admin list is scoped this
+     * way, so a past term reads as the closed record it is.
+     *
+     * @param  Builder<Application>  $query
+     */
+    public function scopeForTerm(Builder $query, int $termId): Builder
+    {
+        return $query->where('membership_term_id', $termId);
+    }
+
     /**
      * Append a ledger row describing what just happened to `paid_at`.
      *
@@ -119,27 +138,28 @@ class Application extends Model
         $previous = $previous ? Carbon::parse($previous) : null;
         $current = $this->paid_at;
 
-        [$action, $amount, $effectiveAt, $note] = match (true) {
+        [$action, $amount, $effectiveAt] = match (true) {
             // Unpaid -> paid.
             $previous === null && $current !== null => [
-                PaymentTransaction::PAID, $fee, $current, null,
+                PaymentTransaction::PAID, $fee, $current,
             ],
             // Paid -> unpaid. The reversal is stamped against the date the money
             // was originally taken, so it lands in the same period it cancels.
             $previous !== null && $current === null => [
-                PaymentTransaction::REVOKED, -$fee, $previous, null,
+                PaymentTransaction::REVOKED, -$fee, $previous,
             ],
-            // Payment date corrected.
+            // Payment date corrected. The before/after dates are the row's own
+            // previous_effective_at and effective_at — the reader has both, so
+            // there is nothing left to say in prose.
             default => [
-                PaymentTransaction::ADJUSTED, 0.0, $current, sprintf(
-                    'Payment date changed from %s to %s',
-                    $previous?->format('M j, Y g:i A') ?? '—',
-                    $current?->format('M j, Y g:i A') ?? '—',
-                ),
+                PaymentTransaction::ADJUSTED, 0.0, $current,
             ],
         };
 
         $this->paymentTransactions()->create([
+            // The member's own term, not the current one: correcting a past
+            // semester's payment must stay in that semester's figures.
+            'membership_term_id' => $this->membership_term_id,
             'action' => $action,
             'amount' => $amount,
             'effective_at' => $effectiveAt,
@@ -147,7 +167,6 @@ class Application extends Model
             'actor' => Auth::user()?->email,
             'member_name' => $this->full_name,
             'section' => $this->section,
-            'note' => $note,
         ]);
     }
 
