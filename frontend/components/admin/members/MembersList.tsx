@@ -1,8 +1,11 @@
 "use client";
 
-/* Members List — the React parity of the Filament resource: filters + search +
-   sort + pagination, per-row actions (toggle paid, view, edit, downloads,
-   delete/restore), bulk actions, and "Mark all as paid" over the filtered set. */
+/* Members List — filters + search + sort + pagination, per-row actions (toggle
+   paid, view, edit, downloads, delete/restore) and bulk actions.
+
+   Every action that moves money is confirmed first and acts only on the ticked
+   rows. Nothing here operates on the whole filtered set: a single click should
+   not be able to rewrite a semester's payment records. */
 
 import Image from "next/image";
 import Link from "next/link";
@@ -19,6 +22,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
+import { useTerms } from "@/components/admin/MembershipTermProvider";
+import TermBar from "@/components/admin/members/TermBar";
 import Badge from "@/components/ui/Badge";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
@@ -31,8 +36,10 @@ import type { Member, Paginated } from "@/lib/adminTypes";
 type Confirm =
   | { kind: "delete"; member: Member }
   | { kind: "restore"; member: Member }
-  | { kind: "bulk"; action: "paid" | "unpaid" | "delete" | "restore" }
-  | { kind: "markAll" }
+  | { kind: "togglePaid"; member: Member }
+  | { kind: "bulk"; action: "delete" | "restore" }
+  /** Payment carries its counts so the dialog can say exactly what will change. */
+  | { kind: "payment"; action: "paid" | "unpaid"; eligible: number; skipped: number }
   | null;
 
 function PaymentPill({ paid }: { paid: boolean }) {
@@ -49,6 +56,9 @@ function PaymentPill({ paid }: { paid: boolean }) {
 
 export default function MembersList() {
   const { notify, can } = useAdmin();
+  // Which semester's membership list is being shown. Shared with the Dashboard
+  // and the payment ledger so all three describe the same roster.
+  const { selected: term, loading: termsLoading } = useTerms();
   const canEdit = can("members.edit");
   const canPay = can("members.payment");
   const canSelect = canEdit || canPay; // any bulk action needs one of these
@@ -57,7 +67,10 @@ export default function MembersList() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "createdAt", direction: "desc" });
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Keyed by id but holding the row itself: selection survives paging, so the
+  // payment actions need each member's current paid state to report honestly
+  // what they will change — the ids alone can't answer that off-page.
+  const [selected, setSelected] = useState<Map<number, Member>>(new Map());
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
@@ -67,8 +80,20 @@ export default function MembersList() {
     return () => clearTimeout(id);
   }, [filters.search]);
 
+  // Switching lists is a different dataset, not a filter of the current one —
+  // start at page 1 with nothing carried over from the previous list's rows.
+  // Adjusted during render (React's documented reset-on-change pattern) rather
+  // than in an effect, so no render ever pairs the new term with a stale page.
+  const [renderedTermId, setRenderedTermId] = useState(term?.id);
+  if (term?.id !== renderedTermId) {
+    setRenderedTermId(term?.id);
+    setPage(1);
+    setSelected(new Map());
+  }
+
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
+    if (term) p.set("term", String(term.id));
     if (debouncedSearch) p.set("search", debouncedSearch);
     if (filters.class) p.set("class", filters.class);
     if (filters.payment) p.set("payment", filters.payment);
@@ -79,17 +104,19 @@ export default function MembersList() {
     }
     p.set("page", String(page));
     return p.toString();
-  }, [debouncedSearch, filters, sort, page]);
+  }, [term, debouncedSearch, filters, sort, page]);
 
+  // Hold off until the term is known, so the table never flashes the current
+  // list's members while a past list is the one selected.
   const { data, loading, error, refresh } = useAdminResource<Paginated<Member>>(
-    `/members?${queryString}`,
+    termsLoading ? null : `/members?${queryString}`,
   );
 
   // Any filter/sort change returns to page 1 and drops the selection.
   const changeFilters = (next: MemberFilters) => {
     setFilters(next);
     setPage(1);
-    setSelected(new Set());
+    setSelected(new Map());
   };
   const onSort = (key: string) => {
     setSort((s) => (s?.key === key ? { key, direction: s.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" }));
@@ -97,48 +124,87 @@ export default function MembersList() {
   };
 
   const rows = data?.data ?? [];
-  const filterPayload = () => ({
-    class: filters.class,
-    payment: filters.payment,
-    trashed: filters.trashed,
-    search: debouncedSearch,
-  });
 
   /* -------------------------------------------------------------- mutations */
 
-  async function run(action: () => Promise<unknown>, success: string) {
+  async function run(action: () => Promise<unknown>, success: string, body?: string) {
     try {
       await action();
       await refresh();
-      notify(success);
+      notify(success, body ? { body } : undefined);
     } catch (e) {
       notify("Action failed", { tone: "warning", body: e instanceof Error ? e.message : undefined });
     }
   }
 
-  const togglePaid = (m: Member) =>
-    run(() => apiSend("POST", `/members/${m.id}/toggle-paid`), m.isPaid ? "Marked as unpaid" : "Marked as paid");
+  /**
+   * Open the confirmation for a payment change over the selection.
+   *
+   * Refuses before asking rather than after: a confirm dialog that leads to "0
+   * updated" is worse than being told up front that nothing is ticked. The
+   * eligible count excludes members already in the target state, matching what
+   * the backend actually does, so the dialog never promises more than happens.
+   */
+  function requestPayment(action: "paid" | "unpaid") {
+    if (selected.size === 0) {
+      notify("No members selected", {
+        tone: "warning",
+        body: `Tick the checkbox beside each member you want to mark as ${action}.`,
+      });
+      return;
+    }
+
+    const members = [...selected.values()];
+    const eligible = members.filter((m) => (action === "paid" ? !m.isPaid : m.isPaid));
+
+    if (eligible.length === 0) {
+      notify("Nothing to update", {
+        tone: "warning",
+        body:
+          members.length === 1
+            ? `The selected member is already ${action}.`
+            : `All ${members.length} selected members are already ${action}.`,
+      });
+      return;
+    }
+
+    setConfirm({ kind: "payment", action, eligible: eligible.length, skipped: members.length - eligible.length });
+  }
 
   async function confirmAction() {
     if (!confirm) return;
-    const ids = [...selected];
+    const ids = [...selected.keys()];
+
     if (confirm.kind === "delete") {
       await run(() => apiSend("DELETE", `/members/${confirm.member.id}`), "Member deleted");
     } else if (confirm.kind === "restore") {
       await run(() => apiSend("POST", `/members/${confirm.member.id}/restore`), "Member restored");
+    } else if (confirm.kind === "togglePaid") {
+      const wasPaid = confirm.member.isPaid;
+      await run(
+        () => apiSend("POST", `/members/${confirm.member.id}/toggle-paid`),
+        wasPaid ? "Marked as unpaid" : "Marked as paid",
+      );
     } else if (confirm.kind === "bulk") {
       await run(async () => {
         const { count } = await apiSend<{ count: number }>("POST", "/members/bulk", { ids, action: confirm.action });
-        setSelected(new Set());
+        setSelected(new Map());
         return count;
       }, "Bulk update applied");
-    } else if (confirm.kind === "markAll") {
-      await run(async () => {
-        const { count } = await apiSend<{ count: number }>("POST", "/members/mark-all-paid", filterPayload());
-        notify("All filtered members marked as paid", { body: `${count} member(s) updated.` });
-        return count;
-      }, "Done");
+    } else if (confirm.kind === "payment") {
+      const { action, eligible, skipped } = confirm;
+      await run(
+        async () => {
+          await apiSend("POST", "/members/bulk", { ids, action });
+          setSelected(new Map());
+        },
+        // The endpoint counts every id it was handed, including ones it skipped,
+        // so the figure reported here is our own — the members that changed.
+        `${eligible} member${eligible === 1 ? "" : "s"} marked as ${action}`,
+        skipped > 0 ? `${skipped} already ${action} — left unchanged.` : undefined,
+      );
     }
+
     setConfirm(null);
   }
 
@@ -146,12 +212,19 @@ export default function MembersList() {
 
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const toggleAll = () =>
-    setSelected(allChecked ? new Set() : new Set(rows.map((r) => r.id)));
-  const toggleOne = (id: number) =>
     setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      const n = new Map(s);
+      // Scoped to this page: untick clears only what's visible, leaving any
+      // off-page selection the officer built up intact.
+      if (allChecked) rows.forEach((r) => n.delete(r.id));
+      else rows.forEach((r) => n.set(r.id, r));
+      return n;
+    });
+  const toggleOne = (m: Member) =>
+    setSelected((s) => {
+      const n = new Map(s);
+      if (n.has(m.id)) n.delete(m.id);
+      else n.set(m.id, m);
       return n;
     });
 
@@ -164,12 +237,23 @@ export default function MembersList() {
       ? [
           {
             key: "select",
-            header: "",
+            // Select-all rides in the column header rather than a row of its
+            // own above the table — same control, one less band of chrome.
+            header: (
+              <input
+                type="checkbox"
+                checked={allChecked}
+                onChange={toggleAll}
+                className="size-4 accent-primary align-middle"
+                aria-label="Select all on this page"
+                title="Select all on this page"
+              />
+            ),
             render: (m: Member) => (
               <input
                 type="checkbox"
                 checked={selected.has(m.id)}
-                onChange={() => toggleOne(m.id)}
+                onChange={() => toggleOne(m)}
                 className="size-4 accent-primary"
                 aria-label={`Select ${m.fullName}`}
               />
@@ -226,7 +310,7 @@ export default function MembersList() {
           <div className="flex items-center justify-end gap-1">
             {canPay && (
               <button
-                onClick={() => togglePaid(m)}
+                onClick={() => setConfirm({ kind: "togglePaid", member: m })}
                 title={m.isPaid ? "Mark as unpaid" : "Mark as paid"}
                 className={`grid size-8 place-items-center rounded-md transition-colors ${m.isPaid ? "text-muted-foreground hover:bg-white/5" : "text-green-400 hover:bg-green-500/10"}`}
               >
@@ -247,43 +331,60 @@ export default function MembersList() {
   ];
 
   return (
-    <div className="space-y-5">
+    // On a wide screen the module fills exactly the space below the 72px topbar
+    // (less the main element's py-8) and scrolls the rows inside the table, so
+    // the page itself never scrolls and the pager stays put. Narrow screens keep
+    // the natural flow, where a page scroll is the better behaviour.
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
+      <TermBar />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Members List</h1>
+        <div>
+          <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Members List</h1>
+          {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+        </div>
+        {/* Named for what it does. "Mark all" read as "everything in the list"
+            and was acting on the whole filtered set, which is not something an
+            officer should be able to trigger from a single click. */}
         {canPay && (
           <button
-            onClick={() => setConfirm({ kind: "markAll" })}
-            className="inline-flex items-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-3.5 py-2 text-sm font-semibold text-green-400 transition-colors hover:bg-green-500/20"
+            onClick={() => requestPayment("paid")}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-3.5 py-2 text-sm font-semibold text-green-400 transition-colors hover:bg-green-500/20 sm:w-auto"
           >
-            <Banknote size={16} /> Mark all as paid
+            <Banknote size={16} /> Mark selected as paid
+            {selected.size > 0 && (
+              <span className="rounded-full bg-green-500/20 px-1.5 text-xs tabular-nums">{selected.size}</span>
+            )}
           </button>
         )}
       </div>
 
-      <MembersFilters value={filters} onChange={changeFilters} />
+      {/* Filters and the bulk actions share one row: the selection controls
+          replace nothing and push nothing down, so the table keeps its height
+          whether or not rows are selected. */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <MembersFilters value={filters} onChange={changeFilters} />
 
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm">
-          <span className="font-medium text-foreground">{selected.size} selected</span>
-          <div className="mx-1 h-4 w-px bg-line" />
-          {canPay && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "paid" })}>Mark paid</BulkBtn>}
-          {canPay && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "unpaid" })}>Mark unpaid</BulkBtn>}
-          {canEdit && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "delete" })} tone="danger">Delete</BulkBtn>}
-          {canEdit && showRestoreBulk && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "restore" })}>Undo delete</BulkBtn>}
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-muted-foreground hover:text-foreground">
-            Clear
-          </button>
-        </div>
-      )}
-
-      {canSelect && (
-        <div className="flex items-center gap-2 px-1">
-          <input type="checkbox" checked={allChecked} onChange={toggleAll} className="size-4 accent-primary" aria-label="Select all" />
-          <span className="text-xs text-muted-foreground">Select all on this page</span>
-        </div>
-      )}
+        {selected.size > 0 && (
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm sm:ml-auto sm:w-auto">
+            <span className="font-medium text-foreground">{selected.size} selected</span>
+            <div className="mx-0.5 h-4 w-px bg-line" />
+            {canPay && <BulkBtn onClick={() => requestPayment("paid")}>Mark paid</BulkBtn>}
+            {canPay && <BulkBtn onClick={() => requestPayment("unpaid")}>Mark unpaid</BulkBtn>}
+            {canEdit && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "delete" })} tone="danger">Delete</BulkBtn>}
+            {canEdit && showRestoreBulk && <BulkBtn onClick={() => setConfirm({ kind: "bulk", action: "restore" })}>Undo delete</BulkBtn>}
+            <button
+              onClick={() => setSelected(new Map())}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
 
       <DataTable
+        fill
         columns={columns}
         rows={rows}
         rowKey={(m) => m.id}
@@ -293,9 +394,8 @@ export default function MembersList() {
         onSort={onSort}
         emptyHeading="No members found"
         emptyDescription="Try clearing the filters, or wait for new registrations from the public form."
+        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
       />
-
-      {data && <Pagination meta={data.meta} onPage={setPage} />}
 
       {/* Confirmations */}
       <ConfirmDialog
@@ -318,19 +418,73 @@ export default function MembersList() {
       />
       <ConfirmDialog
         open={confirm?.kind === "bulk"}
-        title="Apply to selected"
-        description={`This will ${confirm?.kind === "bulk" ? confirm.action : ""} ${selected.size} selected member(s).`}
+        title={confirm?.kind === "bulk" && confirm.action === "delete" ? "Delete selected" : "Restore selected"}
+        description={`This will ${confirm?.kind === "bulk" ? confirm.action : ""} ${selected.size} selected member${selected.size === 1 ? "" : "s"}.`}
         confirmLabel="Apply"
         tone={confirm?.kind === "bulk" && confirm.action === "delete" ? "danger" : "primary"}
         onConfirm={confirmAction}
         onClose={() => setConfirm(null)}
       />
+      {/* Per-row toggle. Money changing hands is worth a beat of confirmation,
+          and an accidental click here is otherwise silent and immediate. */}
       <ConfirmDialog
-        open={confirm?.kind === "markAll"}
-        title="Mark all filtered members as paid"
-        description="Every member matching the current filters that hasn't paid yet will be marked as paid, with today as the payment date. Members already paid keep their date."
-        confirmLabel="Mark all as paid"
-        tone="success"
+        open={confirm?.kind === "togglePaid"}
+        title={confirm?.kind === "togglePaid" && confirm.member.isPaid ? "Mark as unpaid" : "Mark as paid"}
+        description={
+          confirm?.kind === "togglePaid" ? (
+            confirm.member.isPaid ? (
+              <>
+                Clear the payment on <span className="text-foreground">{confirm.member.fullName}</span>? The fee
+                is reversed in the payment history and the member returns to unpaid.
+              </>
+            ) : (
+              <>
+                Record the membership fee for <span className="text-foreground">{confirm.member.fullName}</span>?
+                Today becomes the payment date.
+              </>
+            )
+          ) : undefined
+        }
+        confirmLabel={confirm?.kind === "togglePaid" && confirm.member.isPaid ? "Mark as unpaid" : "Mark as paid"}
+        tone={confirm?.kind === "togglePaid" && confirm.member.isPaid ? "danger" : "success"}
+        onConfirm={confirmAction}
+        onClose={() => setConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={confirm?.kind === "payment"}
+        title={confirm?.kind === "payment" && confirm.action === "unpaid" ? "Mark selected as unpaid" : "Mark selected as paid"}
+        description={
+          confirm?.kind === "payment" ? (
+            <>
+              {confirm.action === "paid" ? (
+                <>
+                  Record the membership fee for{" "}
+                  <span className="text-foreground">
+                    {confirm.eligible} selected member{confirm.eligible === 1 ? "" : "s"}
+                  </span>
+                  , with today as the payment date.
+                </>
+              ) : (
+                <>
+                  Clear the payment on{" "}
+                  <span className="text-foreground">
+                    {confirm.eligible} selected member{confirm.eligible === 1 ? "" : "s"}
+                  </span>
+                  . Each fee is reversed in the payment history.
+                </>
+              )}
+              {confirm.skipped > 0 && (
+                <>
+                  {" "}
+                  {confirm.skipped} already {confirm.action} and will be left unchanged.
+                </>
+              )}
+            </>
+          ) : undefined
+        }
+        confirmLabel={confirm?.kind === "payment" && confirm.action === "unpaid" ? "Mark as unpaid" : "Mark as paid"}
+        tone={confirm?.kind === "payment" && confirm.action === "unpaid" ? "danger" : "success"}
         onConfirm={confirmAction}
         onClose={() => setConfirm(null)}
       />
