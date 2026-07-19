@@ -4,12 +4,14 @@
    (Event, Section, Date range), search, and pagination. Amounts are shown per
    row (descriptive), never summed. */
 
-import { CheckCircle2, PencilLine, Search, XCircle } from "lucide-react";
+import { CheckCircle2, History, PencilLine, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { useAdminResource } from "@/lib/adminApi";
+import { useTerms } from "@/components/admin/MembershipTermProvider";
+import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Paginated, PaymentRow } from "@/lib/adminTypes";
 
@@ -34,6 +36,7 @@ function EventBadge({ action }: { action: PaymentRow["action"] }) {
 
 export default function PaymentHistory() {
   const { meta, money } = useAdmin();
+  const { selected: term, loading: termsLoading, isViewingPast } = useTerms();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [action, setAction] = useState("");
@@ -48,8 +51,19 @@ export default function PaymentHistory() {
     return () => clearTimeout(id);
   }, [search]);
 
+  // A different list is a different dataset — go back to page 1 rather than
+  // landing on a page number that may not exist in it.
+  const [renderedTermId, setRenderedTermId] = useState(term?.id);
+  if (term?.id !== renderedTermId) {
+    setRenderedTermId(term?.id);
+    setPage(1);
+  }
+
   const qs = useMemo(() => {
     const p = new URLSearchParams();
+    // The ledger is scoped to the same semester as the Members module, so a
+    // term's collected fees and its headcount describe the same people.
+    if (term) p.set("term", String(term.id));
     if (debounced) p.set("search", debounced);
     if (action) p.set("action", action);
     if (section) p.set("section", section);
@@ -60,9 +74,11 @@ export default function PaymentHistory() {
     }
     p.set("page", String(page));
     return p.toString();
-  }, [debounced, action, section, dateField, from, until, page]);
+  }, [term, debounced, action, section, dateField, from, until, page]);
 
-  const { data, loading, error } = useAdminResource<Paginated<PaymentRow>>(`/payments?${qs}`);
+  const { data, loading, error } = useAdminResource<Paginated<PaymentRow>>(
+    termsLoading ? null : `/payments?${qs}`,
+  );
   const reset = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
 
   const amountCell = (v: number) => {
@@ -87,17 +103,32 @@ export default function PaymentHistory() {
     { key: "paidAt", header: "Payment date", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.effectiveAt)}</span> },
     { key: "recorded", header: "Recorded", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span> },
     { key: "actor", header: "By", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span> },
-    { key: "note", header: "Note", render: (r) => <span className="text-xs text-muted-foreground">{r.note ?? "—"}</span> },
   ];
 
   return (
-    <div className="space-y-5">
-      <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
+    // Fills the space below the topbar and scrolls rows internally — see
+    // MembersList for the height maths.
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
+      {/* Which semester's ledger this is. Same control as the Members module,
+          sharing the same selection, so switching here follows you there. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <TermSelect />
+        {isViewingPast && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-secondary/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <History size={12} /> Past list
+          </span>
+        )}
+      </div>
+
+      <div>
+        <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
+        {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={search} onChange={(e) => reset(setSearch)(e.target.value)} placeholder="Search member or officer…" className={`${selectCls} w-56 pl-9`} />
+          <input value={search} onChange={(e) => reset(setSearch)(e.target.value)} placeholder="Search member or officer…" className={`${selectCls} w-full pl-9 sm:w-56`} />
         </div>
         <select value={action} onChange={(e) => reset(setAction)(e.target.value)} className={selectCls} aria-label="Event">
           <option value="">Any event</option>
@@ -109,18 +140,22 @@ export default function PaymentHistory() {
           <option value="">Any section</option>
           {meta.sections.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <div className="flex items-center gap-1.5">
-          <select value={dateField} onChange={(e) => reset(setDateField)(e.target.value)} className={selectCls} aria-label="Date field">
+        {/* The date group wraps as a unit. Without flex-wrap the two date
+            inputs plus the field select are wider than a phone, and the row
+            pushed the whole page sideways. */}
+        <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
+          <select value={dateField} onChange={(e) => reset(setDateField)(e.target.value)} className={`${selectCls} min-w-0 flex-1 sm:flex-none`} aria-label="Date field">
             <option value="effective_at">Payment date</option>
             <option value="created_at">Recorded</option>
           </select>
-          <input type="date" value={from} onChange={(e) => reset(setFrom)(e.target.value)} className={selectCls} aria-label="From" />
+          <input type="date" value={from} onChange={(e) => reset(setFrom)(e.target.value)} className={`${selectCls} min-w-0 flex-1 sm:flex-none`} aria-label="From" />
           <span className="text-muted-foreground">–</span>
-          <input type="date" value={until} onChange={(e) => reset(setUntil)(e.target.value)} className={selectCls} aria-label="Until" />
+          <input type="date" value={until} onChange={(e) => reset(setUntil)(e.target.value)} className={`${selectCls} min-w-0 flex-1 sm:flex-none`} aria-label="Until" />
         </div>
       </div>
 
       <DataTable
+        fill
         columns={columns}
         rows={data?.data ?? []}
         rowKey={(r) => r.id}
@@ -128,8 +163,8 @@ export default function PaymentHistory() {
         error={error}
         emptyHeading="No payments recorded yet"
         emptyDescription="Marking a member as paid in the Members List records it here."
+        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
       />
-      {data && <Pagination meta={data.meta} onPage={setPage} />}
     </div>
   );
 }

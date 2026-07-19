@@ -27,7 +27,6 @@ class PaymentTransactionResource extends JsonResource
             'previousEffectiveAt' => optional($this->previous_effective_at)->toIso8601String(),
             'recordedAt' => optional($this->created_at)->toIso8601String(),
             'actor' => $this->actor,
-            'note' => $this->note,
         ];
     }
 }
