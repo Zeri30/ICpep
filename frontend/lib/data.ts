@@ -278,22 +278,25 @@ export type EventTone = "red" | "amber" | "slate";
 
 export interface EventItem {
   name: string;
-  date: string;
+  month: string;
   venue: string;
   cat: string;
   tone: EventTone;
   desc: string;
+  image: string;
 }
 
+/* Real ICpEP.SE BulSU–Meneses activities under Pres. Jeremiah (A.Y. 2025–2026),
+   in the order they were conducted. Photos live in /public/events. */
 export const EVENTS: EventItem[] = [
-  { name: "Intro to Python Workshop", date: "Feb 14, 2025", venue: "Computer Lab 2", cat: "Workshop", tone: "red", desc: "A zero-to-hero session covering Python basics, culminating in a mini text-based game build." },
-  { name: "Web Dev Bootcamp", date: "Mar 7–8, 2025", venue: "AVR, Meneses Campus", cat: "Workshop", tone: "red", desc: "Two-day intensive on HTML, CSS, JavaScript, and deploying a personal portfolio site." },
-  { name: "ICPEP Week 2025", date: "Apr 21–25, 2025", venue: "Campus Grounds", cat: "Major Event", tone: "red", desc: "A week-long celebration of computer engineering: exhibits, games, quiz bees, and the general assembly." },
-  { name: "Coding Challenge: Algorithm Arena", date: "May 16, 2025", venue: "Computer Lab 1", cat: "Competition", tone: "amber", desc: "Timed algorithmic problem-solving showdown. Top three advance to the regional eliminations." },
-  { name: "Tech Talk: AI in Engineering", date: "Jun 20, 2025", venue: "AVR, Meneses Campus", cat: "Seminar", tone: "slate", desc: "Industry speakers on how machine learning is reshaping engineering practice in the Philippines." },
-  { name: "Community Outreach: Tech for Kids", date: "Jul 12, 2025", venue: "Guiguinto Elementary School", cat: "Outreach", tone: "amber", desc: "Members teach basic computer literacy and Scratch programming to grade-school students." },
-  { name: "Team Building 2025", date: "Aug 9, 2025", venue: "Norzagaray, Bulacan", cat: "Team Building", tone: "slate", desc: "A full day of games, challenges, and bonding to kick off the new academic year as one chapter." },
-  { name: "Seminar: Cybersecurity Fundamentals", date: "Sep 19, 2025", venue: "AVR, Meneses Campus", cat: "Seminar", tone: "slate", desc: "Threats, defenses, and ethical hacking basics — with a live demonstration of common attack vectors." },
+  { name: "CPE R3 Challenge Tryout: Programming Sprint", month: "October 2025", venue: "BulSU Meneses Campus", cat: "Competition", tone: "red", desc: "Timed coding sprint to select the chapter's representatives for the ICpEP.SE Regional 3 Challenge.", image: "/events/cpe-r3-tryout-sprint.jpg" },
+  { name: "Innovation to Revolution: Arduino Basics & Overview", month: "October 2025", venue: "BulSU Meneses Campus", cat: "Workshop", tone: "amber", desc: "A hands-on introduction to Arduino microcontrollers and embedded systems in the world of emerging technology.", image: "/events/arduino-basics.jpg" },
+  { name: "Artificial Intelligence Basics", month: "October 2025", venue: "BulSU Meneses Campus", cat: "Seminar", tone: "slate", desc: "A foundational seminar on artificial intelligence concepts and their growing role in engineering.", image: "/events/ai-basics.jpg" },
+  { name: "Machine Learning", month: "October 2025", venue: "BulSU Meneses Campus", cat: "Seminar", tone: "slate", desc: "A deep dive into machine learning fundamentals, models, and their real-world engineering applications.", image: "/events/machine-learning.jpg" },
+  { name: "CPE Challenge: Programming Sprint — Meneses Edition", month: "October 2025", venue: "BulSU Meneses Campus", cat: "Competition", tone: "red", desc: "The campus-wide programming sprint pitting Meneses CpE students against each other in a timed algorithmic showdown.", image: "/events/cpe-challenge-meneses.jpg" },
+  { name: "BulSU Meneses Campus: Inter-Department League", month: "December 2025", venue: "BulSU Meneses Campus", cat: "League", tone: "amber", desc: "A friendly inter-department sports league fostering camaraderie and sportsmanship across the campus.", image: "/events/inter-department-league.jpg" },
+  { name: "ICpEP.SE BulSU–MC R3 Challenge Tryouts", month: "February 2026", venue: "BulSU Meneses Campus", cat: "Competition", tone: "red", desc: "Selection tryouts for the delegates who will carry BulSU Meneses to the ICpEP.SE Regional 3 Challenge.", image: "/events/r3-challenge-tryouts.jpg" },
+  { name: "CPE Exhibition & General Convocation", month: "May 2026", venue: "BulSU Meneses Campus", cat: "Major Event", tone: "red", desc: "The flagship \"Peaky Blinders: Crafting Tomorrow's Engineers\" showcase, capped by the general convocation.", image: "/events/cpe-exhibition-convocation.jpg" },
 ];
 
 /* ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import Image from "next/image";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -81,40 +82,53 @@ const toneHex: Record<EventItem["tone"], string> = {
   slate: "#64748b",
 };
 
-/* One large event "slide" used in the horizontal reel. */
+/* One large event "slide" used in the horizontal reel. A real event photo fills
+   the card, with a dark scrim so the details stay legible over any image. */
 function EventPanel({ e, index }: { e: EventItem; index: number }) {
   const hex = toneHex[e.tone];
   return (
-    <article className="group relative shrink-0 w-[78vw] sm:w-[46vw] lg:w-[32vw] xl:w-[25vw] h-[60vh] rounded-2xl border border-line bg-card overflow-hidden flex flex-col p-8">
-      <div className="absolute top-0 inset-x-0 h-1" style={{ background: `linear-gradient(90deg, ${hex}, transparent)` }} />
+    <article className="group relative shrink-0 w-[78vw] sm:w-[46vw] lg:w-[32vw] xl:w-[25vw] h-[60vh] rounded-2xl border border-line bg-card overflow-hidden flex flex-col">
+      <Image
+        src={e.image}
+        alt={e.name}
+        fill
+        sizes="(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 32vw"
+        draggable={false}
+        className="select-none object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+      />
+      {/* legibility scrim: dark at the base, clear at the top */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/10" />
+      <div className="absolute top-0 inset-x-0 h-1 z-10" style={{ background: `linear-gradient(90deg, ${hex}, transparent)` }} />
       <span
-        className="pointer-events-none absolute -right-2 -top-6 font-display font-black leading-none select-none text-[10rem] opacity-[0.06]"
+        className="pointer-events-none absolute right-4 top-3 z-10 font-display font-black leading-none select-none text-5xl opacity-25"
         style={{ color: hex }}
       >
         {String(index + 1).padStart(2, "0")}
       </span>
 
-      <div className="flex items-center justify-between">
-        <Badge tone={e.tone}>{e.cat}</Badge>
-        <ArrowUpRight
-          size={20}
-          className="text-muted-foreground/40 group-hover:text-primary group-hover:-translate-y-1 group-hover:translate-x-1 transition-all"
-        />
-      </div>
-
-      <div className="mt-auto">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mb-4">
-          <span className="flex items-center gap-1.5">
-            <Calendar size={13} style={{ color: hex }} /> {e.date}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <MapPin size={13} style={{ color: hex }} /> {e.venue}
-          </span>
+      <div className="relative z-10 flex h-full flex-col p-8">
+        <div className="flex items-center justify-between">
+          <Badge tone={e.tone}>{e.cat}</Badge>
+          <ArrowUpRight
+            size={20}
+            className="text-white/40 group-hover:text-primary group-hover:-translate-y-1 group-hover:translate-x-1 transition-all"
+          />
         </div>
-        <h4 className="font-display font-bold text-2xl md:text-3xl uppercase tracking-wide leading-tight">
-          {e.name}
-        </h4>
-        <p className="mt-3 text-sm text-secondary-foreground leading-relaxed">{e.desc}</p>
+
+        <div className="mt-auto">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mb-4">
+            <span className="flex items-center gap-1.5">
+              <Calendar size={13} style={{ color: hex }} /> {e.month}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <MapPin size={13} style={{ color: hex }} /> {e.venue}
+            </span>
+          </div>
+          <h4 className="font-display font-bold text-2xl md:text-3xl uppercase tracking-wide leading-tight">
+            {e.name}
+          </h4>
+          <p className="mt-3 text-sm text-secondary-foreground leading-relaxed">{e.desc}</p>
+        </div>
       </div>
     </article>
   );
