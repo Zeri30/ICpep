@@ -32,7 +32,7 @@ export default function UsersFilters({
         <input
           value={value.search}
           onChange={(e) => set({ search: e.target.value })}
-          placeholder="Search name, username or email…"
+          placeholder="Search name or email…"
           className={`${selectCls} w-full pl-9 sm:w-64`}
         />
       </div>

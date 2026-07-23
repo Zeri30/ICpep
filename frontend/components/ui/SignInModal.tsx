@@ -100,9 +100,9 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
         exit={{ opacity: 0 }}
         transition={{ duration: 0.25 }}
         onClick={onClose}
-        className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm"
+        className="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm"
       />
-      <div className="fixed inset-0 z-[90] grid place-items-center p-4 pointer-events-none">
+      <div className="fixed inset-0 z-[100] grid place-items-center p-4 pointer-events-none">
         <motion.div
           key="signin-modal"
           role="dialog"

@@ -21,6 +21,7 @@ class PaymentTransactionResource extends JsonResource
             'id' => $this->id,
             'memberName' => $this->member_name,
             'section' => $this->section,
+            'yearLevel' => $this->year_level,
             'action' => $this->action,
             'amount' => (float) $this->amount,
             'effectiveAt' => optional($this->effective_at)->toIso8601String(),

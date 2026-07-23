@@ -32,6 +32,9 @@ class RoleAccountsSeeder extends Seeder
                 ['email' => "{$username}@".self::DOMAIN],
                 [
                     'name' => $role->label(),
+                    'first_name' => $role->label(),
+                    'middle_initial' => null,
+                    'last_name' => '',
                     'username' => $username,
                     'password' => $hash,
                     'role' => $role,

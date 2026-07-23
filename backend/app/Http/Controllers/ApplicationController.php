@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Application;
 use App\Models\MembershipTerm;
 use App\Models\RegistrationSetting;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ApplicationController extends Controller
 {
@@ -22,6 +24,10 @@ class ApplicationController extends Controller
         return response()->json([
             'isOpen' => $setting->is_open,
             'reason' => $setting->is_open ? null : $setting->closed_reason,
+            // Lets the public form remember a submission per membership period,
+            // so a refresh keeps showing the confirmation rather than a blank
+            // form — and correctly resets when the next period opens.
+            'periodId' => MembershipTerm::current()?->id,
         ]);
     }
 
@@ -76,29 +82,69 @@ class ApplicationController extends Controller
             'picture'        => ['required', 'file', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
 
+        // Duplicate safety net (checked before we upload anything). One active
+        // application per email address within the current list: a student who
+        // already applied — by accident, a page refresh, the back button, or a
+        // second tab — is turned away with a clear message rather than filed
+        // twice. The email is matched case-insensitively so "Juan@x" and
+        // "juan@x" are the same person.
+        if ($this->alreadyApplied($term->id, $validated['email'])) {
+            return $this->duplicateResponse();
+        }
+
         // Upload files to the configured disk. store() generates a random,
         // collision-free name and returns the path within the bucket.
         $signaturePath = $request->file('signature')->store('signatures');
         $picturePath = $request->file('picture')->store('pictures');
 
-        $application = Application::create([
-            'membership_term_id' => $term->id,
-            'surname'         => $validated['surname'],
-            'given_name'      => $validated['givenName'],
-            'middle_initial'  => $validated['middleInitial'] ?? null,
-            'year_level'      => $validated['yearLevel'],
-            'section'         => $validated['section'],
-            'birthday'        => $validated['birthday'],
-            'address'         => $validated['address'],
-            'email'           => $validated['email'],
-            'phone'           => $validated['phone'],
-            'signature_path'  => $signaturePath,
-            'picture_path'    => $picturePath,
-        ]);
+        try {
+            $application = Application::create([
+                'membership_term_id' => $term->id,
+                'surname'         => $validated['surname'],
+                'given_name'      => $validated['givenName'],
+                'middle_initial'  => $validated['middleInitial'] ?? null,
+                'year_level'      => $validated['yearLevel'],
+                'section'         => $validated['section'],
+                'birthday'        => $validated['birthday'],
+                'address'         => $validated['address'],
+                'email'           => $validated['email'],
+                'phone'           => $validated['phone'],
+                'signature_path'  => $signaturePath,
+                'picture_path'    => $picturePath,
+            ]);
+        } catch (QueryException $e) {
+            // Two submissions raced past the check above at the same moment; the
+            // unique index (applications_term_email_active_unique) is the last
+            // line of defence. 23505 is Postgres' unique-violation SQLSTATE.
+            if ($e->getCode() === '23505') {
+                Storage::delete([$signaturePath, $picturePath]);
+
+                return $this->duplicateResponse();
+            }
+
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Membership registered',
             'id'      => $application->id,
         ], 201);
+    }
+
+    /** Is there already a live application under this email in the given list? */
+    private function alreadyApplied(int $termId, string $email): bool
+    {
+        return Application::query()
+            ->where('membership_term_id', $termId)
+            ->whereRaw('lower(email) = ?', [mb_strtolower(trim($email))])
+            ->exists();
+    }
+
+    private function duplicateResponse(): JsonResponse
+    {
+        return response()->json([
+            'message' => 'You have already applied. Our records show a membership application under this email for the current period, so there is nothing more to do.',
+            'duplicate' => true,
+        ], 409);
     }
 }

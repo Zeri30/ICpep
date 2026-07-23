@@ -54,7 +54,8 @@ class UserController extends Controller
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('username', 'like', "%{$search}%")
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
             });
         }
@@ -79,16 +80,19 @@ class UserController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:150'],
-            'username' => ['required', 'string', 'max:50', 'alpha_dash', 'unique:users,username'],
+            'first_name' => ['required', 'string', 'max:100'],
+            'middle_initial' => ['nullable', 'string', 'max:1'],
+            'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', Rule::in(UserRole::values())],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
         $user = User::create([
-            'name' => $data['name'],
-            'username' => $data['username'],
+            'name' => $this->composeName($data),
+            'first_name' => $data['first_name'],
+            'middle_initial' => $data['middle_initial'] ?? null,
+            'last_name' => $data['last_name'],
             'email' => $data['email'],
             'role' => $data['role'],
             'password' => Hash::make($data['password']),
@@ -96,7 +100,7 @@ class UserController extends Controller
             'email_verified_at' => now(),
         ]);
 
-        ActivityLog::record('user_created', "Created admin account: {$user->name} (@{$user->username})", $user->name);
+        ActivityLog::record('user_created', "Created admin account: {$user->name}", $user->name);
 
         return (new UserResource($user))->response()->setStatusCode(201);
     }
@@ -104,8 +108,9 @@ class UserController extends Controller
     public function update(Request $request, User $user): UserResource|JsonResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:150'],
-            'username' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('users', 'username')->ignore($user->id)],
+            'first_name' => ['required', 'string', 'max:100'],
+            'middle_initial' => ['nullable', 'string', 'max:1'],
+            'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(UserRole::values())],
         ]);
@@ -117,8 +122,10 @@ class UserController extends Controller
         }
 
         $user->update([
-            'name' => $data['name'],
-            'username' => $data['username'],
+            'name' => $this->composeName($data),
+            'first_name' => $data['first_name'],
+            'middle_initial' => $data['middle_initial'] ?? null,
+            'last_name' => $data['last_name'],
             'email' => $data['email'],
             'role' => $data['role'],
         ]);
@@ -173,6 +180,21 @@ class UserController extends Controller
     }
 
     /* ---------------------------------------------------------------- helpers */
+
+    /**
+     * The displayed full name, composed from the parts the form now captures —
+     * "Juan S. Dela Cruz". Kept in the `name` column so every screen and log
+     * line that shows an officer's name is unchanged.
+     *
+     * @param  array{first_name:string,middle_initial?:?string,last_name:string}  $data
+     */
+    private function composeName(array $data): string
+    {
+        $middle = trim((string) ($data['middle_initial'] ?? ''));
+        $middle = $middle === '' ? '' : mb_strtoupper($middle).'. ';
+
+        return trim($data['first_name'].' '.$middle.$data['last_name']);
+    }
 
     private function isSelf(Request $request, User $user): bool
     {

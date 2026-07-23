@@ -22,8 +22,9 @@ const inputCls =
 const labelCls = "mb-1.5 block font-head text-[11px] font-semibold uppercase tracking-widest text-secondary-foreground";
 
 type FormState = {
-  name: string;
-  username: string;
+  firstName: string;
+  middleInitial: string;
+  lastName: string;
   email: string;
   role: string;
   password: string;
@@ -42,8 +43,9 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
   const editing = !!user;
 
   const [form, setForm] = useState<FormState>(() => ({
-    name: user?.name ?? "",
-    username: user?.username ?? "",
+    firstName: user?.firstName ?? "",
+    middleInitial: user?.middleInitial ?? "",
+    lastName: user?.lastName ?? "",
     email: user?.email ?? "",
     role: user?.role ?? meta.roles[meta.roles.length - 1]?.value ?? "admin",
     password: "",
@@ -68,16 +70,18 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
     try {
       if (editing) {
         await apiSend("PATCH", `/users/${user!.id}`, {
-          name: form.name,
-          username: form.username,
+          first_name: form.firstName,
+          middle_initial: form.middleInitial,
+          last_name: form.lastName,
           email: form.email,
           role: form.role,
         });
         notify("Account updated");
       } else {
         await apiSend("POST", "/users", {
-          name: form.name,
-          username: form.username,
+          first_name: form.firstName,
+          middle_initial: form.middleInitial,
+          last_name: form.lastName,
           email: form.email,
           role: form.role,
           password: form.password,
@@ -126,24 +130,28 @@ export function AccountFields({ state, boxed = true }: { state: AccountFormState
       <section className={section}>
         <h2 className={heading}>Account details</h2>
         <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelCls}>First Name</label>
+            <input className={inputCls} value={form.firstName} onChange={(e) => set({ firstName: e.target.value })} required maxLength={100} autoComplete="off" placeholder="Juan" />
+          </div>
+          <div className="grid grid-cols-[6rem_1fr] gap-4">
+            <div>
+              <label className={labelCls}>M.I.</label>
+              <input
+                className={inputCls}
+                value={form.middleInitial}
+                onChange={(e) => set({ middleInitial: e.target.value.slice(0, 1) })}
+                maxLength={1}
+                autoComplete="off"
+                placeholder="S"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Last Name</label>
+              <input className={inputCls} value={form.lastName} onChange={(e) => set({ lastName: e.target.value })} required maxLength={100} autoComplete="off" placeholder="Dela Cruz" />
+            </div>
+          </div>
           <div className="sm:col-span-2">
-            <label className={labelCls}>Full Name</label>
-            <input className={inputCls} value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={150} />
-          </div>
-          <div>
-            <label className={labelCls}>Username</label>
-            <input
-              className={inputCls}
-              value={form.username}
-              onChange={(e) => set({ username: e.target.value })}
-              required
-              maxLength={50}
-              autoComplete="off"
-              placeholder="e.g. jsantos"
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">Letters, numbers, dashes and underscores.</p>
-          </div>
-          <div>
             <label className={labelCls}>Email</label>
             <input type="email" className={inputCls} value={form.email} onChange={(e) => set({ email: e.target.value })} required maxLength={150} />
           </div>

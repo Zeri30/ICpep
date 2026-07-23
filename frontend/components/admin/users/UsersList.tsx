@@ -5,7 +5,6 @@
    password, and permanent delete. Every destructive action confirms first, and
    the signed-in officer can never deactivate or delete their own row. */
 
-import Link from "next/link";
 import {
   KeyRound,
   MoreVertical,
@@ -22,6 +21,7 @@ import DataTable, { type Column, type SortState } from "@/components/admin/ui/Da
 import Pagination from "@/components/admin/ui/Pagination";
 import UsersFilters, { EMPTY_USER_FILTERS, type UserFilters } from "@/components/admin/users/UsersFilters";
 import NewUserModal from "@/components/admin/users/NewUserModal";
+import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -69,6 +69,7 @@ export default function UsersList() {
   const { notify } = useAdmin();
 
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
   const [filters, setFilters] = useState<UserFilters>(EMPTY_USER_FILTERS);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "createdAt", direction: "desc" });
@@ -152,7 +153,7 @@ export default function UsersList() {
       render: (u) => (
         <div className="flex items-center gap-3">
           <span className="grid size-9 place-items-center rounded-full bg-secondary text-xs font-bold uppercase text-muted-foreground">
-            {(u.name || u.username || "?").slice(0, 2)}
+            {(u.name || "?").slice(0, 2)}
           </span>
           <div>
             <p className="font-medium text-foreground">
@@ -163,7 +164,6 @@ export default function UsersList() {
         </div>
       ),
     },
-    { key: "username", header: "Username", render: (u) => <span className="text-secondary-foreground">@{u.username}</span> },
     { key: "email", header: "Email", render: (u) => <span className="text-secondary-foreground">{u.email}</span> },
     { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge user={u} /> },
     { key: "status", header: "Status", render: (u) => <StatusPill active={u.isActive} /> },
@@ -179,6 +179,7 @@ export default function UsersList() {
           onOpen={() => setMenuFor(u.id)}
           onClose={() => setMenuFor(null)}
           user={u}
+          onEdit={() => setEditing(u)}
           onToggle={() => setConfirm({ kind: "toggle", user: u })}
           onReset={() => setResetFor(u)}
           onDelete={() => setConfirm({ kind: "delete", user: u })}
@@ -257,6 +258,12 @@ export default function UsersList() {
         onClose={() => setCreating(false)}
       />
 
+      <EditUserModal
+        user={editing}
+        onSaved={refresh}
+        onClose={() => setEditing(null)}
+      />
+
       <ResetPasswordModal
         open={!!resetFor}
         userName={resetFor?.name ?? null}
@@ -272,6 +279,7 @@ function RowMenu({
   onOpen,
   onClose,
   user,
+  onEdit,
   onToggle,
   onReset,
   onDelete,
@@ -280,6 +288,7 @@ function RowMenu({
   onOpen: () => void;
   onClose: () => void;
   user: AdminUser;
+  onEdit: () => void;
   onToggle: () => void;
   onReset: () => void;
   onDelete: () => void;
@@ -304,9 +313,9 @@ function RowMenu({
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-20 w-56 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)]">
-          <Link href={`/admin/users/${user.id}/edit`} className={item} onClick={onClose}>
+          <button onClick={() => { onClose(); onEdit(); }} className={item}>
             <Pencil size={15} /> Edit account
-          </Link>
+          </button>
           <button onClick={() => { onClose(); onReset(); }} className={item}>
             <KeyRound size={15} /> Reset password
           </button>

@@ -64,6 +64,7 @@ export type PaymentRow = {
   id: number;
   memberName: string;
   section: string | null;
+  yearLevel: string | null;
   action: "paid" | "revoked" | "adjusted";
   amount: number;
   effectiveAt: string | null;
@@ -75,6 +76,9 @@ export type PaymentRow = {
 export type AdminUser = {
   id: number;
   name: string;
+  firstName: string | null;
+  middleInitial: string | null;
+  lastName: string | null;
   username: string | null;
   email: string;
   role: string | null;

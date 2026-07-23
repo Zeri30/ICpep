@@ -31,6 +31,11 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');
 
+    // Payment History — read-only ledger, open to every administrator for
+    // transparency. Acting on payments still needs members.payment (see the
+    // Members module); this page only shows the record.
+    Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+
     // Membership lists and the public form's open/closed state. Reading both is
     // open to any officer — the Members module shows the list selector and a
     // registration banner to everyone. Changing either is the semester rollover
@@ -58,11 +63,6 @@ Route::middleware(EnsureAdmin::class)->group(function () {
         Route::delete('/members/{application}', [MemberController::class, 'destroy'])->name('members.destroy');
         Route::post('/members/{application}/toggle-paid', [MemberController::class, 'togglePaid'])->name('members.togglePaid');
         Route::post('/members/{application}/restore', [MemberController::class, 'restore'])->withTrashed()->name('members.restore');
-    });
-
-    // Financial modules — Treasurer roles only.
-    Route::middleware('permission:finance.view')->group(function () {
-        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
     });
 
     // User Management — administrator accounts. Programming Team only.

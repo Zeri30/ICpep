@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Lock, Send } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Lock, Send, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Reveal from "@/components/ui/Reveal";
 import SectionHeading from "@/components/ui/SectionHeading";
 import PresentationInner from "@/components/ui/PresentationInner";
@@ -9,7 +9,7 @@ import FileDropField, { type FileDropValue } from "@/components/ui/FileDropField
 import { SECTIONS, YEAR_LEVELS } from "@/lib/data";
 import { API_URL } from "@/lib/config";
 
-type FormStatus = "idle" | "submitting" | "success" | "error";
+type FormStatus = "idle" | "submitting" | "success" | "error" | "duplicate";
 
 /* Shared field styling */
 const fieldBase =
@@ -58,8 +58,9 @@ function ClosedPanel({ reason }: { reason: string | null }) {
   );
 }
 
-/* Shown after a successful submission. */
-function SuccessPanel({ onReset }: { onReset: () => void }) {
+/* Shown after a successful submission. A terminal state — one application per
+   student, so there is deliberately no "submit another". */
+function SuccessPanel() {
   return (
     <div className="rounded-2xl bg-card border border-primary/30 p-8 sm:p-12 text-center shadow-[0_0_40px_rgba(0,0,0,0.4)]">
       <div className="mx-auto grid place-items-center w-16 h-16 rounded-full bg-primary/15 text-primary-glow mb-5 shadow-glow-sm">
@@ -70,24 +71,74 @@ function SuccessPanel({ onReset }: { onReset: () => void }) {
         Thank you for applying to ICpEP.SE BulSU Meneses Campus. Our officers will review your application
         and reach out with the next steps.
       </p>
-      <button
-        type="button"
-        onClick={onReset}
-        className="mt-7 inline-flex items-center gap-2 rounded-md border border-line px-5 py-3 text-xs font-head font-semibold uppercase tracking-widest text-secondary-foreground hover:text-foreground hover:border-primary/50 transition-colors"
-      >
-        Submit another application
-      </button>
     </div>
   );
 }
 
-type Registration = { isOpen: boolean; reason: string | null };
+/* Shown when the backend reports an application already exists for this student.
+   A terminal state — there is deliberately no "try again", since re-submitting
+   would only be refused again. */
+function AlreadyAppliedPanel({ message }: { message: string }) {
+  return (
+    <div className="rounded-2xl bg-card border border-amber-500/30 p-8 sm:p-12 text-center shadow-[0_0_40px_rgba(0,0,0,0.4)]">
+      <div className="mx-auto grid place-items-center w-16 h-16 rounded-full bg-amber-500/15 text-amber-400 mb-5">
+        <ShieldCheck size={30} />
+      </div>
+      <h3 className="font-display font-bold text-2xl uppercase tracking-wide">You&apos;ve Already Applied</h3>
+      <p className="mt-3 text-secondary-foreground leading-relaxed max-w-md mx-auto">{message}</p>
+      <p className="mt-5 text-sm text-muted-foreground max-w-md mx-auto">
+        If you believe this is a mistake, please reach out to our officers.
+      </p>
+    </div>
+  );
+}
+
+type Registration = { isOpen: boolean; reason: string | null; periodId: number | null };
+
+/* Remembers, per browser, that an application was submitted for a given
+   membership period. This is a UX convenience so a refresh or the back button
+   keeps showing the confirmation instead of a fresh form — the real duplicate
+   guarantee is the backend (unique index + pre-check), which a cleared marker,
+   another tab, or a direct API call cannot get around. Scoped to the period id
+   so the form reopens for everyone once the next membership period begins. */
+const APPLIED_KEY = "icpep:applied-period";
+/** Stored when a submission is recorded but the period id wasn't known. */
+const APPLIED_UNKNOWN = "applied";
+
+/** The raw marker: a period id as a string, the sentinel above, or null. */
+function readApplied(): string | null {
+  try {
+    return localStorage.getItem(APPLIED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function markApplied(periodId: number | null) {
+  try {
+    localStorage.setItem(APPLIED_KEY, periodId === null ? APPLIED_UNKNOWN : String(periodId));
+  } catch {
+    /* private mode / storage disabled — backend still guards the duplicate */
+  }
+}
+
+function clearApplied() {
+  try {
+    localStorage.removeItem(APPLIED_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export default function Membership() {
   const [status, setStatus] = useState<FormStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [duplicateMsg, setDuplicateMsg] = useState("");
   const [signatureFile, setSignatureFile] = useState<FileDropValue>(null);
   const [pictureFile, setPictureFile] = useState<FileDropValue>(null);
+  // Synchronous guard against a second submission slipping through before React
+  // has re-rendered the disabled button — covers double-clicks and Enter spam.
+  const submittingRef = useRef(false);
   // null until we know. The form is withheld until then rather than rendered
   // optimistically, so a closed period never flashes a form the visitor can
   // start filling in.
@@ -96,17 +147,41 @@ export default function Membership() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`${API_URL}/api/registration-status`, { headers: { Accept: "application/json" } })
+    fetch(`${API_URL}/api/registration-status`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: Registration | null) => {
         if (cancelled) return;
         // If the check itself fails, fall back to showing the form — the
         // backend refuses a closed submission anyway, so the worst case is a
         // clear error instead of a silently hidden form.
-        setRegistration(data ?? { isOpen: true, reason: null });
+        const reg = data ?? { isOpen: true, reason: null, periodId: null };
+        setRegistration(reg);
+        // Already submitted from this browser? Keep the confirmation up instead
+        // of a blank form after a refresh / back button. Restore whenever a
+        // marker exists and the period still matches (or we couldn't read the
+        // period); only a confirmed new period clears it, so the form reopens
+        // when the next membership cycle begins.
+        const applied = readApplied();
+        if (applied !== null) {
+          // Clear only on a confirmed newer period (a numeric marker that no
+          // longer matches). An unknown-period marker or a matching one stays.
+          const staleForNewPeriod =
+            reg.periodId != null && applied !== APPLIED_UNKNOWN && applied !== String(reg.periodId);
+          if (staleForNewPeriod) {
+            clearApplied();
+          } else {
+            setStatus("success");
+          }
+        }
       })
       .catch(() => {
-        if (!cancelled) setRegistration({ isOpen: true, reason: null });
+        if (cancelled) return;
+        setRegistration({ isOpen: true, reason: null, periodId: null });
+        // Backend unreachable, but a local marker still means "already applied".
+        if (readApplied() !== null) setStatus("success");
       });
 
     return () => {
@@ -114,21 +189,20 @@ export default function Membership() {
     };
   }, []);
 
-  const resetForm = () => {
-    setStatus("idle");
-    setSignatureFile(null);
-    setPictureFile(null);
-    setErrorMsg("");
-  };
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // Ignore repeat submits while one is already in flight (a refresh or the
+    // back button starts a fresh page, so this only guards the live form).
+    if (submittingRef.current) return;
 
     if (!signatureFile || !pictureFile) {
       setStatus("error");
       setErrorMsg("Please upload both your e-signature and your formal picture.");
       return;
     }
+
+    submittingRef.current = true;
 
     // Build the payload before any await so we don't rely on the event later.
     const payload = new FormData(e.currentTarget);
@@ -156,6 +230,19 @@ export default function Membership() {
             setRegistration({ isOpen: false, reason: data.reason ?? null });
             return;
           }
+          // Already applied — an active application exists for this student.
+          // A terminal state: show the notice instead of the form so a refresh
+          // or repeated attempt can't file a second record.
+          if (res.status === 409 && data?.duplicate) {
+            markApplied(registration?.periodId ?? null);
+            setDuplicateMsg(
+              typeof data.message === "string" && data.message
+                ? data.message
+                : "Our records show you have already applied for the current membership period.",
+            );
+            setStatus("duplicate");
+            return;
+          }
           // Laravel returns { message, errors: { field: [msg, ...] } } on 422.
           if (res.status === 422 && data?.errors) {
             const first = Object.values(data.errors)[0];
@@ -166,13 +253,17 @@ export default function Membership() {
         } catch {
           /* non-JSON error response — keep the generic message */
         }
+        submittingRef.current = false;
         setStatus("error");
         setErrorMsg(msg);
         return;
       }
 
+      // Remember it for this period so a refresh keeps the confirmation up.
+      markApplied(registration?.periodId ?? null);
       setStatus("success");
     } catch {
+      submittingRef.current = false;
       setStatus("error");
       setErrorMsg("Couldn't reach the server. Please check your connection and try again.");
     }
@@ -202,7 +293,9 @@ export default function Membership() {
           ) : !registration.isOpen ? (
           <ClosedPanel reason={registration.reason} />
           ) : status === "success" ? (
-          <SuccessPanel onReset={resetForm} />
+          <SuccessPanel />
+          ) : status === "duplicate" ? (
+          <AlreadyAppliedPanel message={duplicateMsg} />
           ) : (
           <form
             onSubmit={handleSubmit}

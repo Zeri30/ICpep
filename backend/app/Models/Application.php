@@ -167,6 +167,7 @@ class Application extends Model
             'actor' => Auth::user()?->email,
             'member_name' => $this->full_name,
             'section' => $this->section,
+            'year_level' => $this->year_level,
         ]);
     }
 

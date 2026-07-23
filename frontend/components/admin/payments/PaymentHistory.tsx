@@ -1,8 +1,8 @@
 "use client";
 
-/* Payment History — the React parity of the read-only Filament ledger: filters
-   (Event, Section, Date range), search, and pagination. Amounts are shown per
-   row (descriptive), never summed. */
+/* Payment History — read-only ledger open to every administrator: filters
+   (Event, Section), search, and pagination. Amounts are shown per row
+   (descriptive), never summed. */
 
 import { CheckCircle2, History, PencilLine, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -41,9 +41,6 @@ export default function PaymentHistory() {
   const [debounced, setDebounced] = useState("");
   const [action, setAction] = useState("");
   const [section, setSection] = useState("");
-  const [dateField, setDateField] = useState("effective_at");
-  const [from, setFrom] = useState("");
-  const [until, setUntil] = useState("");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -67,14 +64,9 @@ export default function PaymentHistory() {
     if (debounced) p.set("search", debounced);
     if (action) p.set("action", action);
     if (section) p.set("section", section);
-    if (from || until) {
-      p.set("dateField", dateField);
-      if (from) p.set("from", from);
-      if (until) p.set("until", until);
-    }
     p.set("page", String(page));
     return p.toString();
-  }, [term, debounced, action, section, dateField, from, until, page]);
+  }, [term, debounced, action, section, page]);
 
   const { data, loading, error } = useAdminResource<Paginated<PaymentRow>>(
     termsLoading ? null : `/payments?${qs}`,
@@ -100,7 +92,7 @@ export default function PaymentHistory() {
     },
     { key: "event", header: "Event", render: (r) => <EventBadge action={r.action} /> },
     { key: "amount", header: "Amount", align: "right", render: (r) => amountCell(r.amount) },
-    { key: "paidAt", header: "Payment date", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.effectiveAt)}</span> },
+    { key: "yearLevel", header: "Year Level", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span> },
     { key: "recorded", header: "Recorded", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span> },
     { key: "actor", header: "By", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span> },
   ];
@@ -140,18 +132,6 @@ export default function PaymentHistory() {
           <option value="">Any section</option>
           {meta.sections.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        {/* The date group wraps as a unit. Without flex-wrap the two date
-            inputs plus the field select are wider than a phone, and the row
-            pushed the whole page sideways. */}
-        <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
-          <select value={dateField} onChange={(e) => reset(setDateField)(e.target.value)} className={`${selectCls} min-w-0 flex-1 sm:flex-none`} aria-label="Date field">
-            <option value="effective_at">Payment date</option>
-            <option value="created_at">Recorded</option>
-          </select>
-          <input type="date" value={from} onChange={(e) => reset(setFrom)(e.target.value)} className={`${selectCls} min-w-0 flex-1 sm:flex-none`} aria-label="From" />
-          <span className="text-muted-foreground">–</span>
-          <input type="date" value={until} onChange={(e) => reset(setUntil)(e.target.value)} className={`${selectCls} min-w-0 flex-1 sm:flex-none`} aria-label="Until" />
-        </div>
       </div>
 
       <DataTable

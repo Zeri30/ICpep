@@ -28,6 +28,7 @@ class PaymentTransaction extends Model
         'actor',
         'member_name',
         'section',
+        'year_level',
     ];
 
     protected $casts = [

@@ -16,7 +16,7 @@ type Counts = { members: number; payments: number; users: number };
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null, need: null },
   { href: "/admin/members", label: "Members List", icon: Users, badgeKey: "members", need: "members.view" },
-  { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments", need: "finance.view" },
+  { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments", need: null },
   { href: "/admin/users", label: "User Management", icon: ShieldCheck, badgeKey: "users", need: "users.manage" },
   { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: null, need: null },
 ] as const satisfies ReadonlyArray<{
