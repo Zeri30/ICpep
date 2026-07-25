@@ -227,7 +227,9 @@ export default function Membership() {
           // with the notice rather than reporting a failure the visitor can do
           // nothing about.
           if (res.status === 403 && data?.registrationClosed) {
-            setRegistration({ isOpen: false, reason: data.reason ?? null });
+            // Only the open state changed — the visitor is still looking at the
+            // same registration period, so carry its id through.
+            setRegistration((r) => ({ isOpen: false, reason: data.reason ?? null, periodId: r?.periodId ?? null }));
             return;
           }
           // Already applied — an active application exists for this student.
