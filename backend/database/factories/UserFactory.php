@@ -24,8 +24,16 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        // Accounts are captured as name parts and the displayed `name` is
+        // composed from them (see UserController::composeName), so build them
+        // the same way here rather than leaving the parts null.
+        $first = fake()->firstName();
+        $last = fake()->lastName();
+
         return [
-            'name' => fake()->name(),
+            'name' => "{$first} {$last}",
+            'first_name' => $first,
+            'last_name' => $last,
             'username' => fake()->unique()->userName(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),

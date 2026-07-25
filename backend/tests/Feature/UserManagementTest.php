@@ -56,60 +56,78 @@ class UserManagementTest extends TestCase
 
     /* -------------------------------------------------------------- creation */
 
-    public function test_create_hashes_password_and_logs(): void
+    public function test_create_composes_the_name_hashes_the_password_and_logs(): void
     {
         $this->actingAs($this->manager())
             ->postJson('/api/admin/users', [
-                'name' => 'Jane Officer',
-                'username' => 'jane',
+                'first_name' => 'Jane',
+                'middle_initial' => 's',
+                'last_name' => 'Officer',
                 'email' => 'jane@example.com',
                 'role' => 'secretary',
                 'password' => 'secret1234',
                 'password_confirmation' => 'secret1234',
             ])
             ->assertCreated()
-            ->assertJsonPath('data.username', 'jane')
+            // The form captures the parts; the displayed name is composed from
+            // them, with the middle initial upper-cased and punctuated.
+            ->assertJsonPath('data.name', 'Jane S. Officer')
             ->assertJsonPath('data.isActive', true);
 
-        $user = User::where('username', 'jane')->first();
+        $user = User::where('email', 'jane@example.com')->first();
         $this->assertNotNull($user);
+        $this->assertSame('Jane', $user->first_name);
+        $this->assertSame('Officer', $user->last_name);
         $this->assertNotSame('secret1234', $user->password);
         $this->assertTrue(Hash::check('secret1234', $user->password));
         $this->assertDatabaseHas('activity_logs', ['action' => 'user_created']);
     }
 
-    public function test_create_rejects_duplicate_username_and_email(): void
+    public function test_create_composes_the_name_without_a_middle_initial(): void
     {
-        User::factory()->create(['username' => 'taken', 'email' => 'taken@example.com']);
+        $this->actingAs($this->manager())
+            ->postJson('/api/admin/users', [
+                'first_name' => 'Jane',
+                'last_name' => 'Officer',
+                'email' => 'jane@example.com',
+                'role' => 'secretary',
+                'password' => 'secret1234',
+                'password_confirmation' => 'secret1234',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Jane Officer');
+    }
+
+    public function test_create_requires_the_name_parts_and_rejects_a_duplicate_email(): void
+    {
+        User::factory()->create(['email' => 'taken@example.com']);
 
         $this->actingAs($this->manager())
             ->postJson('/api/admin/users', [
-                'name' => 'Dup',
-                'username' => 'taken',
                 'email' => 'taken@example.com',
                 'role' => 'secretary',
                 'password' => 'secret1234',
                 'password_confirmation' => 'secret1234',
             ])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['username', 'email']);
+            ->assertJsonValidationErrors(['first_name', 'last_name', 'email']);
     }
 
     /* ---------------------------------------------------------------- update */
 
-    public function test_update_allows_reusing_own_username(): void
+    public function test_update_allows_reusing_own_email(): void
     {
-        $target = User::factory()->create(['username' => 'keep', 'email' => 'keep@example.com']);
+        $target = User::factory()->create(['email' => 'keep@example.com']);
 
         $this->actingAs($this->manager())
             ->patchJson("/api/admin/users/{$target->id}", [
-                'name' => 'Renamed',
-                'username' => 'keep',
+                'first_name' => 'Re',
+                'last_name' => 'Named',
                 'email' => 'keep@example.com',
                 'role' => 'president',
             ])
             ->assertOk()
-            ->assertJsonPath('data.name', 'Renamed')
+            ->assertJsonPath('data.name', 'Re Named')
             ->assertJsonPath('data.role', 'president');
 
         $this->assertDatabaseHas('activity_logs', ['action' => 'user_updated']);
@@ -119,16 +137,35 @@ class UserManagementTest extends TestCase
     {
         $me = $this->manager();
 
+        // Everything else in the payload is valid, so the 422 can only be the
+        // self-lockout guard rather than a stray validation failure.
         $this->actingAs($me)
             ->patchJson("/api/admin/users/{$me->id}", [
-                'name' => $me->name,
-                'username' => $me->username,
+                'first_name' => $me->first_name,
+                'last_name' => $me->last_name,
                 'email' => $me->email,
                 'role' => 'secretary',
             ])
-            ->assertUnprocessable();
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'You cannot change your own role.');
 
         $this->assertSame(UserRole::ProgrammingTeam, $me->fresh()->role);
+    }
+
+    /** The guard is on changing your *role*, not on editing yourself at all. */
+    public function test_can_edit_own_account_while_keeping_the_same_role(): void
+    {
+        $me = $this->manager();
+
+        $this->actingAs($me)
+            ->patchJson("/api/admin/users/{$me->id}", [
+                'first_name' => 'Still',
+                'last_name' => 'Me',
+                'email' => $me->email,
+                'role' => $me->role->value,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Still Me');
     }
 
     /* ---------------------------------------------------- activate/deactivate */
