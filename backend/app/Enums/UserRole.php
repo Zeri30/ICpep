@@ -2,12 +2,19 @@
 
 namespace App\Enums;
 
+use App\Models\RolePermission;
+
 /**
  * Administrator roles for the organization's officer positions. Each role maps
  * to a set of {@see Permission}s; that mapping is the single source of truth for
  * what a role may do, consumed by the Gates, middleware and the frontend alike.
  *
- * The set is open to extension: add a case here, give it a label and a
+ * The mapping below is the *default*. The Programming Team edits the live one
+ * from the Privileges panel in User Management, which stores overrides in
+ * `role_permissions` — so a grant applies to the role, and therefore to every
+ * account holding it.
+ *
+ * The set is open to extension: add a case here, give it a label and a default
  * permission set, and seed an account for it — the rest of the system adapts.
  */
 enum UserRole: string
@@ -42,11 +49,27 @@ enum UserRole: string
     }
 
     /**
-     * The abilities this role is granted.
+     * The abilities this role actually holds right now.
+     *
+     * Resolved through {@see RolePermission}, so the Programming Team can grant
+     * or revoke abilities from the Privileges panel without a code change. A
+     * role nobody has customized falls back to {@see self::defaultPermissions()}.
      *
      * @return list<Permission>
      */
     public function permissions(): array
+    {
+        return RolePermission::resolve($this);
+    }
+
+    /**
+     * The abilities this role ships with — the starting point the Privileges
+     * panel offers as "reset to defaults", and the permanent home of any locked
+     * ability (see {@see Permission::isLocked()}).
+     *
+     * @return list<Permission>
+     */
+    public function defaultPermissions(): array
     {
         return match ($this) {
             // Full non-financial access, plus managing officer accounts. Account

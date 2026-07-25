@@ -1,9 +1,13 @@
 "use client";
 
 /* User Management — administrator accounts. Filters (search + role + status),
-   sort, pagination, and per-row actions: edit, activate/deactivate, reset
-   password, and permanent delete. Every destructive action confirms first, and
-   the signed-in officer can never deactivate or delete their own row. */
+   sort, pagination, and per-row actions: edit, privileges, activate/deactivate,
+   reset password, and permanent delete. Every destructive action confirms first,
+   and the signed-in officer can never deactivate or delete their own row.
+
+   Privileges is the odd one out: it is reached from a row but edits that
+   account's *role*, so it affects every account holding it. The modal states
+   that rather than the menu, since the menu has no room to explain it. */
 
 import {
   KeyRound,
@@ -11,6 +15,7 @@ import {
   Pencil,
   Power,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -23,6 +28,7 @@ import UsersFilters, { EMPTY_USER_FILTERS, type UserFilters } from "@/components
 import NewUserModal from "@/components/admin/users/NewUserModal";
 import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
+import RolePrivilegesModal from "@/components/admin/users/RolePrivilegesModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { AdminUser, Paginated } from "@/lib/adminTypes";
@@ -76,6 +82,7 @@ export default function UsersList() {
   const [page, setPage] = useState(1);
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
+  const [privilegesFor, setPrivilegesFor] = useState<AdminUser | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
   useEffect(() => {
@@ -180,6 +187,7 @@ export default function UsersList() {
           onClose={() => setMenuFor(null)}
           user={u}
           onEdit={() => setEditing(u)}
+          onPrivileges={() => setPrivilegesFor(u)}
           onToggle={() => setConfirm({ kind: "toggle", user: u })}
           onReset={() => setResetFor(u)}
           onDelete={() => setConfirm({ kind: "delete", user: u })}
@@ -270,6 +278,9 @@ export default function UsersList() {
         onSubmit={resetPassword}
         onClose={() => setResetFor(null)}
       />
+
+      {/* Edits the row's role, not the row — see the note at the top. */}
+      <RolePrivilegesModal user={privilegesFor} onClose={() => setPrivilegesFor(null)} />
     </div>
   );
 }
@@ -280,6 +291,7 @@ function RowMenu({
   onClose,
   user,
   onEdit,
+  onPrivileges,
   onToggle,
   onReset,
   onDelete,
@@ -289,6 +301,7 @@ function RowMenu({
   onClose: () => void;
   user: AdminUser;
   onEdit: () => void;
+  onPrivileges: () => void;
   onToggle: () => void;
   onReset: () => void;
   onDelete: () => void;
@@ -316,6 +329,16 @@ function RowMenu({
           <button onClick={() => { onClose(); onEdit(); }} className={item}>
             <Pencil size={15} /> Edit account
           </button>
+          {/* Roleless accounts have nothing to configure. */}
+          {user.role ? (
+            <button onClick={() => { onClose(); onPrivileges(); }} className={item}>
+              <SlidersHorizontal size={15} /> Privileges
+            </button>
+          ) : (
+            <button type="button" className={disabled} title="This account has no role" disabled>
+              <SlidersHorizontal size={15} /> Privileges
+            </button>
+          )}
           <button onClick={() => { onClose(); onReset(); }} className={item}>
             <KeyRound size={15} /> Reset password
           </button>

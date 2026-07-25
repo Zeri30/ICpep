@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Admin\MemberController;
 use App\Http\Controllers\Api\Admin\MembershipTermController;
 use App\Http\Controllers\Api\Admin\PaymentController;
 use App\Http\Controllers\Api\Admin\RegistrationController;
+use App\Http\Controllers\Api\Admin\RolePermissionController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
@@ -31,10 +32,14 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');
 
-    // Payment History — read-only ledger, open to every administrator for
-    // transparency. Acting on payments still needs members.payment (see the
-    // Members module); this page only shows the record.
-    Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+    // Payment History — the read-only ledger. Gated on finance.view so the
+    // module can be turned on or off per role from the Privileges panel; the
+    // same permission hides the revenue figures on the dashboard, so "access
+    // financial modules" means one consistent thing wherever it is granted.
+    // Acting on payments is a separate ability and still needs members.payment.
+    Route::middleware('permission:finance.view')->group(function () {
+        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+    });
 
     // Membership lists and the public form's open/closed state. Reading both is
     // open to any officer — the Members module shows the list selector and a
@@ -67,6 +72,12 @@ Route::middleware(EnsureAdmin::class)->group(function () {
 
     // User Management — administrator accounts. Programming Team only.
     Route::middleware('permission:users.manage')->group(function () {
+        // Privileges — the editable role→permission matrix. Declared before the
+        // /users/{user} routes so "roles" is never taken for an account id.
+        Route::get('/users/roles', [RolePermissionController::class, 'index'])->name('roles.index');
+        Route::put('/users/roles/{role}', [RolePermissionController::class, 'update'])->name('roles.update');
+        Route::post('/users/roles/{role}/reset', [RolePermissionController::class, 'reset'])->name('roles.reset');
+
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');

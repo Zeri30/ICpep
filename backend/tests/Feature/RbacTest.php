@@ -47,6 +47,13 @@ class RbacTest extends TestCase
         }
     }
 
+    /**
+     * Payment History is part of the financial modules: reaching it needs
+     * finance.view, the same ability that reveals the revenue figures on the
+     * dashboard. These are the *default* holders — the Programming Team can
+     * grant or revoke it per role from the Privileges panel, which
+     * RolePrivilegesTest covers.
+     */
     public function test_only_finance_roles_reach_payment_history(): void
     {
         $this->actingAs($this->acting(UserRole::Treasurer))->getJson('/api/admin/payments')->assertOk();

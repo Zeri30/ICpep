@@ -90,6 +90,47 @@ export type AdminUser = {
   isSelf: boolean;
 };
 
+/* -------------------------------------------------------------- privileges */
+
+/** One ability in the Privileges panel (see App\Enums\Permission::catalog). */
+export type PermissionInfo = {
+  value: string;
+  label: string;
+  description: string;
+  /** The heading it sits under — "Members", "Finance", "Administration". */
+  group: string;
+  /**
+   * Whether the panel may grant or revoke it. Abilities are opened up one at a
+   * time; the rest are shown as fixed rows so the whole picture is visible.
+   */
+  editable: boolean;
+  /**
+   * An ability that must be held for this one to work, or null. Editing members
+   * and changing payment both need `members.view`, since reaching the module at
+   * all is gated on it — the backend drops them if it is missing.
+   */
+  requires: string | null;
+};
+
+/** What one role can do, and how far a change to it would reach. */
+export type RolePrivileges = {
+  value: string;
+  label: string;
+  /** The abilities the role holds right now. */
+  permissions: string[];
+  /** What it ships with — the target of "reset to defaults". */
+  defaults: string[];
+  /** True once the role has been changed from the shipped defaults. */
+  customized: boolean;
+  /** How many administrator accounts hold this role. */
+  accountCount: number;
+};
+
+export type PrivilegesCatalog = {
+  permissions: PermissionInfo[];
+  roles: RolePrivileges[];
+};
+
 export type ActivityRow = {
   id: number;
   action: string;
