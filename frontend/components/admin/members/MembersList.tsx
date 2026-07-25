@@ -29,6 +29,7 @@ import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/admin/members/MembersFilters";
+import EditMemberModal from "@/components/admin/members/EditMemberModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
@@ -72,6 +73,7 @@ export default function MembersList() {
   // what they will change — the ids alone can't answer that off-page.
   const [selected, setSelected] = useState<Map<number, Member>>(new Map());
   const [confirm, setConfirm] = useState<Confirm>(null);
+  const [editing, setEditing] = useState<Member | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
   // Debounce only the free-text search; selects apply immediately.
@@ -323,6 +325,7 @@ export default function MembersList() {
               onClose={() => setMenuFor(null)}
               member={m}
               canEdit={canEdit}
+              onEdit={() => setEditing(m)}
               onDelete={() => setConfirm({ kind: "delete", member: m })}
             />
           </div>
@@ -395,6 +398,13 @@ export default function MembersList() {
         emptyHeading="No members found"
         emptyDescription="Try clearing the filters, or wait for new registrations from the public form."
         footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+      />
+
+      {/* Editing stays on the list, so filters, term and page survive a save. */}
+      <EditMemberModal
+        member={editing}
+        onSaved={refresh}
+        onClose={() => setEditing(null)}
       />
 
       {/* Confirmations */}
@@ -513,6 +523,7 @@ function RowMenu({
   onClose,
   member,
   canEdit,
+  onEdit,
   onDelete,
 }: {
   open: boolean;
@@ -520,6 +531,7 @@ function RowMenu({
   onClose: () => void;
   member: Member;
   canEdit: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -545,9 +557,9 @@ function RowMenu({
             <Eye size={15} /> View
           </Link>
           {canEdit && (
-            <Link href={`/admin/members/${member.id}/edit`} className={item} onClick={onClose}>
+            <button onClick={() => { onClose(); onEdit(); }} className={item}>
               <Pencil size={15} /> Edit
-            </Link>
+            </button>
           )}
           <a href={`/api/admin/members/${member.id}/download/picture`} className={item} onClick={onClose}>
             <Download size={15} /> Download photo
