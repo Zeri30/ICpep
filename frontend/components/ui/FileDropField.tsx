@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, FileText, UploadCloud, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type DragEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent } from "react";
 
 export type FileDropValue = File | null;
 
@@ -40,17 +40,20 @@ export default function FileDropField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  /* The object URL for the image preview, derived during render rather than set
+     from an effect — an effect would render once without the preview and then
+     again with it, flashing the empty state on every pick. */
+  const previewUrl = useMemo(
+    () => (file && file.type.startsWith("image/") ? URL.createObjectURL(file) : null),
+    [file],
+  );
 
-  // Build (and revoke) an object URL for image previews.
+  // A blob URL pins the file in memory until revoked, so release each one once
+  // it has been replaced or the field unmounts.
   useEffect(() => {
-    if (file && file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
-    }
-    setPreviewUrl(null);
-  }, [file]);
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const acceptAttr = accept.join(",");
   const acceptLabel = accept.includes("application/pdf")
