@@ -60,6 +60,77 @@ export type Member = {
   signatureUrl?: string | null;
 };
 
+/**
+ * One event on the organization's calendar (see backend App\Models\Event).
+ *
+ * `date` and `time` arrive already converted to the organization's timezone, so
+ * the grid groups on `date` as a plain string and the form fills straight from
+ * both — no Date parsing, and therefore no chance of an event sliding a day
+ * either way on a device whose clock is set elsewhere.
+ */
+export type ScheduledEvent = {
+  id: number;
+  title: string;
+  category: string;
+  /** "2026-11-03" */
+  date: string;
+  /** "09:00" — for the start time input. */
+  time: string;
+  /** "11:00" — for the end time input. Null only on rows predating end times. */
+  endTime: string | null;
+  /** "9:00 AM" — for reading. */
+  timeLabel: string;
+  endTimeLabel: string | null;
+  /** "9:00 AM – 11:00 AM". Falls back to the start alone when there is no end. */
+  timeRangeLabel: string;
+  /** The underlying instant, for comparing rather than displaying. */
+  startsAt: string;
+  description: string | null;
+
+  /** What the Secretary says became of it. Never inferred from the date. */
+  status: "scheduled" | "done" | "cancelled";
+  statusLabel: string;
+  /** Where it sits relative to today, worked out from the date each request. */
+  timing: "upcoming" | "today" | "past";
+  /** That, in words: "Today", "Tomorrow", "3 days ago". */
+  timingLabel: string;
+  /** Its day has passed and nobody has said whether it happened. */
+  needsStatusUpdate: boolean;
+  /**
+   * Whether the outcome may be recorded yet — only once the day has gone by.
+   * Read from the API rather than re-derived here, so the control and the
+   * endpoint can never disagree about whether a click will be accepted.
+   */
+  statusEditable: boolean;
+  /**
+   * Whether the QR and code are still valid. False once the day has passed or
+   * the event is closed.
+   */
+  acceptsAttendance: boolean;
+
+  /**
+   * The attendance credentials and share link, present only for officers who
+   * can manage the schedule — the calendar itself is readable by everyone, and
+   * the token is the whole secret behind a check-in, so the API withholds these
+   * from the rest.
+   */
+  qrUrl?: string;
+  attendanceCode?: string;
+  /** Whether a link may be minted: still scheduled, and not yet past. */
+  canShare?: boolean;
+  shareUrl?: string | null;
+  /**
+   * A link was issued and has since been withdrawn. Distinguishes that from
+   * never having been shared — both leave `shareUrl` null, but only this one
+   * means creating a link now replaces a dead one rather than being the first.
+   */
+  shareRevoked?: boolean;
+  /** Why sharing is off, when it is. */
+  shareBlockedReason?: string | null;
+  createdBy?: string | null;
+  createdAt: string | null;
+};
+
 export type PaymentRow = {
   id: number;
   memberName: string;

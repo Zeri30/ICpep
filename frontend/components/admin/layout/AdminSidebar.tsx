@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from "lucide-react";
+import { CalendarDays, Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from "lucide-react";
 import Logo from "@/components/ui/Logo";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import { useAdminResource } from "@/lib/adminApi";
@@ -16,6 +16,9 @@ type Counts = { members: number; payments: number; users: number };
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null, need: null },
   { href: "/admin/members", label: "Members List", icon: Users, badgeKey: "members", need: "members.view" },
+  // Open to every role: reading the calendar needs no ability, only changing it
+  // does. So there is no `need` here — the module itself is not gated.
+  { href: "/admin/calendar", label: "Calendar", icon: CalendarDays, badgeKey: null, need: null },
   { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments", need: "finance.view" },
   { href: "/admin/users", label: "User Management", icon: ShieldCheck, badgeKey: "users", need: "users.manage" },
   { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: null, need: null },
