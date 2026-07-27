@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\ActivityController;
 use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\MeController;
 use App\Http\Controllers\Api\Admin\MemberController;
 use App\Http\Controllers\Api\Admin\MembershipTermController;
@@ -51,6 +52,19 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/registration', [RegistrationController::class, 'show'])->name('registration.show');
     Route::post('/registration/close', [RegistrationController::class, 'close'])->name('registration.close');
     Route::post('/registration/open', [RegistrationController::class, 'open'])->name('registration.open');
+
+    // The calendar. Reading is open to every officer — a schedule only some of
+    // them can see is not a schedule. Changing it needs schedule.manage, held
+    // by the Secretary alone by default, so every other role's calendar is
+    // view-only whether or not the UI offers them a button.
+    Route::get('/events', [EventController::class, 'index'])->name('events.index');
+    Route::middleware('permission:schedule.manage')->group(function () {
+        Route::post('/events', [EventController::class, 'store'])->name('events.store');
+        Route::patch('/events/{event}', [EventController::class, 'update'])->name('events.update');
+        Route::patch('/events/{event}/status', [EventController::class, 'status'])->name('events.status');
+        Route::post('/events/{event}/share', [EventController::class, 'share'])->name('events.share');
+        Route::delete('/events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
+    });
 
     // Members — reading needs members.view; the writes below gate more tightly.
     Route::middleware('permission:members.view')->group(function () {
