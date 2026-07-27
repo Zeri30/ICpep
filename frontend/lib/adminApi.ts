@@ -21,7 +21,8 @@ export type Permission =
   | "members.payment"
   | "finance.view"
   | "users.manage"
-  | "terms.manage";
+  | "terms.manage"
+  | "schedule.manage";
 
 export type Officer = {
   name: string;
@@ -42,6 +43,13 @@ export type AdminMeta = {
   sections: string[];
   yearLevels: string[];
   roles: RoleOption[];
+  /** The Category options on the event form (see App\Models\Event::CATEGORIES). */
+  eventCategories: string[];
+  /**
+   * The organization's timezone. Every date on the calendar is a day in this
+   * zone, not in the viewer's — the API converts, so the UI only has to say so.
+   */
+  timezone: string;
 };
 
 export type Me = { user: Officer; meta: AdminMeta };

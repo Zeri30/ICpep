@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\Event;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -41,6 +42,13 @@ class MeController extends Controller
                 'sections' => Application::SECTIONS,
                 'yearLevels' => Application::YEAR_LEVELS,
                 'roles' => UserRole::options(),
+                // The event form's Category select. Sent with the rest of the
+                // config so the calendar never has to make a second call just
+                // to populate a dropdown.
+                'eventCategories' => Event::CATEGORIES,
+                // Every date on the calendar means a day in this timezone, not
+                // in the viewer's — shown in the UI so that is never a guess.
+                'timezone' => Event::timezone(),
             ],
         ]);
     }

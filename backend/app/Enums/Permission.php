@@ -38,6 +38,12 @@ enum Permission: string
      */
     case ManageTerms = 'terms.manage';
 
+    /**
+     * Schedule events on the organization's calendar — create, edit and delete.
+     * Reading the calendar needs nothing: every officer sees it.
+     */
+    case ManageSchedule = 'schedule.manage';
+
     public function label(): string
     {
         return match ($this) {
@@ -47,6 +53,7 @@ enum Permission: string
             self::AccessFinance => 'Access financial modules',
             self::ManageUsers => 'Manage administrator accounts',
             self::ManageTerms => 'Manage membership lists and registration',
+            self::ManageSchedule => 'Schedule events on the calendar',
         };
     }
 
@@ -64,6 +71,7 @@ enum Permission: string
             self::AccessFinance => 'Open Payment History, and see revenue figures and the payment summary on the dashboard.',
             self::ManageUsers => 'Open User Management: create accounts, reset passwords and set privileges.',
             self::ManageTerms => "Create each semester's membership list, switch the current one, and open or close the public registration form.",
+            self::ManageSchedule => 'Add, edit and delete events on the Calendar. Every officer can already read it — this is the ability to change it.',
         };
     }
 
@@ -73,6 +81,7 @@ enum Permission: string
         return match ($this) {
             self::ViewMembers, self::EditMembers, self::UpdatePayment => 'Members',
             self::AccessFinance => 'Finance',
+            self::ManageSchedule => 'Scheduling',
             self::ManageUsers, self::ManageTerms => 'Administration',
         };
     }
@@ -95,7 +104,8 @@ enum Permission: string
     {
         return match ($this) {
             self::ViewMembers, self::EditMembers, self::UpdatePayment,
-            self::AccessFinance, self::ManageUsers, self::ManageTerms => true,
+            self::AccessFinance, self::ManageUsers, self::ManageTerms,
+            self::ManageSchedule => true,
             // Unreachable today, and deliberately kept: a case added later falls
             // here and stays out of the panel until someone lists it above.
             default => false,
