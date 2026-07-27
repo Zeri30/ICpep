@@ -79,6 +79,18 @@ select {
   color-scheme: dark;
 }
 
+/* Tailwind's reset leaves buttons on the default arrow, so every clickable
+   thing in the admin had to ask for a pointer by hand — and the ones that
+   forgot read as text that happens to highlight on hover. Stated once here
+   instead. Disabled buttons are left out so `disabled:cursor-not-allowed`
+   still means something, and elements that only play a button on TV
+   (`<label>`, `role="button"` divs) keep their own class, since no element
+   selector could find them. */
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
 /* ---------------------------------------------------------------------------
    Utilities & effects
 --------------------------------------------------------------------------- */

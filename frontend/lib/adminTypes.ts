@@ -87,19 +87,20 @@ export type ScheduledEvent = {
   startsAt: string;
   description: string | null;
 
-  /** What the Secretary says became of it. Never inferred from the date. */
+  /** What the secretariat says became of it. Never inferred from the date. */
   status: "scheduled" | "done" | "cancelled";
   statusLabel: string;
   /** Where it sits relative to today, worked out from the date each request. */
   timing: "upcoming" | "today" | "past";
   /** That, in words: "Today", "Tomorrow", "3 days ago". */
   timingLabel: string;
-  /** Its day has passed and nobody has said whether it happened. */
+  /** It has finished and nobody has said whether it happened. */
   needsStatusUpdate: boolean;
   /**
-   * Whether the outcome may be recorded yet — only once the day has gone by.
-   * Read from the API rather than re-derived here, so the control and the
-   * endpoint can never disagree about whether a click will be accepted.
+   * Whether the outcome may be recorded yet — only from an hour after the
+   * event ends. Read from the API rather than re-derived here: it turns on the
+   * server's clock rather than the viewer's, and the control and the endpoint
+   * can never disagree about whether a click will be accepted.
    */
   statusEditable: boolean;
   /**

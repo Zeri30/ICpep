@@ -3,16 +3,17 @@
 /* The organization's calendar: a month grid, and the scheduled events listed
    beside it.
 
-   Read by every officer role. The Secretary — anyone holding schedule.manage —
-   also creates here, by double-clicking the day they want. The backend enforces
-   the same rule, so for every other role this screen is genuinely view-only and
-   not merely a version of it with the buttons taken out. */
+   Read by every officer role. The secretariat — anyone holding schedule.manage
+   — also creates here, by double-clicking the day they want. The backend
+   enforces the same rule, so for every other role this screen is genuinely
+   view-only and not merely a version of it with the buttons taken out. */
 
 import {
   AlertTriangle,
   CalendarDays,
   CalendarPlus,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -22,11 +23,15 @@ import { useAdmin } from "@/components/admin/AdminProvider";
 import CategoryTag, { toneFor } from "@/components/admin/schedule/CategoryTag";
 import {
   NeedsUpdateBadge,
+  STATUS_ORDER,
+  STATUS_TONES,
   StatusBadge,
   TimingBadge,
+  pill,
 } from "@/components/admin/schedule/StatusBadge";
 import EventModal from "@/components/admin/schedule/EventModal";
 import {
+  MONTHS,
   WEEKDAYS,
   formatLongDate,
   formatShortDate,
@@ -61,6 +66,50 @@ const SCOPES: { value: Scope; label: string }[] = [
 ];
 
 /**
+ * The outcome being filtered on, or null for no filter at all.
+ *
+ * It asks the whole calendar rather than the slice the scope had selected, and
+ * so replaces the scope while it is on rather than narrowing it. "Show me the
+ * done ones" is a question about the record: an event is only ever marked Done
+ * or Cancelled once it is over, so asking it of Upcoming — the default — would
+ * answer "none" for a calendar full of them, which reads as a broken filter
+ * rather than as a scope that excluded the answer.
+ */
+type StatusFilter = ScheduledEvent["status"] | null;
+
+/**
+ * How many events on the calendar hold each outcome.
+ *
+ * Counted over everything, not the current slice, so a chip means the same
+ * number before and after it is clicked.
+ */
+type StatusCounts = Record<ScheduledEvent["status"], number>;
+
+/**
+ * What the list says when a slice turns up nothing. Constant, so they sit here
+ * with the scopes they belong to rather than being rebuilt on every render —
+ * only the month's needs the month's name, which is why it is a function.
+ */
+const EMPTY_COPY: Record<Scope, (monthName: string) => { heading: string; body: string }> = {
+  upcoming: () => ({
+    heading: "Nothing coming up",
+    body: "Past events are still on the calendar — switch to All to see them.",
+  }),
+  month: (monthName) => ({
+    heading: `Nothing in ${monthName}`,
+    body: "Page to another month, or switch to All.",
+  }),
+  all: () => ({
+    heading: "No events scheduled yet",
+    body: "Events the Secretary and Assistant Secretary schedule will be listed here.",
+  }),
+  unrecorded: () => ({
+    heading: "Everything is accounted for",
+    body: "No past event is still waiting to be marked done or cancelled.",
+  }),
+};
+
+/**
  * How many events a day cell shows before it collapses into a count.
  *
  * Three fit the cell at its smallest desktop height. A fourth would overflow,
@@ -87,6 +136,7 @@ export default function EventCalendar() {
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>("upcoming");
+  const [status, setStatus] = useState<StatusFilter>(null);
   const [modal, setModal] = useState<ModalState>(CLOSED);
 
   const listRef = useRef<HTMLElement>(null);
@@ -109,23 +159,68 @@ export default function EventCalendar() {
     return map;
   }, [events]);
 
-  // A selected day overrides the scope entirely: having asked for one date, the
-  // officer is shown that date and nothing else, until they clear it.
+  const statusCounts = useMemo(() => {
+    const counts: StatusCounts = { scheduled: 0, done: 0, cancelled: 0 };
+    for (const e of events) counts[e.status]++;
+    return counts;
+  }, [events]);
+
+  // Three questions, each answered on its own and in this order of precedence:
+  // a chosen day beats a chosen outcome, which beats the time scope. Each is
+  // narrower than the one below it, so the one the officer picked last is the
+  // one they get — and none of them can silently combine into an empty list
+  // whose emptiness nobody asked for.
   const listed = useMemo(() => {
     if (selected) return byDate.get(selected) ?? [];
+    if (status) {
+      const matching = events.filter((e) => e.status === status);
+      // Done and Cancelled are a record of what happened, and a record reads
+      // newest first — soonest-first would open a year of done events on one
+      // from last September. Scheduled keeps the calendar's own order, because
+      // it is the one outcome that still holds events yet to happen.
+      return status === "scheduled" ? matching : matching.reverse();
+    }
     if (scope === "upcoming") return events.filter((e) => e.date >= today);
     if (scope === "month") return events.filter((e) => e.date.startsWith(monthPrefix));
     if (scope === "unrecorded") return events.filter((e) => e.needsStatusUpdate);
     return events;
-  }, [selected, byDate, scope, events, today, monthPrefix]);
+  }, [selected, byDate, status, scope, events, today, monthPrefix]);
 
-  // Events whose day has gone by with nobody saying what became of them. The
+  // Events that have finished with nobody saying what became of them. The
   // count is what makes the backlog visible — one forgotten event is easy to
   // miss on a grid, eleven of them should be impossible to.
   const unrecorded = useMemo(
     () => events.filter((e) => e.needsStatusUpdate).length,
     [events],
   );
+
+  /**
+   * The years the header's picker offers.
+   *
+   * Only years that have actually arrived, so a chapter's first year opens on a
+   * single entry rather than a list of empty futures. The list grows on its own
+   * — on the 1st of January the new year appears and every year before it stays,
+   * because those events are still the organization's record and the point of
+   * the picker is reaching them.
+   *
+   * Two things widen it beyond that. A year holding an event is always listed,
+   * so a meeting booked ahead of the turn of the year can still be reached; and
+   * the month on screen is always listed, so paging past the edge with the
+   * arrows cannot leave the picker showing a year it does not offer.
+   */
+  const years = useMemo(() => {
+    const thisYear = Number(today.slice(0, 4));
+    let first = Math.min(thisYear, cursor.year);
+    let last = Math.max(thisYear, cursor.year);
+
+    for (const e of events) {
+      const year = Number(e.date.slice(0, 4));
+      if (year < first) first = year;
+      if (year > last) last = year;
+    }
+
+    return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+  }, [events, today, cursor.year]);
 
   const step = (by: number) => {
     const d = new Date(cursor.year, cursor.month + by, 1);
@@ -201,7 +296,7 @@ export default function EventCalendar() {
           <p className="mt-1 text-sm text-muted-foreground">
             {canManage
               ? "Double-click a date to schedule an event."
-              : "Scheduled events, kept by the Secretary."}{" "}
+              : "Scheduled events, kept by the Secretary and Assistant Secretary."}{" "}
             All times {meta.timezone.replace("_", " ")}.
           </p>
         </div>
@@ -210,7 +305,11 @@ export default function EventCalendar() {
           <button
             type="button"
             onClick={() => openDay(defaultNewDate())}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent"
+            // Sized to the schedule panel it sits above — 22rem to match the
+            // grid's second column below, full width where that column is. The
+            // two right edges lining up exactly reads as deliberate; nearly
+            // lining up reads as a mistake.
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent lg:w-[22rem]"
           >
             <CalendarPlus size={16} /> New event
           </button>
@@ -226,8 +325,11 @@ export default function EventCalendar() {
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section className="flex min-h-0 flex-col rounded-xl border border-line bg-card">
           <MonthHeader
-            label={monthLabel(cursor.year, cursor.month)}
+            year={cursor.year}
+            month={cursor.month}
+            years={years}
             loading={loading && !data}
+            onPick={(year, month) => setCursor({ year, month })}
             onPrev={() => step(-1)}
             onNext={() => step(1)}
             onToday={goToday}
@@ -283,6 +385,8 @@ export default function EventCalendar() {
           events={listed}
           selected={selected}
           scope={scope}
+          status={status}
+          statusCounts={statusCounts}
           unrecorded={unrecorded}
           monthName={monthLabel(cursor.year, cursor.month)}
           loading={loading && !data}
@@ -292,6 +396,7 @@ export default function EventCalendar() {
             // lingering day filter would silently override.
             setSelected(null);
           }}
+          onStatus={setStatus}
           onClear={() => setSelected(null)}
           onOpen={openEvent}
         />
@@ -308,15 +413,31 @@ export default function EventCalendar() {
   );
 }
 
+/**
+ * The month on screen, and the ways to change it.
+ *
+ * The heading *is* the picker: two selects wearing the display type the title
+ * used to. A calendar that can only be paged a month at a time makes last
+ * February eight clicks away, and the arrows are still there for the far more
+ * common step of one — so the pair covers both without adding a control that
+ * has to be found first.
+ */
 function MonthHeader({
-  label,
+  year,
+  month,
+  years,
   loading,
+  onPick,
   onPrev,
   onNext,
   onToday,
 }: {
-  label: string;
+  year: number;
+  /** 0-indexed, as Date has it. */
+  month: number;
+  years: number[];
   loading: boolean;
+  onPick: (year: number, month: number) => void;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -326,11 +447,25 @@ function MonthHeader({
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line/60 px-3 py-3">
-      <div className="flex items-center gap-2">
-        <h2 className="font-display text-lg font-black uppercase tracking-wide text-foreground">
-          {label}
-        </h2>
-        {loading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {/* The selects carry their own labels, but the grid keeps a heading so
+            the page's outline still says which month is being read. */}
+        <h2 className="sr-only">{monthLabel(year, month)}</h2>
+
+        <HeaderSelect
+          label="Month"
+          value={month}
+          onChange={(next) => onPick(year, next)}
+          options={MONTHS.map((name, i) => ({ value: i, label: name }))}
+        />
+        <HeaderSelect
+          label="Year"
+          value={year}
+          onChange={(next) => onPick(next, month)}
+          options={years.map((y) => ({ value: y, label: String(y) }))}
+        />
+
+        {loading && <Loader2 size={14} className="ml-1 animate-spin text-muted-foreground" />}
       </div>
       <div className="flex items-center gap-2">
         <button type="button" onClick={onToday} className="rounded-md border border-line px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground">
@@ -344,6 +479,55 @@ function MonthHeader({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * One half of the heading, as a dropdown.
+ *
+ * A native select rather than a custom menu: it is already keyboard-operable,
+ * it scrolls a long year list on its own, and on a phone it opens the platform
+ * picker — all things a hand-built panel would have to earn back. The chevron
+ * is drawn over it because `appearance-none` is what lets the closed state wear
+ * the heading's type rather than the OS's.
+ *
+ * Dressed as a control rather than as text: bordered, on a raised fill, with
+ * the chevron in the accent colour. Type this large reads as a title, and a
+ * title is not something anyone thinks to click — the box is what says
+ * otherwise before the pointer ever reaches it.
+ */
+function HeaderSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: { value: number; label: string }[];
+  onChange: (value: number) => void;
+}) {
+  return (
+    <span className="relative inline-flex items-center rounded-lg border border-line bg-secondary/50 transition-colors hover:border-primary/60 hover:bg-secondary focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40">
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="cursor-pointer appearance-none bg-transparent py-1 pl-2.5 pr-7 font-display text-lg font-black uppercase tracking-wide text-foreground outline-none"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value} className="bg-card font-sans text-sm normal-case">
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        size={15}
+        aria-hidden
+        strokeWidth={2.5}
+        className="pointer-events-none absolute right-2 text-primary"
+      />
+    </span>
   );
 }
 
@@ -391,7 +575,7 @@ function DayCell({
   return (
     // A labelled group rather than a gridcell: gridcell is only meaningful
     // inside a role="grid"/"row" tree, and wrapping each week in a row would
-    // buy nothing here. Only the Secretary can act on the cell itself, so
+    // buy nothing here. Only the secretariat can act on the cell itself, so
     // only they get it in the tab order — 42 focus stops that do nothing
     // would make the calendar tedious to tab past for everyone else, who
     // reach the events through the chips and the list instead.
@@ -519,10 +703,13 @@ function EventList({
   events,
   selected,
   scope,
+  status,
+  statusCounts,
   unrecorded,
   monthName,
   loading,
   onScope,
+  onStatus,
   onClear,
   onOpen,
 }: {
@@ -530,39 +717,47 @@ function EventList({
   events: ScheduledEvent[];
   selected: string | null;
   scope: Scope;
+  status: StatusFilter;
+  statusCounts: StatusCounts;
   unrecorded: number;
   monthName: string;
   loading: boolean;
   onScope: (scope: Scope) => void;
+  onStatus: (status: StatusFilter) => void;
   onClear: () => void;
   onOpen: (event: ScheduledEvent) => void;
 }) {
-  const empty = {
-    upcoming: {
-      heading: "Nothing coming up",
-      body: "Past events are still on the calendar — switch to All to see them.",
-    },
-    month: { heading: `Nothing in ${monthName}`, body: "Page to another month, or switch to All." },
-    all: {
-      heading: "No events scheduled yet",
-      body: "Events the Secretary schedules will be listed here.",
-    },
-    unrecorded: {
-      heading: "Everything is accounted for",
-      body: "No past event is still waiting to be marked done or cancelled.",
-    },
-  }[scope];
+  // The outcome the list is filtered on, as a word — "cancelled" — for the
+  // count and the empty state, both of which read as sentences.
+  const outcome = status === null ? null : STATUS_TONES[status].label.toLowerCase();
+
+  // The backlog is a scope, so an outcome supersedes it just like the others.
+  const showingBacklog = status === null && scope === "unrecorded";
+
+  const empty =
+    // The outcome filter replaces the scope, so it is the whole explanation
+    // when it is on: there is no month or slice left to blame.
+    outcome !== null
+      ? {
+          heading: `Nothing ${outcome}`,
+          body: `No event on the calendar is marked ${outcome}.`,
+        }
+      : EMPTY_COPY[scope](monthName);
 
   return (
     <section ref={ref} className="flex min-h-0 flex-col rounded-xl border border-line bg-card">
       <div className="border-b border-line/60 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
+            {/* "Schedule" rather than "Scheduled events": one of the outcomes
+                below is itself called Scheduled, and a panel headed "Scheduled
+                events" listing the cancelled ones would contradict itself. */}
             <h2 className="truncate font-head text-xs font-semibold uppercase tracking-[0.15em] text-foreground">
-              {selected ? formatLongDate(selected) : "Scheduled events"}
+              {selected ? formatLongDate(selected) : "Schedule"}
             </h2>
             <p className="text-[11px] text-muted-foreground">
-              {events.length} {events.length === 1 ? "event" : "events"}
+              {events.length} {!selected && outcome ? `${outcome} ` : ""}
+              {events.length === 1 ? "event" : "events"}
               {selected ? " on this day" : ""}
             </p>
           </div>
@@ -577,37 +772,67 @@ function EventList({
           )}
         </div>
 
-        {/* Hidden while a single day is showing — the scope does not apply to
+        {/* Hidden while a single day is showing — the filters do not apply to
             it, and offering a control that changes nothing is a small lie. */}
         {!selected && (
           <>
-            <div className="mt-3 flex rounded-lg border border-line p-0.5">
-              {SCOPES.map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => onScope(s.value)}
-                  aria-pressed={scope === s.value}
-                  className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    scope === s.value
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {s.label}
-                </button>
+            {/* Above the scope, and always here: this row is what the scope row
+                below comes and goes under, so putting it second would make the
+                chips jump every time one was picked. */}
+            <div role="group" aria-label="Filter by outcome" className="mt-3 flex flex-wrap gap-1">
+              {STATUS_ORDER.map((value) => (
+                <StatusChip
+                  key={value}
+                  value={value}
+                  count={statusCounts[value]}
+                  active={status === value}
+                  // Clicking the one already on clears it — the only way back
+                  // to everything, now that there is no "Any" to return to.
+                  onClick={() => onStatus(status === value ? null : value)}
+                />
               ))}
             </div>
 
-            {/* Only when there is a backlog, and it leaves once cleared —
-                a permanent "0 need an update" row is furniture nobody reads. */}
-            {(unrecorded > 0 || scope === "unrecorded") && (
+            {/* The scope answers "when", and an outcome supersedes it: while one
+                is chosen the list is the whole calendar's worth of them, and a
+                highlighted Upcoming beside it would be describing a slice that
+                is not on screen. */}
+            {status === null && (
+              <div className="mt-2 flex rounded-lg border border-line p-0.5">
+                {SCOPES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => onScope(s.value)}
+                    aria-pressed={scope === s.value}
+                    className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                      scope === s.value
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Only when there is a backlog, and it leaves once cleared — a
+                permanent "0 need an update" row is furniture nobody reads.
+                Stays put while an outcome is chosen, unlike the scope: the
+                backlog is drawn from the Scheduled ones, so it is most worth
+                reaching from exactly the chip that would otherwise hide it.
+                Clicking clears the outcome, because the two cannot both win. */}
+            {(unrecorded > 0 || showingBacklog) && (
               <button
                 type="button"
-                onClick={() => onScope(scope === "unrecorded" ? "upcoming" : "unrecorded")}
-                aria-pressed={scope === "unrecorded"}
+                onClick={() => {
+                  onStatus(null);
+                  onScope(showingBacklog ? "upcoming" : "unrecorded");
+                }}
+                aria-pressed={showingBacklog}
                 className={`mt-2 flex w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                  scope === "unrecorded"
+                  showingBacklog
                     ? "border-amber-accent/50 bg-amber-accent/15 text-amber-accent"
                     : "border-amber-accent/30 text-amber-accent hover:bg-amber-accent/10"
                 }`}
@@ -635,7 +860,11 @@ function EventList({
           </div>
         ) : (
           <ul className="divide-y divide-line/40">
-            {events.map((e) => (
+            {events.map((e) => {
+              // "Nov 04" once, rather than formatting the same date twice to
+              // read one half of it each time.
+              const [month, dayOfMonth] = formatShortDate(e.date).split(" ");
+              return (
               <li key={e.id}>
                 <button
                   type="button"
@@ -654,10 +883,10 @@ function EventList({
                 >
                   <span className="mt-0.5 w-12 shrink-0 text-center">
                     <span className="block font-display text-base font-black leading-none text-foreground">
-                      {formatShortDate(e.date).split(" ")[1]}
+                      {dayOfMonth}
                     </span>
                     <span className="block font-head text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {formatShortDate(e.date).split(" ")[0]}
+                      {month}
                     </span>
                   </span>
                   <span className="min-w-0 flex-1">
@@ -680,10 +909,57 @@ function EventList({
                   </span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * One outcome in the filter row, with how many events on the calendar hold it.
+ *
+ * The count is the point: it turns the row into a summary of the record as well
+ * as a control over it, and a chip reading 0 says so before it is clicked
+ * rather than after. Counted over everything, because clicking shows everything
+ * — a chip that read 0 and then produced seven would be worse than no count at
+ * all. Each wears its own colour only while it is the one being filtered on;
+ * three colours at rest would compete with the events below, which is where
+ * colour is meant to carry meaning.
+ *
+ * Takes the status itself rather than a label and a colour, so a fourth outcome
+ * would be one line in {@link STATUS_TONES} and nothing here.
+ */
+function StatusChip({
+  value,
+  count,
+  active,
+  onClick,
+}: {
+  value: ScheduledEvent["status"];
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const { label, badge } = STATUS_TONES[value];
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`${pill} transition-colors ${
+        active
+          ? badge
+          : "border-line text-muted-foreground hover:border-primary/40 hover:text-foreground"
+      }`}
+    >
+      {label}
+      <span className={`tabular-nums ${active ? "opacity-70" : "text-muted-foreground/60"}`}>
+        {count}
+      </span>
+    </button>
   );
 }
