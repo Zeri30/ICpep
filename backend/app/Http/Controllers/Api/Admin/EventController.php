@@ -20,7 +20,8 @@ use Illuminate\Validation\ValidationException;
  *
  * Reading is open to every officer — the calendar is the point, and a schedule
  * only some of the officers can see is not one. Writing belongs to whoever
- * holds `schedule.manage`, which by default is the Secretary alone.
+ * holds `schedule.manage`, which by default is the Secretary and the Assistant
+ * Secretary.
  *
  * The write routes are gated by middleware as well as here; the check is
  * repeated in the controller so the authorization is visible at the action it
@@ -102,9 +103,16 @@ class EventController extends Controller
      * Record what became of an event: done, cancelled, or back to scheduled.
      *
      * Kept off {@see self::update()} because it is a different act with a
-     * different consequence — closing an event kills its share link — and
-     * because the Secretary marks one done from a list without opening the
-     * whole form.
+     * different consequence: closing an event revokes its share link for good,
+     * and it is refused outright for one that is not over, where editing the
+     * details never is. Two rules that different do not belong behind one
+     * endpoint whose response could only report on both at once.
+     *
+     * The form sends this alongside the details on save — after them, so the
+     * outcome is judged against the event as it will be — which is two requests
+     * for what the officer sees as one save. That is the cost of keeping the
+     * distinction, and it buys a refusal that names the outcome as the thing
+     * that was refused.
      */
     public function status(Request $request, Event $event): JsonResponse
     {
@@ -119,9 +127,9 @@ class EventController extends Controller
         $status = EventStatus::from($data['status']);
 
         // Closing an event is an account of what happened, so there is nothing
-        // to account for until the day has gone by — marking next week's
-        // meeting Done would be a claim about the future. Enforced here and not
-        // only in the UI, so it holds for any client.
+        // to account for until it is over — marking next week's meeting Done
+        // would be a claim about the future. Enforced here and not only in the
+        // UI, so it holds for any client.
         //
         // Retracting one is always allowed, whatever the date. Without that,
         // an event closed and then rescheduled into the future could never be
@@ -129,7 +137,7 @@ class EventController extends Controller
         // that made it necessary.
         if ($status->isClosed() && ! $event->statusIsEditable()) {
             throw ValidationException::withMessages([
-                'status' => "This event has not happened yet ({$event->timingLabel()}). Its status can be set once the day has passed.",
+                'status' => "This event is not over yet ({$event->timingLabel()}). Its status can be set an hour after it ends.",
             ]);
         }
         $previous = $event->status;

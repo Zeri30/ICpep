@@ -3,7 +3,7 @@
 namespace App\Enums;
 
 /**
- * What the Secretary says became of an event.
+ * What the secretariat says became of an event.
  *
  * Deliberately separate from *when* the event is (see
  * {@see \App\Models\Event::timing()}), which the calendar works out from the
@@ -37,7 +37,7 @@ enum EventStatus: string
     }
 
     /**
-     * Has the Secretary settled what happened to this event?
+     * Has the secretariat settled what happened to this event?
      *
      * Both closed states end an event's life: its attendance QR stops working
      * and its share link goes dead.
@@ -53,12 +53,10 @@ enum EventStatus: string
         return array_map(static fn (self $s): string => $s->value, self::cases());
     }
 
-    /** @return list<array{value:string,label:string}> for the frontend controls. */
-    public static function options(): array
-    {
-        return array_map(
-            static fn (self $s): array => ['value' => $s->value, 'label' => $s->label()],
-            self::cases(),
-        );
-    }
+    // No options() here, unlike UserRole and the event categories: the calendar
+    // needs these three as a compile-time union to type its controls against,
+    // so they are declared in the frontend (see STATUS_TONES in
+    // StatusBadge.tsx) and each event carries its own `statusLabel` for
+    // display. A list shipped at runtime would be a second declaration, not a
+    // replacement for the first.
 }

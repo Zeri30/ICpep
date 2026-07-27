@@ -12,10 +12,11 @@ use Illuminate\Database\QueryException;
  * customized from the Privileges panel, holding that role's complete ability
  * list; roles without a row fall back to the defaults declared in code.
  *
- * Only abilities marked {@see Permission::isEditable()} can actually be moved —
- * today that is paid/unpaid alone. The rest are pinned to the code defaults on
- * every read, so widening the panel later is a change to that one method rather
- * than to anything here.
+ * Only abilities marked {@see Permission::isEditable()} can actually be moved;
+ * anything else is pinned to the code defaults on every read. Today every
+ * ability is editable, so a stored row is the whole truth for its role — which
+ * is why an ability added to a role's defaults afterwards needs a migration to
+ * reach a row that was already saved.
  *
  * Everything that authorizes — the Gates, the `permission:*` middleware, the
  * ability list handed to the React admin — reads through {@see self::resolve()},
