@@ -510,7 +510,9 @@ class RolePrivilegesTest extends TestCase
             ->postJson('/api/admin/users/roles/secretary/reset')
             ->assertOk()
             ->assertJsonPath('customized', false)
-            ->assertJsonPath('permissions', ['members.view', 'members.edit']);
+            // Scheduling is part of the Secretary's defaults — they keep the
+            // organization's calendar, so a reset must hand it back.
+            ->assertJsonPath('permissions', ['members.view', 'members.edit', 'schedule.manage']);
     }
 
     public function test_an_unknown_role_is_a_404(): void
