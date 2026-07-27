@@ -91,19 +91,19 @@ enum UserRole: string
                 Permission::EditMembers,
                 Permission::ManageTerms,
             ],
-            // The Secretary keeps the organization's calendar. Scheduling is
-            // theirs alone by default — every other role reads the calendar and
-            // cannot change it. Deliberately not shared with the Assistant
-            // Secretary: if the chapter wants a second pair of hands on the
-            // schedule, the Programming Team grants it from the Privileges
-            // panel rather than it being assumed here.
-            self::Secretary => [
+            // The secretariat keeps the organization's calendar. Scheduling is
+            // theirs by default — every other role reads the calendar and
+            // cannot change it. The Assistant Secretary holds it on the same
+            // terms as the Secretary: the post exists to cover the Secretary's
+            // work, and a schedule only one person can touch stops the week
+            // they are unwell.
+            self::Secretary, self::AssistantSecretary => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
                 Permission::ManageSchedule,
             ],
             // Full non-financial access; cannot manage accounts or the cycle.
-            self::Adviser, self::AssistantSecretary => [
+            self::Adviser => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
             ],

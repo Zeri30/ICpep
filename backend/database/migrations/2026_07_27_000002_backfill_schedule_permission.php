@@ -1,13 +1,12 @@
 <?php
 
 use App\Enums\Permission;
-use App\Enums\UserRole;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Give `schedule.manage` to the roles whose defaults include it but whose saved
- * row predates the ability existing.
+ * Give `schedule.manage` to the Secretary, whose saved row predates the ability
+ * existing.
  *
  * A role customized from the Privileges panel stores its complete ability list,
  * and {@see \App\Models\RolePermission::resolve()} returns that list instead of
@@ -29,28 +28,25 @@ use Illuminate\Support\Facades\DB;
  */
 return new class extends Migration
 {
+    /**
+     * The roles that held the ability by default the day this was written.
+     *
+     * Spelled out rather than read back from {@see UserRole::defaultPermissions()},
+     * because that method is live code and this is history. Asking it at run
+     * time would re-aim a shipped migration every time the defaults changed —
+     * and the reasoning above, which is what makes this safe, is true of these
+     * roles and no others. A role that gains the ability later needs its own
+     * migration with its own argument for why filling it in is not an override.
+     */
+    private const ROLES = ['secretary'];
+
     public function up(): void
     {
         $ability = Permission::ManageSchedule->value;
 
-        foreach (DB::table('role_permissions')->get() as $row) {
-            $role = UserRole::tryFrom($row->role);
+        $rows = DB::table('role_permissions')->whereIn('role', self::ROLES)->get();
 
-            if (! $role) {
-                continue;
-            }
-
-            $defaults = array_map(
-                static fn (Permission $p): string => $p->value,
-                $role->defaultPermissions(),
-            );
-
-            // Only roles the ability belongs to by default, and only where it
-            // is actually missing.
-            if (! in_array($ability, $defaults, true)) {
-                continue;
-            }
-
+        foreach ($rows as $row) {
             $stored = json_decode($row->permissions, true);
             $stored = is_array($stored) ? $stored : [];
 
