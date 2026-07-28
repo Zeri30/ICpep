@@ -14,9 +14,10 @@ use RuntimeException;
 /**
  * One scheduled event on the organization's calendar.
  *
- * Created, edited and deleted by the Secretary alone (see
- * {@see \App\Enums\Permission::ManageSchedule}); every other officer role reads
- * it. The calendar is internal — members have no accounts and never see it.
+ * Created, edited and deleted by whoever holds
+ * {@see \App\Enums\Permission::ManageSchedule} — the Secretary and the
+ * Assistant Secretary by default; every other officer role reads it. The
+ * calendar is internal: members have no accounts and never see it.
  *
  * ## Timezone
  *
@@ -48,7 +49,7 @@ class Event extends Model
     use SoftDeletes;
 
     /**
-     * The kinds of event the Secretary can schedule.
+     * The kinds of event the secretariat can schedule.
      *
      * The first five mirror the categories the public site already uses for its
      * events (frontend/lib/data.ts), so the same event is filed the same way in
@@ -237,11 +238,28 @@ class Event extends Model
     /* ------------------------------------------------------------- status */
 
     /**
-     * Has this event's date passed with nobody saying what became of it?
+     * How long after an event ends before the calendar starts asking what
+     * became of it.
+     *
+     * An event that runs to 4 PM is rarely over at 4 PM — people linger, and
+     * the officer who would close it off is the one still packing up. An hour
+     * is long enough that the question never arrives while the event is still
+     * going, and short enough that it gets answered the same afternoon, by
+     * someone who was there, rather than the next morning from memory.
+     *
+     * ⚠ The wording is written out in three places rather than derived from
+     * this number — the refusal in EventController::status(), and two lines in
+     * the frontend's StatusControl. Changing it here means changing "an hour"
+     * in all three, or they quietly start lying.
+     */
+    public const STATUS_GRACE_MINUTES = 60;
+
+    /**
+     * Has this event finished with nobody saying what became of it?
      *
      * The signal the calendar surfaces so an event does not simply slide into
      * the past unaccounted for. It is not an error — it is a reminder aimed at
-     * the one role that can clear it.
+     * the roles that can clear it.
      */
     public function needsStatusUpdate(): bool
     {
@@ -249,19 +267,39 @@ class Event extends Model
     }
 
     /**
-     * May the Secretary record what became of this event yet?
+     * May the secretariat record what became of this event yet?
      *
-     * Only once its day has gone by. Status is an account of what happened, and
-     * nobody can give one before it has — an event marked Done the week before
-     * would be a claim about the future.
+     * Only once it is over and the grace period has run out. Status is an
+     * account of what happened, and nobody can give one before it has — an
+     * event marked Done the week before would be a claim about the future.
+     *
+     * Measured from the event's own end time rather than the end of its day:
+     * a meeting that finished at 10 AM is finished, and waiting until midnight
+     * to ask about it means asking the following morning, once everyone who
+     * could answer has gone home.
      *
      * The cost of the rule: an event called off in advance cannot be marked
-     * Cancelled until the day it would have been. Until then the way to take it
-     * off the calendar is to delete it.
+     * Cancelled until it would have finished. Until then the way to take it off
+     * the calendar is to delete it.
      */
     public function statusIsEditable(): bool
     {
-        return $this->timing() === 'past';
+        return $this->wrapsUpAt()->isPast();
+    }
+
+    /**
+     * The instant this event counts as closed off: an hour after it ends.
+     *
+     * A row saved before end times were recorded has none to measure from, so
+     * it is taken as an hour long. Assuming a length rather than falling back
+     * to the old end-of-day rule keeps one answer to "when does this become
+     * askable", which is the thing the UI has to be able to state.
+     */
+    public function wrapsUpAt(): CarbonImmutable
+    {
+        $ends = $this->ends_at ?? $this->starts_at->addHour();
+
+        return $ends->addMinutes(self::STATUS_GRACE_MINUTES);
     }
 
     /* --------------------------------------------------------- attendance */
@@ -273,6 +311,15 @@ class Event extends Model
      * day has gone by or the event has been closed off. Scanning the QR for
      * last week's meeting, or typing its code, has to fail — otherwise
      * attendance can be recorded for something that already finished.
+     *
+     * Deliberately looser than {@see self::statusIsEditable()}, which turns on
+     * an instant an hour after the event ends. The two answer different
+     * questions: how long a code stays usable for a straggler still queueing,
+     * versus when someone can give an account of what happened. A QR that died
+     * at 4:01 PM would be the wrong answer to the first. The consequence of the
+     * split is that closing an event early kills a code the day would still
+     * have allowed — which is correct, because closing it is someone saying it
+     * is over.
      *
      * ⚠ Nothing enforces this yet, because there is no check-in endpoint to
      * enforce it in — the attendance module is later work. This method is the

@@ -58,6 +58,22 @@ export function monthLabel(year: number, month: number): string {
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
+/** The months the header's picker offers, indexed as Date does — January is 0. */
+export const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
 export type GridDay = { date: string; day: number; inMonth: boolean };
 
 /**

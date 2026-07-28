@@ -5,18 +5,19 @@ namespace Tests\Feature;
 use App\Enums\EventStatus;
 use App\Enums\UserRole;
 use App\Models\Event;
-use Carbon\CarbonImmutable;
 use App\Models\RolePermission;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
  * The calendar: who may schedule events, and who may only read them.
  *
- * The rule the module exists to enforce is that the Secretary keeps the
- * schedule and everyone else has a view-only calendar — so most of what is
- * checked here is the API refusing writes, not the UI hiding buttons.
+ * The rule the module exists to enforce is that the secretariat — the Secretary
+ * and the Assistant Secretary — keeps the schedule and everyone else has a
+ * view-only calendar, so most of what is checked here is the API refusing
+ * writes, not the UI hiding buttons.
  */
 class EventSchedulerTest extends TestCase
 {
@@ -67,6 +68,21 @@ class EventSchedulerTest extends TestCase
         $this->assertDatabaseHas('events', ['title' => 'General Assembly']);
     }
 
+    /**
+     * The Assistant Secretary schedules on exactly the same terms — not a
+     * reduced version of it — so the calendar keeps working when the Secretary
+     * is away.
+     */
+    public function test_the_assistant_secretary_can_schedule_an_event(): void
+    {
+        $this->actingAs($this->acting(UserRole::AssistantSecretary))
+            ->postJson('/api/admin/events', $this->payload())
+            ->assertCreated()
+            ->assertJsonPath('title', 'General Assembly');
+
+        $this->assertDatabaseHas('events', ['title' => 'General Assembly']);
+    }
+
     public function test_the_end_time_must_be_after_the_start(): void
     {
         $secretary = $this->acting(UserRole::Secretary);
@@ -96,7 +112,7 @@ class EventSchedulerTest extends TestCase
     public function test_no_other_role_can_schedule_an_event(): void
     {
         foreach (UserRole::cases() as $role) {
-            if ($role === UserRole::Secretary) {
+            if (in_array($role, [UserRole::Secretary, UserRole::AssistantSecretary], true)) {
                 continue;
             }
 
@@ -186,7 +202,7 @@ class EventSchedulerTest extends TestCase
     {
         $event = $this->scheduled();
 
-        foreach ([UserRole::ProgrammingTeam, UserRole::President, UserRole::AssistantSecretary, UserRole::Pro] as $role) {
+        foreach ([UserRole::ProgrammingTeam, UserRole::President, UserRole::Adviser, UserRole::Pro] as $role) {
             $actor = $this->acting($role);
 
             $this->actingAs($actor)
@@ -312,7 +328,7 @@ class EventSchedulerTest extends TestCase
     {
         $this->scheduled();
 
-        foreach ([UserRole::Pro, UserRole::President, UserRole::AssistantSecretary, UserRole::ProgrammingTeam] as $role) {
+        foreach ([UserRole::Pro, UserRole::President, UserRole::Adviser, UserRole::ProgrammingTeam] as $role) {
             $this->actingAs($this->acting($role))
                 ->getJson('/api/admin/events')
                 ->assertOk()
@@ -338,6 +354,26 @@ class EventSchedulerTest extends TestCase
             'category' => 'Meeting',
             'starts_at' => Event::combine($date, '10:00'),
             'ends_at' => Event::combine($date, '12:00'),
+        ]);
+    }
+
+    /**
+     * A two-hour event whose end sits this many minutes from now — negative for
+     * one that has already finished.
+     *
+     * Built to the minute rather than to the day, because that is the grain the
+     * status rules now work at: an event that ended this morning is a different
+     * case from one that ends this afternoon, and both are "today".
+     */
+    private function eventEndingInMinutes(int $minutes): Event
+    {
+        $end = CarbonImmutable::now()->addMinutes($minutes);
+
+        return Event::create([
+            'title' => "Event ending in {$minutes}m",
+            'category' => 'Meeting',
+            'starts_at' => $end->subHours(2),
+            'ends_at' => $end,
         ]);
     }
 
@@ -379,16 +415,15 @@ class EventSchedulerTest extends TestCase
 
     /**
      * Status is an account of what happened, so it cannot be given before the
-     * event has had its day — "Done" on next week's meeting would be a claim
-     * about the future.
+     * event is over — "Done" on next week's meeting would be a claim about the
+     * future, and "Done" on one still running is a claim about the rest of it.
      */
-    public function test_the_status_cannot_be_set_before_the_event_has_passed(): void
+    public function test_the_status_cannot_be_set_before_the_event_is_over(): void
     {
         $secretary = $this->acting(UserRole::Secretary);
 
-        foreach ([2, 0] as $days) {
-            $event = $this->eventInDays($days);
-
+        // Days away, and happening right now.
+        foreach ([$this->eventInDays(2), $this->eventEndingInMinutes(30)] as $event) {
             $this->actingAs($secretary)
                 ->patchJson("/api/admin/events/{$event->id}/status", ['status' => 'done'])
                 ->assertJsonValidationErrors('status');
@@ -397,19 +432,84 @@ class EventSchedulerTest extends TestCase
             $this->assertFalse($event->statusIsEditable());
         }
 
-        // The day after, it opens up.
-        $past = $this->eventInDays(-1);
-        $this->assertTrue($past->statusIsEditable());
+        // Once it is over and the hour has run out, it opens up.
+        $over = $this->eventEndingInMinutes(-90);
+        $this->assertTrue($over->statusIsEditable());
         $this->actingAs($secretary)
-            ->patchJson("/api/admin/events/{$past->id}/status", ['status' => 'cancelled'])
+            ->patchJson("/api/admin/events/{$over->id}/status", ['status' => 'cancelled'])
             ->assertOk();
+    }
+
+    /**
+     * The hour after an event ends belongs to the event: people are still
+     * packing up, and the officer who would close it off is one of them. Being
+     * asked then is being asked too early to answer.
+     *
+     * The clock is pinned to an afternoon so the boundary is crossed without
+     * the day changing — the whole point of the rule is that it no longer waits
+     * for midnight.
+     */
+    public function test_the_status_opens_an_hour_after_the_event_ends(): void
+    {
+        $secretary = $this->acting(UserRole::Secretary);
+        $timezone = Event::timezone();
+
+        $event = Event::create([
+            'title' => 'General Assembly',
+            'category' => 'Meeting',
+            'starts_at' => Event::combine('2026-11-03', '10:00'),
+            'ends_at' => Event::combine('2026-11-03', '12:00'),
+        ]);
+
+        // Half an hour after it ended: still inside the grace period.
+        $this->travelTo(CarbonImmutable::parse('2026-11-03 12:30', $timezone));
+        $this->assertFalse($event->statusIsEditable());
+        $this->assertFalse($event->needsStatusUpdate());
+        $this->actingAs($secretary)
+            ->patchJson("/api/admin/events/{$event->id}/status", ['status' => 'done'])
+            ->assertJsonValidationErrors('status');
+
+        // An hour and a half after: the same afternoon, and now askable.
+        $this->travelTo(CarbonImmutable::parse('2026-11-03 13:30', $timezone));
+        $this->assertTrue($event->statusIsEditable());
+        $this->assertTrue($event->needsStatusUpdate());
+        $this->assertSame('today', $event->timing());
+
+        $this->actingAs($secretary)
+            ->patchJson("/api/admin/events/{$event->id}/status", ['status' => 'done'])
+            ->assertOk()
+            ->assertJsonPath('status', 'done')
+            // Closed off on the day it happened, without the calendar having
+            // had to wait for tomorrow to ask.
+            ->assertJsonPath('timing', 'today');
+    }
+
+    /**
+     * A row saved before end times were recorded has none to measure from, so
+     * it is taken as an hour long — the calendar still has an answer for when
+     * to start asking, rather than falling back to a second rule.
+     */
+    public function test_an_event_with_no_end_time_is_treated_as_an_hour_long(): void
+    {
+        $event = Event::create([
+            'title' => 'Legacy meeting',
+            'category' => 'Meeting',
+            'starts_at' => Event::combine('2026-11-03', '10:00'),
+        ]);
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-03 11:30', Event::timezone()));
+        $this->assertFalse($event->statusIsEditable());
+
+        // Assumed to end at 11:00, plus the hour.
+        $this->travelTo(CarbonImmutable::parse('2026-11-03 12:30', Event::timezone()));
+        $this->assertTrue($event->statusIsEditable());
     }
 
     public function test_no_other_role_can_change_an_events_status(): void
     {
         $event = $this->eventInDays(-1);
 
-        foreach ([UserRole::ProgrammingTeam, UserRole::President, UserRole::AssistantSecretary] as $role) {
+        foreach ([UserRole::ProgrammingTeam, UserRole::President, UserRole::Adviser] as $role) {
             $this->actingAs($this->acting($role))
                 ->patchJson("/api/admin/events/{$event->id}/status", ['status' => 'cancelled'])
                 ->assertForbidden();
@@ -461,7 +561,8 @@ class EventSchedulerTest extends TestCase
     {
         $this->assertTrue($this->eventInDays(-1)->needsStatusUpdate());
         $this->assertFalse($this->eventInDays(1)->needsStatusUpdate());
-        $this->assertFalse($this->eventInDays(0)->needsStatusUpdate());
+        // Under way right now: due, but not yet something to account for.
+        $this->assertFalse($this->eventEndingInMinutes(30)->needsStatusUpdate());
 
         $closed = $this->eventInDays(-3);
         $closed->update(['status' => EventStatus::Done]);
@@ -686,20 +787,39 @@ class EventSchedulerTest extends TestCase
 
     /**
      * Scheduling is grantable like every other ability, so the chapter can hand
-     * it to a second officer from the Privileges panel without a code change —
-     * the default is Secretary-only, not Secretary-forever.
+     * it to a further officer from the Privileges panel without a code change —
+     * the default is the secretariat, not the secretariat forever.
      */
     public function test_the_privileges_panel_can_grant_scheduling_to_another_role(): void
     {
+        $this->actingAs($this->acting(UserRole::Adviser))
+            ->postJson('/api/admin/events', $this->payload())
+            ->assertForbidden();
+
+        RolePermission::grant(UserRole::Adviser, [
+            'members.view', 'members.edit', 'schedule.manage',
+        ]);
+
+        $this->actingAs($this->acting(UserRole::Adviser))
+            ->postJson('/api/admin/events', $this->payload())
+            ->assertCreated();
+    }
+
+    /**
+     * And it runs the other way: the Assistant Secretary holds the calendar by
+     * default, not by fiat, so a chapter that wants scheduling back with the
+     * Secretary alone can say so from the panel.
+     */
+    public function test_the_privileges_panel_can_take_scheduling_off_the_assistant_secretary(): void
+    {
+        RolePermission::grant(UserRole::AssistantSecretary, ['members.view', 'members.edit']);
+
         $this->actingAs($this->acting(UserRole::AssistantSecretary))
             ->postJson('/api/admin/events', $this->payload())
             ->assertForbidden();
 
-        RolePermission::grant(UserRole::AssistantSecretary, [
-            'members.view', 'members.edit', 'schedule.manage',
-        ]);
-
-        $this->actingAs($this->acting(UserRole::AssistantSecretary))
+        // The Secretary is untouched by the revocation.
+        $this->actingAs($this->acting(UserRole::Secretary))
             ->postJson('/api/admin/events', $this->payload())
             ->assertCreated();
     }

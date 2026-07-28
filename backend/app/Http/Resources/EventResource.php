@@ -43,9 +43,11 @@ class EventResource extends JsonResource
             'timing' => $this->timing(),
             'timingLabel' => $this->timingLabel(),
             'needsStatusUpdate' => $this->needsStatusUpdate(),
-            // Whether the status may be set yet — only once the day has gone
-            // by. The UI disables the control on this rather than re-deriving
-            // the rule from the date and risking a different answer.
+            // Whether the status may be set yet — only from an hour after the
+            // event ends. The UI disables the control on this rather than
+            // re-deriving the rule from the clock: the answer turns on the
+            // server's, and a browser whose clock is a few minutes fast would
+            // otherwise offer a button the endpoint refuses.
             'statusEditable' => $this->statusIsEditable(),
             // Whether the QR and code are still good. Nothing validates them
             // yet (there is no check-in endpoint), but the calendar can already

@@ -3,7 +3,7 @@
 /* Create, edit, read and delete one calendar event.
 
    One modal covers all four because they are the same fields seen from
-   different permissions: the Secretary gets a form, everyone else gets the same
+   different permissions: the secretariat gets a form, everyone else gets the same
    information laid out as text. Splitting them into a form modal and a details
    modal would mean two places to change whenever a field is added, and two
    chances for the read-only view to quietly fall behind.
@@ -15,7 +15,16 @@
    header and footer stay put while only the middle scrolls. */
 
 import { AnimatePresence, motion } from "motion/react";
-import { CalendarPlus, Clock, Loader2, PencilLine, QrCode, Trash2, X } from "lucide-react";
+import {
+  CalendarPlus,
+  CircleQuestionMark,
+  Clock,
+  Loader2,
+  PencilLine,
+  QrCode,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
@@ -25,8 +34,11 @@ import AttendanceCredentials from "@/components/admin/schedule/AttendanceCredent
 import CategoryTag from "@/components/admin/schedule/CategoryTag";
 import {
   NeedsUpdateBadge,
+  STATUS_ORDER,
+  STATUS_TONES,
   StatusBadge,
   TimingBadge,
+  pill,
 } from "@/components/admin/schedule/StatusBadge";
 import { apiSend } from "@/lib/adminApi";
 import { formatLongDate } from "@/components/admin/schedule/calendarDates";
@@ -35,8 +47,92 @@ import type { ScheduledEvent } from "@/lib/adminTypes";
 const fieldCls =
   "w-full rounded-md border border-line bg-secondary/60 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary/60";
 
-const labelCls =
-  "mb-1.5 block font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground";
+const labelText =
+  "font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground";
+
+const labelCls = `mb-1.5 block ${labelText}`;
+
+/** The same label as a row, so a hint icon can sit beside the words. */
+const labelRowCls = `mb-1.5 flex items-center gap-1.5 ${labelText}`;
+
+/**
+ * Who an event's announcement goes out to.
+ *
+ * ⚠ Nothing is sent yet: this is not in the save payload and the API does not
+ * accept it. The field is here so the shape of the decision is settled before
+ * the mail goes out — an announcement that reaches the wrong list is not
+ * something to discover after building the sending half. Both boxes are
+ * independent and may be left unticked, which is what an event nobody is
+ * emailed about looks like.
+ */
+const AUDIENCES = [
+  { value: "officers", label: "Officers" },
+  { value: "members", label: "Members" },
+] as const;
+
+type Audience = (typeof AUDIENCES)[number]["value"];
+
+/**
+ * The little (?) beside a label.
+ *
+ * Shown on hover *and* on focus, so the explanation is not pointer-only — the
+ * icon is a real button for that reason, and `type="button"` so it cannot
+ * submit the form it sits inside. The same words are its `aria-label`, which is
+ * what a screen reader announces; the panel is the sighted half of one message
+ * rather than a second one.
+ *
+ * Anchored to the icon's left edge and drawn downwards. Centred would put half
+ * the panel past the left of the form, where the dialog's scroll container
+ * would cut it off.
+ */
+function FieldHint({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label={text}
+        className="text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
+      >
+        <CircleQuestionMark size={13} />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-full z-10 mt-1.5 w-52 rounded-lg border border-line bg-background px-2.5 py-2 text-[11px] font-normal normal-case leading-relaxed tracking-normal text-secondary-foreground opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+/** The event's own details, as the form sends them — everything but its outcome. */
+type EventFields = {
+  title: string;
+  category: string;
+  date: string;
+  time: string;
+  endTime: string;
+  description: string | null;
+};
+
+/**
+ * Has anything in the form moved away from the event as saved?
+ *
+ * Compared field by field against the same shapes the API returns, so an
+ * untouched form is recognised as untouched. `endTime` is nullable on a row
+ * saved before end times were recorded, and `description` is null rather than
+ * empty when cleared — both normalise to "" so absent and blank are one thing.
+ */
+function edited(event: ScheduledEvent, fields: EventFields): boolean {
+  return (
+    fields.title !== event.title ||
+    fields.category !== event.category ||
+    fields.date !== event.date ||
+    fields.time !== event.time ||
+    fields.endTime !== (event.endTime ?? "") ||
+    (fields.description ?? "") !== (event.description ?? "")
+  );
+}
 
 export default function EventModal({
   event,
@@ -95,7 +191,7 @@ function EventDialog({
 }) {
   const { meta, can, notify } = useAdmin();
   const canManage = can("schedule.manage");
-  // Everyone may open an event; only the Secretary sees fields they can change.
+  // Everyone may open an event; only the secretariat sees fields to change.
   const readOnly = !canManage;
 
   const [title, setTitle] = useState(event?.title ?? "");
@@ -105,37 +201,29 @@ function EventDialog({
   const [endTime, setEndTime] = useState(event?.endTime ?? "19:00");
   const [description, setDescription] = useState(event?.description ?? "");
 
+  // Starts empty on every open, since there is nowhere to have stored it yet.
+  // See AUDIENCES — this is deliberately not part of the save.
+  const [audience, setAudience] = useState<Audience[]>([]);
+
+  const toggleAudience = (value: Audience) =>
+    setAudience((current) =>
+      current.includes(value) ? current.filter((a) => a !== value) : [...current, value],
+    );
+
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  // The event as it stands right now. Marking it done or minting a share link
-  // both change it without closing the modal, and the officer should see the
-  // consequence — a dead share button, a new link — immediately rather than
-  // after reopening.
+  // The event as the server last described it. Minting a share link changes it
+  // without closing the modal — that is a request the officer made explicitly
+  // and whose result they need in front of them to copy — so the panel below
+  // is refreshed from the response rather than waiting for a reopen.
   const [current, setCurrent] = useState(event);
-  const [statusSaving, setStatusSaving] = useState(false);
 
-  async function setStatus(next: ScheduledEvent["status"]) {
-    if (!current || next === current.status) return;
-    setStatusSaving(true);
-    setFormError(null);
-    try {
-      const updated = await apiSend<ScheduledEvent>(
-        "PATCH",
-        `/events/${current.id}/status`,
-        { status: next },
-      );
-      setCurrent(updated);
-      notify(`Marked ${updated.statusLabel.toLowerCase()}`, { body: updated.title });
-      // Refresh the calendar behind, with no date so it does not jump.
-      onSaved();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Could not update the status.");
-    } finally {
-      setStatusSaving(false);
-    }
-  }
+  // The outcome the form is holding, which is not the same thing as the one the
+  // event has: like every other field here, it is chosen now and written on
+  // Save. Clicking Done and then Cancel has to leave the event alone.
+  const [status, setStatus] = useState<ScheduledEvent["status"]>(event?.status ?? "scheduled");
 
   // Escape closes, unless a save is in flight — the request lands either way and
   // the officer would be left unsure whether it saved.
@@ -162,8 +250,9 @@ function EventDialog({
 
     setSaving(true);
     setFormError(null);
+
     try {
-      const body = {
+      const body: EventFields = {
         title: title.trim(),
         category,
         date: day,
@@ -175,7 +264,38 @@ function EventDialog({
       };
 
       if (current) {
-        await apiSend("PATCH", `/events/${current.id}`, body);
+        // Only sent when a detail actually moved. Recording an outcome is the
+        // most common thing done to an existing event and usually touches
+        // nothing else — sending the details anyway would write "Updated
+        // General Assembly — now 3 Nov at 5:00 PM" into the activity log above
+        // every single one, describing a change nobody made.
+        const event = edited(current, body)
+          ? await apiSend<ScheduledEvent>("PATCH", `/events/${current.id}`, body)
+          : current;
+        setCurrent(event);
+
+        // Sent after the details, and only when it actually changed. Closing an
+        // event is a separate act on a separate endpoint — it revokes the share
+        // link, and it is refused for an event that is not over — so it goes
+        // second, to be judged against the event as it will be rather than as
+        // it was. Moving a meeting to next week and marking it done in the same
+        // save is a contradiction, and this is the order that catches it.
+        if (status !== event.status) {
+          try {
+            setCurrent(
+              await apiSend<ScheduledEvent>("PATCH", `/events/${current.id}/status`, { status }),
+            );
+          } catch (err) {
+            setFormError(err instanceof Error ? err.message : "Could not record the outcome.");
+            // The details went through and only the outcome was refused. Leave
+            // the modal open carrying the reason, but let the calendar catch up
+            // — it would otherwise keep showing the old title until something
+            // else refreshed it.
+            onSaved();
+            return;
+          }
+        }
+
         notify("Event updated", { body: title.trim() });
       } else {
         await apiSend("POST", "/events", body);
@@ -352,6 +472,42 @@ function EventDialog({
                     </p>
 
                     <div>
+                      {/* A group label rather than a <label>, since it names two
+                          checkboxes rather than one control. */}
+                      <span className={labelRowCls} id="event-attendees-label">
+                        Attendees
+                        <FieldHint text="Who gets an email announcement about this event." />
+                      </span>
+                      <div
+                        role="group"
+                        aria-labelledby="event-attendees-label"
+                        className="grid grid-cols-2 gap-2"
+                      >
+                        {AUDIENCES.map((a) => {
+                          const checked = audience.includes(a.value);
+                          return (
+                            <label
+                              key={a.value}
+                              className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2.5 text-sm transition-colors ${
+                                checked
+                                  ? "border-primary/50 bg-primary/10 text-foreground"
+                                  : "border-line bg-secondary/40 text-secondary-foreground hover:border-primary/30"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleAudience(a.value)}
+                                className="size-4 accent-primary"
+                              />
+                              {a.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
                       <label className={labelCls} htmlFor="event-description">
                         Description / notes
                       </label>
@@ -370,13 +526,18 @@ function EventDialog({
                   {/* ------------------------------- its status and its codes */}
                   {current ? (
                     <div className="space-y-4">
-                      <StatusControl event={current} busy={statusSaving} onSet={setStatus} />
+                      <StatusControl
+                        event={current}
+                        value={status}
+                        busy={saving}
+                        onSelect={setStatus}
+                      />
                       <AttendanceCredentials event={current} onShared={setCurrent} />
                     </div>
                   ) : (
                     // Nothing is generated while the form is open, so a new
                     // event has no credentials to show yet — say so rather than
-                    // leave a gap the Secretary has to guess at.
+                    // leave a gap the scheduler has to guess at.
                     <p className="flex items-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-2.5 text-[11px] text-muted-foreground">
                       <QrCode size={13} /> A QR code and a 6-character attendance
                       code are generated once you save this event.
@@ -444,80 +605,106 @@ function EventDialog({
   );
 }
 
-const STATUSES = [
-  { value: "scheduled", label: "Scheduled", active: "bg-sky-500/15 text-sky-300" },
-  { value: "done", label: "Done", active: "bg-green-500/15 text-green-400" },
-  { value: "cancelled", label: "Cancelled", active: "bg-red-500/15 text-red-400" },
-] as const satisfies ReadonlyArray<{
-  value: ScheduledEvent["status"];
-  label: string;
-  active: string;
-}>;
-
 /**
- * Record what became of the event.
+ * Choose what became of the event.
  *
- * Locked until the day has gone by: an outcome is an account of what happened,
- * and there is nothing to account for beforehand. Retracting one back to
- * Scheduled stays available whatever the date — otherwise an event closed and
- * then rescheduled could never be set right.
+ * A field like any other: picking one stages it, and Save changes writes it.
+ * Applying it on the click would make this the one control in the dialog that
+ * cannot be taken back by pressing Cancel — and the thing it does is not small,
+ * since closing an event revokes its share link for good.
+ *
+ * Locked until an hour after the event ends: an outcome is an account of what
+ * happened, and there is nothing to account for beforehand. Retracting one back
+ * to Scheduled stays available whatever the date — otherwise an event closed
+ * and then rescheduled could never be set right.
  *
  * Nagging is deliberate but bounded: a past event still marked Scheduled says
  * so plainly here, because that is the state nobody meant to leave it in.
  */
 function StatusControl({
   event,
+  value,
   busy,
-  onSet,
+  onSelect,
 }: {
+  /** The event as saved — what the rules and the standing hint are read from. */
   event: ScheduledEvent;
+  /** The outcome the form is holding, which may not be the saved one yet. */
+  value: ScheduledEvent["status"];
   busy: boolean;
-  onSet: (status: ScheduledEvent["status"]) => void;
+  onSelect: (status: ScheduledEvent["status"]) => void;
 }) {
   const locked = !event.statusEditable;
+  const pending = value !== event.status;
+
+  // Six readings of the same control, flat rather than nested five ternaries
+  // deep, so which one applies is a line you can point at.
+  function hint(): string {
+    // While a choice is pending the hint describes what saving will do — the
+    // consequence belongs with the decision, not after it.
+    if (pending && value === "scheduled") {
+      return "Saving puts this back to Scheduled. The old share link stays dead; you can create a new one afterwards.";
+    }
+    if (pending) {
+      return `Saving records this as ${STATUS_TONES[value].label.toLowerCase()} and revokes its share link for good.`;
+    }
+    if (locked) {
+      return `This event is ${event.timingLabel.toLowerCase()}. You can record whether it happened from an hour after it ends.`;
+    }
+    if (event.needsStatusUpdate) {
+      return `This event was ${event.timingLabel.toLowerCase()} and is still marked scheduled. Say whether it happened.`;
+    }
+    if (event.status === "scheduled") {
+      return "Marking it done or cancelled revokes its share link for good.";
+    }
+    return "Its share link has been revoked. Setting it back to Scheduled lets you create a new one — the old link stays dead.";
+  }
 
   return (
     <div className="rounded-lg border border-line bg-secondary/30 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className={labelCls + " mb-0"}>Status</p>
-        {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+        {busy ? (
+          <Loader2 size={12} className="animate-spin text-muted-foreground" />
+        ) : (
+          // Says plainly that the event has not changed yet. Without it the
+          // control looks exactly as it did when clicking was the whole action.
+          pending && (
+            <span className={`${pill} border-amber-accent/40 bg-amber-accent/10 text-amber-accent`}>
+              Unsaved
+            </span>
+          )
+        )}
       </div>
 
       <div className="mt-2 flex rounded-lg border border-line p-0.5">
-        {STATUSES.map((s) => {
-          // Closing needs the day to have passed; retracting never does.
-          const disabled = busy || (locked && s.value !== "scheduled");
+        {STATUS_ORDER.map((option) => {
+          // Closing needs the event to be over; retracting never does.
+          const disabled = busy || (locked && option !== "scheduled");
+          const { label, active } = STATUS_TONES[option];
           return (
             <button
-              key={s.value}
+              key={option}
               type="button"
               disabled={disabled}
-              onClick={() => onSet(s.value)}
-              aria-pressed={event.status === s.value}
+              onClick={() => onSelect(option)}
+              aria-pressed={value === option}
               title={
-                locked && s.value !== "scheduled"
-                  ? "Available once the event's day has passed"
+                locked && option !== "scheduled"
+                  ? "Available an hour after the event ends"
                   : undefined
               }
               className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                event.status === s.value ? s.active : "text-muted-foreground hover:text-foreground"
+                value === option ? active : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {s.label}
+              {label}
             </button>
           );
         })}
       </div>
 
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        {locked
-          ? `This event is ${event.timingLabel.toLowerCase()}. You can record whether it happened once its day has passed.`
-          : event.needsStatusUpdate
-            ? `This event was ${event.timingLabel.toLowerCase()} and is still marked scheduled. Say whether it happened.`
-            : event.status === "scheduled"
-              ? "Marking it done or cancelled revokes its share link for good."
-              : "Its share link has been revoked. Setting it back to Scheduled lets you create a new one — the old link stays dead."}
-      </p>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{hint()}</p>
     </div>
   );
 }
