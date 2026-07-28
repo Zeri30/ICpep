@@ -26,8 +26,24 @@ enum Permission: string
     /** Change a member's payment status (paid / unpaid) — a financial action. */
     case UpdatePayment = 'members.payment';
 
-    /** Reach the financial modules (Payment History, revenue figures). */
+    /** Open Payment History and read the payment ledger. */
     case AccessFinance = 'finance.view';
+
+    /**
+     * See the money on the dashboard — the revenue totals and the payment
+     * summary.
+     *
+     * Deliberately separate from {@see self::AccessFinance}. The two used to be
+     * one ability, which meant letting a role read the ledger also handed them
+     * the chapter's takings, and there was no way to give one without the
+     * other. The secretariat is exactly that case: they keep the records and
+     * need the ledger, but the money is the treasury's business.
+     *
+     * Independent rather than requiring the ledger, because the reverse is a
+     * real position too — an executive who should see the totals without
+     * reading every line of who has paid.
+     */
+    case ViewRevenue = 'finance.revenue';
 
     /** Reach User Management and manage administrator accounts. */
     case ManageUsers = 'users.manage';
@@ -50,7 +66,8 @@ enum Permission: string
             self::ViewMembers => 'View members',
             self::EditMembers => 'Edit members',
             self::UpdatePayment => 'Update payment status',
-            self::AccessFinance => 'Access financial modules',
+            self::AccessFinance => 'Open Payment History',
+            self::ViewRevenue => 'See revenue figures',
             self::ManageUsers => 'Manage administrator accounts',
             self::ManageTerms => 'Manage membership lists and registration',
             self::ManageSchedule => 'Schedule events on the calendar',
@@ -68,7 +85,8 @@ enum Permission: string
             self::ViewMembers => 'Open the Members List and read member records.',
             self::EditMembers => 'Add, edit, delete and restore members. Does not include payment status.',
             self::UpdatePayment => 'Mark members paid or unpaid, individually or in bulk.',
-            self::AccessFinance => 'Open Payment History, and see revenue figures and the payment summary on the dashboard.',
+            self::AccessFinance => 'Open Payment History and read the record of who has paid. Does not show the revenue totals.',
+            self::ViewRevenue => 'See the revenue figures and payment summary on the dashboard. Does not open Payment History.',
             self::ManageUsers => 'Open User Management: create accounts, reset passwords and set privileges.',
             self::ManageTerms => "Create each semester's membership list, switch the current one, and open or close the public registration form.",
             self::ManageSchedule => 'Add, edit and delete events on the Calendar. Every officer can already read it — this is the ability to change it.',
@@ -80,7 +98,7 @@ enum Permission: string
     {
         return match ($this) {
             self::ViewMembers, self::EditMembers, self::UpdatePayment => 'Members',
-            self::AccessFinance => 'Finance',
+            self::AccessFinance, self::ViewRevenue => 'Finance',
             self::ManageSchedule => 'Scheduling',
             self::ManageUsers, self::ManageTerms => 'Administration',
         };
@@ -104,8 +122,8 @@ enum Permission: string
     {
         return match ($this) {
             self::ViewMembers, self::EditMembers, self::UpdatePayment,
-            self::AccessFinance, self::ManageUsers, self::ManageTerms,
-            self::ManageSchedule => true,
+            self::AccessFinance, self::ViewRevenue, self::ManageUsers,
+            self::ManageTerms, self::ManageSchedule => true,
             // Unreachable today, and deliberately kept: a case added later falls
             // here and stays out of the panel until someone lists it above.
             default => false,

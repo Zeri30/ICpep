@@ -26,17 +26,21 @@ class DashboardController extends Controller
     public function index(Request $request): JsonResponse
     {
         // Money figures (revenue and the payment summary) are only returned to
-        // roles that may access the financial modules; everyone else gets the
+        // roles that may see the chapter's takings; everyone else gets the
         // membership counts and charts. The frontend hides the same cards.
-        $canFinance = Gate::allows('finance.view');
+        //
+        // Gated on finance.revenue, not finance.view: reading Payment History
+        // and seeing the revenue are separate abilities, so a role can keep the
+        // records without being shown the income (see Permission::ViewRevenue).
+        $canRevenue = Gate::allows('finance.revenue');
         $term = MembershipTerm::resolve($request->query('term'));
 
         return response()->json([
-            'stats' => $this->stats($canFinance, $term),
-            'paymentSummary' => $canFinance ? $this->paymentSummary($term) : null,
+            'stats' => $this->stats($canRevenue, $term),
+            'paymentSummary' => $canRevenue ? $this->paymentSummary($term) : null,
             'membersByClass' => $this->membersByClass($term),
             'registrationsOverTime' => $this->registrationsOverTime($term),
-            'canViewFinance' => $canFinance,
+            'canViewRevenue' => $canRevenue,
             'term' => $term ? ['id' => $term->id, 'label' => $term->label, 'isCurrent' => $term->is_current] : null,
         ]);
     }
@@ -73,7 +77,7 @@ class DashboardController extends Controller
     }
 
     /** Members / 3rd / 4th / revenue — derived from current state, never accumulated. */
-    private function stats(bool $canFinance, ?MembershipTerm $term): array
+    private function stats(bool $canRevenue, ?MembershipTerm $term): array
     {
         $fee = (float) config('icpep.membership_fee');
 
@@ -86,9 +90,10 @@ class DashboardController extends Controller
             'fourthYear' => $this->members($term)->where('year_level', '4th Year')->count(),
             'paid' => $paid,
             'unpaid' => $live - $paid,
-            // Peso figures are financial — null them out for non-finance roles.
-            'revenue' => $canFinance ? $paid * $fee : null,
-            'pendingRevenue' => $canFinance ? ($live - $paid) * $fee : null,
+            // Peso figures are the chapter's income — null them out for roles
+            // that may read the ledger but not the takings.
+            'revenue' => $canRevenue ? $paid * $fee : null,
+            'pendingRevenue' => $canRevenue ? ($live - $paid) * $fee : null,
         ];
     }
 

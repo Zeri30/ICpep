@@ -71,6 +71,13 @@ enum UserRole: string
      */
     public function defaultPermissions(): array
     {
+        // Every role below holds Permission::AccessFinance. Payment History is
+        // open to the whole board on purpose: the chapter's record of who has
+        // paid their dues is something any officer may be asked about, and a
+        // ledger only two people can open invites the question of what is in
+        // it. It is read-only wherever it appears — recording a payment needs
+        // members.payment, and the revenue figures need finance.revenue, both
+        // of which stay with the treasury.
         return match ($this) {
             // Full non-financial access, plus managing officer accounts. Account
             // management is deliberately limited to this one role: officers who
@@ -78,6 +85,7 @@ enum UserRole: string
             self::ProgrammingTeam => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
+                Permission::AccessFinance,
                 Permission::ManageUsers,
                 Permission::ManageTerms,
             ],
@@ -89,6 +97,7 @@ enum UserRole: string
             self::President, self::Vpea, self::Vpia => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
+                Permission::AccessFinance,
                 Permission::ManageTerms,
             ],
             // The secretariat keeps the organization's calendar. Scheduling is
@@ -97,25 +106,44 @@ enum UserRole: string
             // terms as the Secretary: the post exists to cover the Secretary's
             // work, and a schedule only one person can touch stops the week
             // they are unwell.
+            //
+            // The two roles are deliberately one entry rather than two
+            // identical ones, so that "whatever the Secretary can do, the
+            // Assistant Secretary can also do" is a property of the code and
+            // not of someone remembering to change both.
+            //
+            // Like every role they read Payment History, and like every role
+            // outside the treasury they do not see the revenue. That split is
+            // the reason the two finance abilities are separate at all (see
+            // Permission::ViewRevenue): the secretariat keeps the
+            // organization's records, and who has paid is one of them, but the
+            // takings are the treasury's business.
             self::Secretary, self::AssistantSecretary => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
+                Permission::AccessFinance,
                 Permission::ManageSchedule,
             ],
-            // Full non-financial access; cannot manage accounts or the cycle.
+            // Full member access; cannot manage accounts or the cycle.
             self::Adviser => [
                 Permission::ViewMembers,
                 Permission::EditMembers,
+                Permission::AccessFinance,
             ],
-            // Financial roles: read members, run payments and the money modules.
+            // The treasury: read members, run payments, and the only roles that
+            // see the chapter's money — the revenue figures on the dashboard,
+            // on top of the ledger everyone reads.
             self::Treasurer, self::AssistantTreasurer => [
                 Permission::ViewMembers,
                 Permission::UpdatePayment,
                 Permission::AccessFinance,
+                Permission::ViewRevenue,
             ],
-            // View-only access to the admin panel.
+            // View-only access to the admin panel: the member roster and the
+            // payment ledger, and nothing they can change.
             self::Pro, self::Bod => [
                 Permission::ViewMembers,
+                Permission::AccessFinance,
             ],
         };
     }
