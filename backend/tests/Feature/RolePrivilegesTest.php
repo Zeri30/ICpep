@@ -162,9 +162,8 @@ class RolePrivilegesTest extends TestCase
 
         // Their other abilities are untouched — Payment History still opens.
         $this->actingAs($this->acting(UserRole::Treasurer))
-            ->getJson('/api/admin/dashboard')
-            ->assertOk()
-            ->assertJsonPath('canViewFinance', true);
+            ->getJson('/api/admin/payments')
+            ->assertOk();
     }
 
     public function test_the_officers_own_permission_list_reflects_the_change(): void
@@ -174,7 +173,7 @@ class RolePrivilegesTest extends TestCase
         $this->actingAs($this->acting(UserRole::Bod))
             ->getJson('/api/admin/me')
             ->assertOk()
-            ->assertJsonPath('user.permissions', ['members.view', 'members.payment']);
+            ->assertJsonPath('user.permissions', ['members.view', 'members.payment', 'finance.view']);
     }
 
     /* ------------------------------------------------------- the fixed abilities */
@@ -195,25 +194,45 @@ class RolePrivilegesTest extends TestCase
     /* ---------------------------------------------------------------- finance */
 
     /**
-     * One tick covers the whole financial area — the Payment History module and
-     * the money on the dashboard move together, so "access financial modules"
-     * means the same thing wherever it is granted.
+     * The ledger and the money are two ticks, not one. Granting Payment History
+     * opens the record of who has paid and nothing else — the revenue figures
+     * stay hidden until the second ability is granted as well.
      */
-    public function test_granting_finance_opens_payment_history_and_the_dashboard_figures(): void
+    public function test_granting_payment_history_does_not_uncover_the_revenue(): void
     {
         $pro = $this->acting(UserRole::Pro);
 
-        // Before: a view-only role has neither.
+        // Start from a role stripped of finance entirely — Payment History is
+        // in every role's defaults, so the grant has to be observed from below.
+        $this->save(UserRole::Pro, [Permission::ViewMembers]);
+
         $this->actingAs($pro)->getJson('/api/admin/payments')->assertForbidden();
         $this->actingAs($pro)->getJson('/api/admin/dashboard')
-            ->assertOk()->assertJsonPath('canViewFinance', false);
+            ->assertOk()->assertJsonPath('canViewRevenue', false);
 
-        $this->save(UserRole::Pro, [...UserRole::Pro->defaultPermissions(), Permission::AccessFinance]);
+        $this->save(UserRole::Pro, [Permission::ViewMembers, Permission::AccessFinance]);
 
-        // After: both, without touching anything else.
+        // The ledger opens; the dashboard money does not follow it.
         $this->actingAs($pro)->getJson('/api/admin/payments')->assertOk();
         $this->actingAs($pro)->getJson('/api/admin/dashboard')
-            ->assertOk()->assertJsonPath('canViewFinance', true);
+            ->assertOk()
+            ->assertJsonPath('canViewRevenue', false)
+            ->assertJsonPath('stats.revenue', null);
+    }
+
+    /** And the reverse: the revenue can be granted without opening the ledger. */
+    public function test_granting_revenue_does_not_open_payment_history(): void
+    {
+        $this->member();
+        $pro = $this->acting(UserRole::Pro);
+
+        $this->save(UserRole::Pro, [Permission::ViewMembers, Permission::ViewRevenue]);
+
+        $this->actingAs($pro)->getJson('/api/admin/dashboard')
+            ->assertOk()
+            ->assertJsonPath('canViewRevenue', true);
+
+        $this->actingAs($pro)->getJson('/api/admin/payments')->assertForbidden();
     }
 
     public function test_revoking_finance_closes_payment_history_and_hides_the_figures(): void
@@ -226,7 +245,7 @@ class RolePrivilegesTest extends TestCase
         $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertForbidden();
         $this->actingAs($treasurer)->getJson('/api/admin/dashboard')
             ->assertOk()
-            ->assertJsonPath('canViewFinance', false)
+            ->assertJsonPath('canViewRevenue', false)
             ->assertJsonPath('stats.revenue', null)
             ->assertJsonPath('paymentSummary', null);
 
@@ -335,7 +354,7 @@ class RolePrivilegesTest extends TestCase
         $stored = RolePermission::query()->where('role', 'president')->value('permissions');
 
         $this->assertEqualsCanonicalizing(
-            ['members.view', 'members.edit', 'terms.manage'],
+            ['members.view', 'members.edit', 'finance.view', 'terms.manage'],
             $stored,
         );
     }
@@ -510,9 +529,10 @@ class RolePrivilegesTest extends TestCase
             ->postJson('/api/admin/users/roles/secretary/reset')
             ->assertOk()
             ->assertJsonPath('customized', false)
-            // Scheduling is part of the Secretary's defaults — they keep the
-            // organization's calendar, so a reset must hand it back.
-            ->assertJsonPath('permissions', ['members.view', 'members.edit', 'schedule.manage']);
+            // Scheduling and Payment History are both part of the Secretary's
+            // defaults — they keep the organization's calendar and its records,
+            // so a reset must hand both back. Seeing the revenue is not.
+            ->assertJsonPath('permissions', ['members.view', 'members.edit', 'finance.view', 'schedule.manage']);
     }
 
     public function test_an_unknown_role_is_a_404(): void

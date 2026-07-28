@@ -233,7 +233,12 @@ export type DashboardData = {
   paymentSummary: { today: SummaryCell; week: SummaryCell; month: SummaryCell } | null;
   membersByClass: { labels: string[]; data: number[] };
   registrationsOverTime: { labels: string[]; data: number[] };
-  canViewFinance: boolean;
+  /**
+   * Whether this officer may see the chapter's money — the revenue tiles and
+   * the payment summary. Separate from reaching Payment History: the
+   * secretariat reads the ledger without being shown the takings.
+   */
+  canViewRevenue: boolean;
   /** The membership list these figures describe. */
   term: { id: number; label: string; isCurrent: boolean } | null;
 };

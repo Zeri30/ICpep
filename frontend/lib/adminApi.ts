@@ -20,6 +20,7 @@ export type Permission =
   | "members.edit"
   | "members.payment"
   | "finance.view"
+  | "finance.revenue"
   | "users.manage"
   | "terms.manage"
   | "schedule.manage";
