@@ -55,10 +55,18 @@ class MemberController extends Controller
     {
         Gate::authorize('members.edit');
 
+        // Trimmed explicitly so leading/trailing spaces from a pasted ID never
+        // defeat the uniqueness check below.
+        $request->merge(['studentId' => trim((string) $request->input('studentId'))]);
+
         $data = $request->validate([
             'surname' => ['required', 'string', 'max:100'],
             'givenName' => ['required', 'string', 'max:100'],
             'middleInitial' => ['nullable', 'string', 'max:1'],
+            'studentId' => [
+                'required', 'string', 'max:20', 'regex:/^[A-Za-z0-9-]+$/',
+                Rule::unique('applications', 'student_id')->ignore($application->id),
+            ],
             'yearLevel' => ['required', Rule::in(Application::YEAR_LEVELS)],
             'section' => ['required', Rule::in(Application::SECTIONS)],
             'birthday' => ['required', 'date'],
@@ -72,6 +80,7 @@ class MemberController extends Controller
             'surname' => $data['surname'],
             'given_name' => $data['givenName'],
             'middle_initial' => $data['middleInitial'] ?? null,
+            'student_id' => $data['studentId'],
             'year_level' => $data['yearLevel'],
             'section' => $data['section'],
             'birthday' => $data['birthday'],
@@ -206,10 +215,16 @@ class MemberController extends Controller
         $this->applyDateRange($query, $request);
 
         if ($search = trim((string) $request->input('search'))) {
+            // whereLike(..., caseSensitive: false) compiles to ILIKE on Postgres
+            // and a LOWER() comparison elsewhere, so this stays case-insensitive
+            // on both the sqlite test DB and the Supabase/Postgres database.
             $query->where(function (Builder $q) use ($search): void {
-                $q->where('surname', 'like', "%{$search}%")
-                    ->orWhere('given_name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                $q->whereLike('surname', "%{$search}%")
+                    ->orWhereLike('given_name', "%{$search}%")
+                    ->orWhereLike('email', "%{$search}%")
+                    ->orWhereLike('student_id', "%{$search}%")
+                    ->orWhereLike('phone', "%{$search}%")
+                    ->orWhereLike('section', "%{$search}%");
             });
         }
 

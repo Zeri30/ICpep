@@ -163,6 +163,33 @@ class AdminApiTest extends TestCase
         $this->actingAs($admin)->getJson('/api/admin/members?trashed=only')->assertJsonCount(1, 'data');
     }
 
+    public function test_members_list_search_matches_student_id_phone_and_section(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication([
+            'surname' => 'Dela Cruz', 'given_name' => 'Juan',
+            'student_id' => '2024-00123', 'phone' => '09171234567', 'section' => 'Section A',
+        ]);
+        $this->makeApplication([
+            'surname' => 'Reyes', 'given_name' => 'Maria',
+            'student_id' => '2021-00456', 'phone' => '09209876543', 'section' => 'Section B',
+        ]);
+
+        $admin = $this->admin();
+
+        // Partial + case-insensitive match on each of the new fields.
+        $this->actingAs($admin)->getJson('/api/admin/members?search=2024')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.studentId', '2024-00123');
+        $this->actingAs($admin)->getJson('/api/admin/members?search=juan')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.givenName', 'Juan');
+        $this->actingAs($admin)->getJson('/api/admin/members?search=0917')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.phone', '09171234567');
+        $this->actingAs($admin)->getJson('/api/admin/members?search=  Section B  ')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.section', 'Section B');
+
+        // Combined with an existing filter: only rows matching both survive.
+        $this->actingAs($admin)
+            ->getJson('/api/admin/members?search=2024&class=3B')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
     public function test_member_show_includes_signed_file_urls(): void
     {
         Storage::fake('supabase');

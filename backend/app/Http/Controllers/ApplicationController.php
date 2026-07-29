@@ -62,10 +62,15 @@ class ApplicationController extends Controller
             ], 403);
         }
 
+        // Trimmed explicitly so leading/trailing spaces from a pasted ID never
+        // defeat the uniqueness check below.
+        $request->merge(['studentId' => trim((string) $request->input('studentId'))]);
+
         $validated = $request->validate([
             'surname'        => ['required', 'string', 'max:100'],
             'givenName'      => ['required', 'string', 'max:100'],
             'middleInitial'  => ['nullable', 'string', 'max:1'],
+            'studentId'      => ['required', 'string', 'max:20', 'regex:/^[A-Za-z0-9-]+$/', 'unique:applications,student_id'],
             'yearLevel'      => ['required', 'string', 'max:50'],
             'section'        => ['required', 'string', 'max:50'],
             'birthday'       => ['required', 'date'],
@@ -86,6 +91,7 @@ class ApplicationController extends Controller
             'surname'         => $validated['surname'],
             'given_name'      => $validated['givenName'],
             'middle_initial'  => $validated['middleInitial'] ?? null,
+            'student_id'      => $validated['studentId'],
             'year_level'      => $validated['yearLevel'],
             'section'         => $validated['section'],
             'birthday'        => $validated['birthday'],

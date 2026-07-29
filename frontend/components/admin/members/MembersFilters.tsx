@@ -41,8 +41,8 @@ export default function MembersFilters({
         <input
           value={value.search}
           onChange={(e) => set({ search: e.target.value })}
-          placeholder="Search name or email…"
-          className={`${selectCls} w-full pl-9 sm:w-56`}
+          placeholder="Search by name, email, student ID, or phone number…"
+          className={`${selectCls} w-full pl-9 sm:w-96`}
         />
       </div>
 
