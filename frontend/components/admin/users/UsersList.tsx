@@ -14,7 +14,6 @@ import {
   MoreVertical,
   Pencil,
   Power,
-  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   UserPlus,
@@ -28,6 +27,7 @@ import UsersFilters, { EMPTY_USER_FILTERS, type UserFilters } from "@/components
 import NewUserModal from "@/components/admin/users/NewUserModal";
 import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
+import RoleBadge from "@/components/admin/users/RoleBadge";
 import RolePrivilegesModal from "@/components/admin/users/RolePrivilegesModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -37,27 +37,6 @@ type Confirm =
   | { kind: "toggle"; user: AdminUser }
   | { kind: "delete"; user: AdminUser }
   | null;
-
-// The two roles that can manage administrator accounts get the accent badge.
-/* Roles that can manage accounts, highlighted in the table. Mirrors the
-   users.manage grant in App\Enums\UserRole. */
-const MANAGER_ROLES = new Set(["programming_team"]);
-
-function RoleBadge({ user }: { user: AdminUser }) {
-  const isManager = user.role ? MANAGER_ROLES.has(user.role) : false;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-        isManager
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-line bg-white/5 text-secondary-foreground"
-      }`}
-    >
-      {isManager && <ShieldCheck size={12} />}
-      {user.roleLabel ?? user.role ?? "—"}
-    </span>
-  );
-}
 
 function StatusPill({ active }: { active: boolean }) {
   return active ? (
@@ -172,7 +151,7 @@ export default function UsersList() {
       ),
     },
     { key: "email", header: "Email", render: (u) => <span className="text-secondary-foreground">{u.email}</span> },
-    { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge user={u} /> },
+    { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge role={u.role} label={u.roleLabel} /> },
     { key: "status", header: "Status", render: (u) => <StatusPill active={u.isActive} /> },
     { key: "lastLogin", header: "Last Login", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.lastLoginAt)}</span> },
     { key: "createdAt", header: "Created", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.createdAt)}</span> },

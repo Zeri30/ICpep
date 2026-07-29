@@ -12,7 +12,21 @@ import { useCallback, useEffect, useState } from "react";
 
 const API_BASE = "/api/admin";
 
-export type RoleOption = { value: string; label: string };
+/**
+ * One role as the selects and badges consume it (see App\Enums\UserRole::options).
+ *
+ * `family` is the branch of the organization it belongs to — what the role badge
+ * is coloured by and what the role selects group under; see lib/roleFamily.
+ * `managesUsers` comes from the live privilege matrix rather than a hard-coded
+ * list here, since that ability can be moved from the Privileges panel.
+ */
+export type RoleOption = {
+  value: string;
+  label: string;
+  family: string;
+  familyLabel: string;
+  managesUsers: boolean;
+};
 
 /** The ability strings the backend Gates on (see App\Enums\Permission). */
 export type Permission =
@@ -44,6 +58,18 @@ export type AdminMeta = {
   sections: string[];
   yearLevels: string[];
   roles: RoleOption[];
+  /**
+   * The role families in the order their headings should appear — the grouping
+   * for the role selects. Sent separately from the roles because the order of the
+   * headings is its own decision; see App\Enums\RoleFamily::options().
+   */
+  roleFamilies: { value: string; label: string }[];
+  /**
+   * The role the account form starts a new account on — the least-privileged
+   * one. Sent by the backend rather than taken as the last option, which only
+   * happened to be that role until the Team Heads were added after it.
+   */
+  defaultRole: string;
   /** The Category options on the event form (see App\Models\Event::CATEGORIES). */
   eventCategories: string[];
   /**

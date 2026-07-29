@@ -2,6 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import { useAdmin } from "@/components/admin/AdminProvider";
+import RoleOptions from "@/components/admin/users/RoleOptions";
 
 export type UserFilters = {
   search: string;
@@ -37,11 +38,10 @@ export default function UsersFilters({
         />
       </div>
 
+      {/* Grouped by family — see RoleOptions. */}
       <select value={value.role} onChange={(e) => set({ role: e.target.value })} className={selectCls} aria-label="Role">
         <option value="">All roles</option>
-        {meta.roles.map((r) => (
-          <option key={r.value} value={r.value}>{r.label}</option>
-        ))}
+        <RoleOptions roles={meta.roles} />
       </select>
 
       <select value={value.status} onChange={(e) => set({ status: e.target.value })} className={selectCls} aria-label="Status">
