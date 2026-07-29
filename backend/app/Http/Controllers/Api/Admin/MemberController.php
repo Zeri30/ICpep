@@ -6,13 +6,18 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\MemberResource;
 use App\Models\Application;
 use App\Models\MembershipTerm;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -35,11 +40,7 @@ class MemberController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = $this->filtered($request);
-
-        $sort = self::SORTABLE[$request->input('sort')] ?? 'created_at';
-        $direction = $request->input('direction') === 'asc' ? 'asc' : 'desc';
-        $query->orderBy($sort, $direction);
+        $query = $this->applySort($this->filtered($request), $request);
 
         return MemberResource::collection($query->paginate($this->perPage($request))->withQueryString());
     }
@@ -183,6 +184,114 @@ class MemberController extends Controller
         }
     }
 
+    /* ----------------------------------------------------------------- export */
+
+    /** Column order shared by every export format. */
+    private const EXPORT_COLUMNS = [
+        'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email', 'Payment Status', 'Paid At', 'Registered At',
+    ];
+
+    public function exportCsv(Request $request): StreamedResponse
+    {
+        $members = $this->exportRows($request);
+
+        return response()->streamDownload(function () use ($members): void {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, self::EXPORT_COLUMNS);
+            foreach ($members as $member) {
+                fputcsv($out, $this->exportRow($member));
+            }
+            fclose($out);
+        }, $this->exportFilename($request, 'csv'), ['Content-Type' => 'text/csv']);
+    }
+
+    public function exportExcel(Request $request): StreamedResponse
+    {
+        $members = $this->exportRows($request);
+
+        return response()->streamDownload(function () use ($members): void {
+            $writer = new XlsxWriter();
+            $writer->openToFile('php://output');
+            $writer->addRow(Row::fromValues(self::EXPORT_COLUMNS));
+            foreach ($members as $member) {
+                $writer->addRow(Row::fromValues($this->exportRow($member)));
+            }
+            $writer->close();
+        }, $this->exportFilename($request, 'xlsx'), [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /** Printable roster: logo, org name, applied filters, table, total, signature blocks. */
+    public function exportPdf(Request $request): Response
+    {
+        $term = MembershipTerm::resolve($request->input('term'));
+        $members = $this->exportRows($request);
+
+        $pdf = Pdf::loadView('admin.members.export-pdf', [
+            'members' => $members,
+            'term' => $term,
+            'filters' => $this->filterSummary($request, $term),
+            'generatedAt' => now(),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->stream($this->exportFilename($request, 'pdf'));
+    }
+
+    /** Every member the current filters + search match, in list order — unpaginated. */
+    private function exportRows(Request $request): Collection
+    {
+        return $this->applySort($this->filtered($request), $request)->get();
+    }
+
+    /** @return list<string> */
+    private function exportRow(Application $member): array
+    {
+        return [
+            $member->student_id,
+            $member->full_name,
+            $member->year_level,
+            $member->section,
+            $member->phone,
+            $member->email,
+            $member->is_paid ? 'Paid' : 'Unpaid',
+            optional($member->paid_at)->toDateString() ?? '',
+            optional($member->created_at)->toDateString() ?? '',
+        ];
+    }
+
+    private function exportFilename(Request $request, string $ext): string
+    {
+        $term = MembershipTerm::resolve($request->input('term'));
+        $slug = $term ? str($term->label)->slug() : 'members-list';
+
+        return "members-list-{$slug}-".now()->format('Y-m-d').".{$ext}";
+    }
+
+    /** Human-readable list of the filters currently applied, for the PDF header. */
+    private function filterSummary(Request $request, ?MembershipTerm $term): array
+    {
+        $summary = [];
+
+        if ($term) {
+            $summary['Semester'] = $term->label;
+        }
+        if ($class = $request->input('class')) {
+            $summary['Year & Section'] = $class;
+        }
+        if ($payment = $request->input('payment')) {
+            $summary['Payment'] = ucfirst($payment);
+        }
+        if ($trashed = $request->input('trashed')) {
+            $summary['Records'] = $trashed === 'only' ? 'Deleted members only' : 'Including deleted members';
+        }
+        if ($search = trim((string) $request->input('search'))) {
+            $summary['Search'] = $search;
+        }
+
+        return $summary;
+    }
+
     /* ---------------------------------------------------------------- helpers */
 
     /** Apply the list filters + search to the index query. */
@@ -241,6 +350,15 @@ class MemberController extends Controller
         $query
             ->when($request->input('from'), fn (Builder $q, $d): Builder => $q->whereDate($field, '>=', $d))
             ->when($request->input('until'), fn (Builder $q, $d): Builder => $q->whereDate($field, '<=', $d));
+    }
+
+    /** Sort mirrors the list's column sort (and its default) for index and exports alike. */
+    private function applySort(Builder $query, Request $request): Builder
+    {
+        $sort = self::SORTABLE[$request->input('sort')] ?? 'created_at';
+        $direction = $request->input('direction') === 'asc' ? 'asc' : 'desc';
+
+        return $query->orderBy($sort, $direction);
     }
 
     /** 20 by default — a page the admin table shows without the browser scrolling. */

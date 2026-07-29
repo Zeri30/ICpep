@@ -12,11 +12,15 @@ import Link from "next/link";
 import {
   Banknote,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Download,
   Eye,
+  FileSpreadsheet,
+  FileText,
   MoreVertical,
   Pencil,
+  Printer,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -105,6 +109,14 @@ export default function MembersList() {
     p.set("page", String(page));
     return p.toString();
   }, [term, debouncedSearch, filters, sort, page]);
+
+  // Same filters/search/sort as the table, minus pagination — an export always
+  // covers every matching row, not just the page currently on screen.
+  const exportQueryString = useMemo(() => {
+    const p = new URLSearchParams(queryString);
+    p.delete("page");
+    return p.toString();
+  }, [queryString]);
 
   // Hold off until the term is known, so the table never flashes the current
   // list's members while a past list is the one selected.
@@ -343,20 +355,25 @@ export default function MembersList() {
           <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Members List</h1>
           {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
         </div>
-        {/* Named for what it does. "Mark all" read as "everything in the list"
-            and was acting on the whole filtered set, which is not something an
-            officer should be able to trigger from a single click. */}
-        {canPay && (
-          <button
-            onClick={() => requestPayment("paid")}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-3.5 py-2 text-sm font-semibold text-green-400 transition-colors hover:bg-green-500/20 sm:w-auto"
-          >
-            <Banknote size={16} /> Mark selected as paid
-            {selected.size > 0 && (
-              <span className="rounded-full bg-green-500/20 px-1.5 text-xs tabular-nums">{selected.size}</span>
-            )}
-          </button>
-        )}
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          {/* Open to every role — reading the list is all it takes to export it. */}
+          <ExportMenu queryString={exportQueryString} />
+
+          {/* Named for what it does. "Mark all" read as "everything in the list"
+              and was acting on the whole filtered set, which is not something an
+              officer should be able to trigger from a single click. */}
+          {canPay && (
+            <button
+              onClick={() => requestPayment("paid")}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-3.5 py-2 text-sm font-semibold text-green-400 transition-colors hover:bg-green-500/20 sm:w-auto"
+            >
+              <Banknote size={16} /> Mark selected as paid
+              {selected.size > 0 && (
+                <span className="rounded-full bg-green-500/20 px-1.5 text-xs tabular-nums">{selected.size}</span>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters and the bulk actions share one row: the selection controls
@@ -488,6 +505,49 @@ export default function MembersList() {
         onConfirm={confirmAction}
         onClose={() => setConfirm(null)}
       />
+    </div>
+  );
+}
+
+/** Export the current filtered/searched list as CSV, Excel, or a printable PDF. */
+function ExportMenu({ queryString }: { queryString: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const base = "/api/admin/members/export";
+  const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
+
+  return (
+    <div ref={ref} className="relative w-full sm:w-auto">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-secondary/60 px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:w-auto"
+      >
+        <Download size={16} /> Export / Print
+        <ChevronDown size={14} className={open ? "rotate-180 transition-transform" : "transition-transform"} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-11 z-20 w-52 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] sm:left-auto sm:right-0">
+          <a href={`${base}/csv?${queryString}`} className={item} onClick={() => setOpen(false)}>
+            <FileText size={15} /> Export as CSV
+          </a>
+          <a href={`${base}/excel?${queryString}`} className={item} onClick={() => setOpen(false)}>
+            <FileSpreadsheet size={15} /> Export as Excel
+          </a>
+          <a href={`${base}/pdf?${queryString}`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
+            <Printer size={15} /> Print as PDF
+          </a>
+        </div>
+      )}
     </div>
   );
 }
