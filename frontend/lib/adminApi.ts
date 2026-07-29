@@ -8,7 +8,7 @@
    CSRF token in a header, mirroring SignInModal. A 401 means the session is
    gone, so we bounce to the landing page. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = "/api/admin";
 
@@ -172,15 +172,32 @@ export function useAdminResource<T>(
   const [loading, setLoading] = useState(true);
   const { pollMs } = opts;
 
+  /**
+   * Which request is the current one. Responses are not guaranteed to come back
+   * in the order they were sent, and the slow one is not always the old one —
+   * switching membership list has been seen to land the *previous* semester's
+   * response seconds after the new semester's request went out, leaving one
+   * semester's members sitting under another's heading with nothing to say they
+   * were stale. A response that is no longer the one being waited on is dropped
+   * rather than written, so `data` only ever moves forwards.
+   */
+  const requestId = useRef(0);
+
   const load = useCallback(async () => {
     if (path === null) return;
+    const mine = ++requestId.current;
     try {
-      setData(await apiGet<T>(path));
+      const next = await apiGet<T>(path);
+      if (mine !== requestId.current) return;
+      setData(next);
       setError(null);
     } catch (e) {
+      if (mine !== requestId.current) return;
       setError(e instanceof Error ? e.message : "Failed to load.");
     } finally {
-      setLoading(false);
+      // Guarded too: a superseded request must not report that the current one
+      // has finished loading.
+      if (mine === requestId.current) setLoading(false);
     }
   }, [path]);
 
