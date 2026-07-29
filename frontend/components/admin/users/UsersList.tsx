@@ -1,17 +1,20 @@
 "use client";
 
 /* User Management — administrator accounts. Filters (search + role + status),
-   sort, pagination, and per-row actions: edit, activate/deactivate, reset
-   password, and permanent delete. Every destructive action confirms first, and
-   the signed-in officer can never deactivate or delete their own row. */
+   sort, pagination, and per-row actions: edit, privileges, activate/deactivate,
+   reset password, and permanent delete. Every destructive action confirms first,
+   and the signed-in officer can never deactivate or delete their own row.
 
-import Link from "next/link";
+   Privileges is the odd one out: it is reached from a row but edits that
+   account's *role*, so it affects every account holding it. The modal states
+   that rather than the menu, since the menu has no room to explain it. */
+
 import {
   KeyRound,
   MoreVertical,
   Pencil,
   Power,
-  ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -22,7 +25,10 @@ import DataTable, { type Column, type SortState } from "@/components/admin/ui/Da
 import Pagination from "@/components/admin/ui/Pagination";
 import UsersFilters, { EMPTY_USER_FILTERS, type UserFilters } from "@/components/admin/users/UsersFilters";
 import NewUserModal from "@/components/admin/users/NewUserModal";
+import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
+import RoleBadge from "@/components/admin/users/RoleBadge";
+import RolePrivilegesModal from "@/components/admin/users/RolePrivilegesModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { AdminUser, Paginated } from "@/lib/adminTypes";
@@ -31,27 +37,6 @@ type Confirm =
   | { kind: "toggle"; user: AdminUser }
   | { kind: "delete"; user: AdminUser }
   | null;
-
-// The two roles that can manage administrator accounts get the accent badge.
-/* Roles that can manage accounts, highlighted in the table. Mirrors the
-   users.manage grant in App\Enums\UserRole. */
-const MANAGER_ROLES = new Set(["programming_team"]);
-
-function RoleBadge({ user }: { user: AdminUser }) {
-  const isManager = user.role ? MANAGER_ROLES.has(user.role) : false;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-        isManager
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-line bg-white/5 text-secondary-foreground"
-      }`}
-    >
-      {isManager && <ShieldCheck size={12} />}
-      {user.roleLabel ?? user.role ?? "—"}
-    </span>
-  );
-}
 
 function StatusPill({ active }: { active: boolean }) {
   return active ? (
@@ -69,12 +54,14 @@ export default function UsersList() {
   const { notify } = useAdmin();
 
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
   const [filters, setFilters] = useState<UserFilters>(EMPTY_USER_FILTERS);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortState>({ key: "createdAt", direction: "desc" });
   const [page, setPage] = useState(1);
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
+  const [privilegesFor, setPrivilegesFor] = useState<AdminUser | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
   useEffect(() => {
@@ -152,7 +139,7 @@ export default function UsersList() {
       render: (u) => (
         <div className="flex items-center gap-3">
           <span className="grid size-9 place-items-center rounded-full bg-secondary text-xs font-bold uppercase text-muted-foreground">
-            {(u.name || u.username || "?").slice(0, 2)}
+            {(u.name || "?").slice(0, 2)}
           </span>
           <div>
             <p className="font-medium text-foreground">
@@ -163,9 +150,8 @@ export default function UsersList() {
         </div>
       ),
     },
-    { key: "username", header: "Username", render: (u) => <span className="text-secondary-foreground">@{u.username}</span> },
     { key: "email", header: "Email", render: (u) => <span className="text-secondary-foreground">{u.email}</span> },
-    { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge user={u} /> },
+    { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge role={u.role} label={u.roleLabel} /> },
     { key: "status", header: "Status", render: (u) => <StatusPill active={u.isActive} /> },
     { key: "lastLogin", header: "Last Login", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.lastLoginAt)}</span> },
     { key: "createdAt", header: "Created", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.createdAt)}</span> },
@@ -179,6 +165,8 @@ export default function UsersList() {
           onOpen={() => setMenuFor(u.id)}
           onClose={() => setMenuFor(null)}
           user={u}
+          onEdit={() => setEditing(u)}
+          onPrivileges={() => setPrivilegesFor(u)}
           onToggle={() => setConfirm({ kind: "toggle", user: u })}
           onReset={() => setResetFor(u)}
           onDelete={() => setConfirm({ kind: "delete", user: u })}
@@ -257,12 +245,21 @@ export default function UsersList() {
         onClose={() => setCreating(false)}
       />
 
+      <EditUserModal
+        user={editing}
+        onSaved={refresh}
+        onClose={() => setEditing(null)}
+      />
+
       <ResetPasswordModal
         open={!!resetFor}
         userName={resetFor?.name ?? null}
         onSubmit={resetPassword}
         onClose={() => setResetFor(null)}
       />
+
+      {/* Edits the row's role, not the row — see the note at the top. */}
+      <RolePrivilegesModal user={privilegesFor} onClose={() => setPrivilegesFor(null)} />
     </div>
   );
 }
@@ -272,6 +269,8 @@ function RowMenu({
   onOpen,
   onClose,
   user,
+  onEdit,
+  onPrivileges,
   onToggle,
   onReset,
   onDelete,
@@ -280,6 +279,8 @@ function RowMenu({
   onOpen: () => void;
   onClose: () => void;
   user: AdminUser;
+  onEdit: () => void;
+  onPrivileges: () => void;
   onToggle: () => void;
   onReset: () => void;
   onDelete: () => void;
@@ -304,9 +305,19 @@ function RowMenu({
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-20 w-56 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)]">
-          <Link href={`/admin/users/${user.id}/edit`} className={item} onClick={onClose}>
+          <button onClick={() => { onClose(); onEdit(); }} className={item}>
             <Pencil size={15} /> Edit account
-          </Link>
+          </button>
+          {/* Roleless accounts have nothing to configure. */}
+          {user.role ? (
+            <button onClick={() => { onClose(); onPrivileges(); }} className={item}>
+              <SlidersHorizontal size={15} /> Privileges
+            </button>
+          ) : (
+            <button type="button" className={disabled} title="This account has no role" disabled>
+              <SlidersHorizontal size={15} /> Privileges
+            </button>
+          )}
           <button onClick={() => { onClose(); onReset(); }} className={item}>
             <KeyRound size={15} /> Reset password
           </button>

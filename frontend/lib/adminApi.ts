@@ -8,11 +8,25 @@
    CSRF token in a header, mirroring SignInModal. A 401 means the session is
    gone, so we bounce to the landing page. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = "/api/admin";
 
-export type RoleOption = { value: string; label: string };
+/**
+ * One role as the selects and badges consume it (see App\Enums\UserRole::options).
+ *
+ * `family` is the branch of the organization it belongs to — what the role badge
+ * is coloured by and what the role selects group under; see lib/roleFamily.
+ * `managesUsers` comes from the live privilege matrix rather than a hard-coded
+ * list here, since that ability can be moved from the Privileges panel.
+ */
+export type RoleOption = {
+  value: string;
+  label: string;
+  family: string;
+  familyLabel: string;
+  managesUsers: boolean;
+};
 
 /** The ability strings the backend Gates on (see App\Enums\Permission). */
 export type Permission =
@@ -20,8 +34,10 @@ export type Permission =
   | "members.edit"
   | "members.payment"
   | "finance.view"
+  | "finance.revenue"
   | "users.manage"
-  | "terms.manage";
+  | "terms.manage"
+  | "schedule.manage";
 
 export type Officer = {
   name: string;
@@ -42,6 +58,25 @@ export type AdminMeta = {
   sections: string[];
   yearLevels: string[];
   roles: RoleOption[];
+  /**
+   * The role families in the order their headings should appear — the grouping
+   * for the role selects. Sent separately from the roles because the order of the
+   * headings is its own decision; see App\Enums\RoleFamily::options().
+   */
+  roleFamilies: { value: string; label: string }[];
+  /**
+   * The role the account form starts a new account on — the least-privileged
+   * one. Sent by the backend rather than taken as the last option, which only
+   * happened to be that role until the Team Heads were added after it.
+   */
+  defaultRole: string;
+  /** The Category options on the event form (see App\Models\Event::CATEGORIES). */
+  eventCategories: string[];
+  /**
+   * The organization's timezone. Every date on the calendar is a day in this
+   * zone, not in the viewer's — the API converts, so the UI only has to say so.
+   */
+  timezone: string;
 };
 
 export type Me = { user: Officer; meta: AdminMeta };
@@ -137,15 +172,32 @@ export function useAdminResource<T>(
   const [loading, setLoading] = useState(true);
   const { pollMs } = opts;
 
+  /**
+   * Which request is the current one. Responses are not guaranteed to come back
+   * in the order they were sent, and the slow one is not always the old one —
+   * switching membership list has been seen to land the *previous* semester's
+   * response seconds after the new semester's request went out, leaving one
+   * semester's members sitting under another's heading with nothing to say they
+   * were stale. A response that is no longer the one being waited on is dropped
+   * rather than written, so `data` only ever moves forwards.
+   */
+  const requestId = useRef(0);
+
   const load = useCallback(async () => {
     if (path === null) return;
+    const mine = ++requestId.current;
     try {
-      setData(await apiGet<T>(path));
+      const next = await apiGet<T>(path);
+      if (mine !== requestId.current) return;
+      setData(next);
       setError(null);
     } catch (e) {
+      if (mine !== requestId.current) return;
       setError(e instanceof Error ? e.message : "Failed to load.");
     } finally {
-      setLoading(false);
+      // Guarded too: a superseded request must not report that the current one
+      // has finished loading.
+      if (mine === requestId.current) setLoading(false);
     }
   }, [path]);
 

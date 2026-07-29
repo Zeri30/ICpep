@@ -28,6 +28,9 @@ class AdminUserSeeder extends Seeder
             ['email' => $email],
             [
                 'name' => env('ADMIN_NAME', 'ICpEP.SE Admin'),
+                'first_name' => env('ADMIN_NAME', 'ICpEP.SE Admin'),
+                'middle_initial' => null,
+                'last_name' => '',
                 'username' => env('ADMIN_USERNAME', 'admin'),
                 'password' => Hash::make($password),
                 // The bootstrap account belongs to the Programming Team — the

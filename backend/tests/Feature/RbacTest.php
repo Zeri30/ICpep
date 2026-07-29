@@ -47,14 +47,41 @@ class RbacTest extends TestCase
         }
     }
 
-    public function test_only_finance_roles_reach_payment_history(): void
+    /**
+     * Payment History is open to the whole board by default, for transparency:
+     * the record of who has paid their dues is something any officer may be
+     * asked about, and a ledger only the treasury can open invites the question
+     * of what is in it.
+     *
+     * Reading it is all it grants. Recording a payment needs members.payment
+     * and the revenue figures need finance.revenue, both of which stay with the
+     * treasury — covered by the tests either side of this one.
+     *
+     * These are the *defaults*; the Programming Team can still revoke it from
+     * any role in the Privileges panel, which RolePrivilegesTest covers.
+     */
+    public function test_every_role_reaches_payment_history(): void
     {
-        $this->actingAs($this->acting(UserRole::Treasurer))->getJson('/api/admin/payments')->assertOk();
-        $this->actingAs($this->acting(UserRole::AssistantTreasurer))->getJson('/api/admin/payments')->assertOk();
-
-        foreach ([UserRole::President, UserRole::Secretary, UserRole::Pro, UserRole::Adviser] as $role) {
-            $this->actingAs($this->acting($role))->getJson('/api/admin/payments')->assertForbidden();
+        foreach (UserRole::cases() as $role) {
+            $this->actingAs($this->acting($role))
+                ->getJson('/api/admin/payments')
+                ->assertOk();
         }
+    }
+
+    /** Reading the ledger is not permission to change it. */
+    public function test_reading_payment_history_does_not_allow_recording_payments(): void
+    {
+        Storage::fake('supabase');
+        $member = $this->member();
+
+        foreach ([UserRole::Pro, UserRole::Bod, UserRole::Secretary, UserRole::President] as $role) {
+            $this->actingAs($this->acting($role))
+                ->postJson("/api/admin/members/{$member->id}/toggle-paid")
+                ->assertForbidden();
+        }
+
+        $this->assertNull($member->fresh()->paid_at);
     }
 
     public function test_only_the_programming_team_reaches_user_management(): void
@@ -139,12 +166,37 @@ class RbacTest extends TestCase
             ->assertOk()
             ->assertJsonPath('stats.revenue', null)
             ->assertJsonPath('paymentSummary', null)
-            ->assertJsonPath('canViewFinance', false);
+            ->assertJsonPath('canViewRevenue', false);
 
         $this->actingAs($this->acting(UserRole::Treasurer))
             ->getJson('/api/admin/dashboard')
             ->assertOk()
-            ->assertJsonPath('canViewFinance', true);
+            ->assertJsonPath('canViewRevenue', true);
+    }
+
+    /**
+     * The reason the two finance abilities are separate. The secretariat keeps
+     * the organization's records, so they open Payment History — but the
+     * chapter's takings are the treasury's business, and the dashboard stays
+     * shut to them.
+     */
+    public function test_the_secretariat_reads_the_ledger_without_seeing_the_revenue(): void
+    {
+        $this->member();
+
+        foreach ([UserRole::Secretary, UserRole::AssistantSecretary] as $role) {
+            $officer = $this->acting($role);
+
+            $this->actingAs($officer)->getJson('/api/admin/payments')->assertOk();
+
+            $this->actingAs($officer)
+                ->getJson('/api/admin/dashboard')
+                ->assertOk()
+                ->assertJsonPath('canViewRevenue', false)
+                ->assertJsonPath('stats.revenue', null)
+                ->assertJsonPath('stats.pendingRevenue', null)
+                ->assertJsonPath('paymentSummary', null);
+        }
     }
 
     /* ------------------------------------------------------------ activity log */

@@ -79,6 +79,18 @@ select {
   color-scheme: dark;
 }
 
+/* Tailwind's reset leaves buttons on the default arrow, so every clickable
+   thing in the admin had to ask for a pointer by hand — and the ones that
+   forgot read as text that happens to highlight on hover. Stated once here
+   instead. Disabled buttons are left out so `disabled:cursor-not-allowed`
+   still means something, and elements that only play a button on TV
+   (`<label>`, `role="button"` divs) keep their own class, since no element
+   selector could find them. */
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
 /* ---------------------------------------------------------------------------
    Utilities & effects
 --------------------------------------------------------------------------- */
@@ -148,6 +160,42 @@ select {
 }
 .pulse-ring {
   animation: pulseRing 2.2s ease-out infinite;
+}
+
+/* Skeleton placeholders — the shape of a row while its data is still in flight
+   (see components/admin/ui/DataTable). A highlight sweeping across a flat bar
+   rather than a fade in and out: a fade makes twenty rows read as twenty
+   separate things blinking at you, where a sweep reads as one surface still
+   loading. Kept in CSS rather than done with motion/react because a full table
+   is ~200 of these at once, and this compositor-friendly background shift costs
+   nothing next to that many animated React components.
+
+   `background-size: 200%` makes the gradient twice the element's width, so the
+   position runs 100% → -100% to carry the highlight from the left edge clear
+   off the right one. */
+@keyframes skeletonSweep {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+.skeleton {
+  background-color: var(--color-secondary);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.07) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeletonSweep 1.6s ease-in-out infinite;
+}
+/* Matching the marquee above: the placeholder still reads as a placeholder
+   without the sweep, so reduced motion keeps the bars and drops the animation
+   rather than falling back to a spinner. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 /* Gallery placeholder patterns */

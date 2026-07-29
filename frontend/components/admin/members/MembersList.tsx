@@ -33,6 +33,7 @@ import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/admin/members/MembersFilters";
+import EditMemberModal from "@/components/admin/members/EditMemberModal";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
@@ -45,6 +46,27 @@ type Confirm =
   /** Payment carries its counts so the dialog can say exactly what will change. */
   | { kind: "payment"; action: "paid" | "unpaid"; eligible: number; skipped: number }
   | null;
+
+/**
+ * How many placeholder rows to draw while the first page is in flight.
+ *
+ * Twenty because that is the page size the API returns (MemberController's
+ * `perPage` default), so the skeleton stands in the space the real rows are
+ * about to take — same height, same scroll extent, nothing jumps when they
+ * land. A smaller, "nicer" number would leave the table to grow on arrival,
+ * which is the layout shift this is here to remove.
+ */
+const SKELETON_ROWS = 20;
+
+/** A placeholder bar. `w` is a Tailwind width, sized to the copy it stands in. */
+function Bar({ w, h = "h-4" }: { w: string; h?: string }) {
+  return <span className={`skeleton inline-block rounded ${h} ${w}`} />;
+}
+
+/** A placeholder for the pill-shaped cells — the class, year and payment badges. */
+function Pill({ w }: { w: string }) {
+  return <span className={`skeleton inline-block h-5 rounded-full ${w}`} />;
+}
 
 function PaymentPill({ paid }: { paid: boolean }) {
   return paid ? (
@@ -76,6 +98,7 @@ export default function MembersList() {
   // what they will change — the ids alone can't answer that off-page.
   const [selected, setSelected] = useState<Map<number, Member>>(new Map());
   const [confirm, setConfirm] = useState<Confirm>(null);
+  const [editing, setEditing] = useState<Member | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
   // Debounce only the free-text search; selects apply immediately.
@@ -120,7 +143,7 @@ export default function MembersList() {
 
   // Hold off until the term is known, so the table never flashes the current
   // list's members while a past list is the one selected.
-  const { data, loading, error, refresh } = useAdminResource<Paginated<Member>>(
+  const { data, error, refresh } = useAdminResource<Paginated<Member>>(
     termsLoading ? null : `/members?${queryString}`,
   );
 
@@ -135,7 +158,32 @@ export default function MembersList() {
     setPage(1);
   };
 
-  const rows = data?.data ?? [];
+  // Which semester the rows in `data` were fetched for. Recorded during render
+  // on the same reset-on-change pattern as the page reset above, so no render
+  // can pair one semester's heading with another semester's members.
+  const [dataTermId, setDataTermId] = useState(term?.id);
+  const [lastData, setLastData] = useState(data);
+  if (data !== lastData) {
+    setLastData(data);
+    setDataTermId(term?.id);
+  }
+
+  // Switching semester is a different dataset, not a filter of the current one
+  // — the page reset above already says so. The rows on screen belong to the
+  // semester just left, so they are dropped rather than left sitting under the
+  // new one's heading, and the placeholders come back exactly as on a cold
+  // load. Paging, sorting and filtering keep their rows: same dataset, and
+  // swapping real content for twenty shimmering bars disrupts more than the
+  // wait does.
+  const otherTerm = data !== null && term?.id !== dataTermId;
+  const rows = otherTerm ? [] : (data?.data ?? []);
+
+  /* Deliberately not gated on the hook's `loading`: that flag starts true and
+     never goes true again, so it describes the first fetch and nothing else —
+     on a semester switch it is already false. Having no rows for the selected
+     semester is the real condition. `error` has to win over it, or a switch
+     that failed would shimmer forever instead of saying what went wrong. */
+  const awaitingRows = !error && (data === null || otherTerm);
 
   /* -------------------------------------------------------------- mutations */
 
@@ -270,6 +318,7 @@ export default function MembersList() {
                 aria-label={`Select ${m.fullName}`}
               />
             ),
+            skeleton: <span className="skeleton inline-block size-4 rounded-sm" />,
           },
         ]
       : []),
@@ -285,6 +334,12 @@ export default function MembersList() {
             {m.surname?.[0]}
           </span>
         ),
+      // The avatar is what sets the row's height, so this one is load-bearing:
+      // a shorter placeholder here and every row grows when the photos arrive.
+      // `block` rather than inline-block for the same reason — an inline box
+      // sits on the text baseline and carries the descender space with it,
+      // which measured 5px taller per row than the real (block) avatar.
+      skeleton: <span className="skeleton block size-10 rounded-full" />,
     },
     {
       key: "name",
@@ -296,17 +351,35 @@ export default function MembersList() {
           <p className="text-xs text-muted-foreground">{m.email}</p>
         </div>
       ),
+      // Two lines, because the cell has two — name over email.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-32" />
+          <Bar w="w-44" h="h-3" />
+        </div>
+      ),
     },
-    { key: "class", header: "Class", render: (m) => <Badge tone="red">{m.classCode}</Badge> },
-    { key: "year", header: "Year", render: (m) => <Badge tone="dark">{m.yearLevel}</Badge> },
-    { key: "section", header: "Section", sortable: true, render: (m) => <span className="text-secondary-foreground">{m.section}</span> },
-    { key: "phone", header: "Phone", render: (m) => <span className="text-secondary-foreground">{m.phone}</span> },
-    { key: "paidAt", header: "Payment", sortable: true, render: (m) => <PaymentPill paid={m.isPaid} /> },
-    { key: "createdAt", header: "Registered", sortable: true, render: (m) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(m.createdAt)}</span> },
+    // The widths below are not decorative — the table is auto-layout, so each
+    // placeholder's width is what holds its column open. They were measured
+    // against a loaded table and trimmed to match; see SKELETON_ROWS.
+    { key: "class", header: "Class", render: (m) => <Badge tone="red">{m.classCode}</Badge>, skeleton: <Pill w="w-12" /> },
+    { key: "year", header: "Year", render: (m) => <Badge tone="dark">{m.yearLevel}</Badge>, skeleton: <Pill w="w-24" /> },
+    { key: "section", header: "Section", sortable: true, render: (m) => <span className="text-secondary-foreground">{m.section}</span>, skeleton: <Bar w="w-16" /> },
+    { key: "phone", header: "Phone", render: (m) => <span className="text-secondary-foreground">{m.phone}</span>, skeleton: <Bar w="w-24" /> },
+    { key: "paidAt", header: "Payment", sortable: true, render: (m) => <PaymentPill paid={m.isPaid} />, skeleton: <Pill w="w-20" /> },
+    { key: "createdAt", header: "Registered", sortable: true, render: (m) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(m.createdAt)}</span>, skeleton: <Bar w="w-40" /> },
     {
       key: "actions",
       header: "",
       align: "right",
+      // Same square buttons the real row ends with, so the column keeps its
+      // width instead of collapsing to nothing and shoving the rest across.
+      skeleton: (
+        <div className="flex items-center justify-end gap-1">
+          {canPay && <span className="skeleton inline-block size-8 rounded-md" />}
+          <span className="skeleton inline-block size-8 rounded-md" />
+        </div>
+      ),
       render: (m) =>
         m.deletedAt ? (
           canEdit ? (
@@ -335,6 +408,7 @@ export default function MembersList() {
               onClose={() => setMenuFor(null)}
               member={m}
               canEdit={canEdit}
+              onEdit={() => setEditing(m)}
               onDelete={() => setConfirm({ kind: "delete", member: m })}
             />
           </div>
@@ -353,7 +427,19 @@ export default function MembersList() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Members List</h1>
-          {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+          {/* The term arrives on its own request, after the heading has already
+              painted. Rendered as a placeholder rather than nothing, because
+              this line is above the table — letting it appear late pushed the
+              whole card down 24px just as the rows were landing. The bar is
+              sized to the text's own line box (16px + the 2px margins) so the
+              swap changes nothing. */}
+          {term ? (
+            <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>
+          ) : termsLoading ? (
+            <p className="mt-1">
+              <span className="skeleton my-0.5 block h-4 w-40 rounded" />
+            </p>
+          ) : null}
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           {/* Open to every role — reading the list is all it takes to export it. */}
@@ -405,13 +491,25 @@ export default function MembersList() {
         columns={columns}
         rows={rows}
         rowKey={(m) => m.id}
-        loading={loading && !data}
+        loading={awaitingRows}
+        skeletonRows={SKELETON_ROWS}
         error={error}
         sort={sort}
         onSort={onSort}
         emptyHeading="No members found"
         emptyDescription="Try clearing the filters, or wait for new registrations from the public form."
-        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+        // The pager is part of the card's height, so it gets a placeholder too
+        // — otherwise the band appears with the data and shoves the table up.
+        // It also has to give way on a semester switch, or the pager would
+        // still be reporting the previous semester's totals.
+        footer={awaitingRows ? <PaginationSkeleton /> : data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+      />
+
+      {/* Editing stays on the list, so filters, term and page survive a save. */}
+      <EditMemberModal
+        member={editing}
+        onSaved={refresh}
+        onClose={() => setEditing(null)}
       />
 
       {/* Confirmations */}
@@ -552,6 +650,24 @@ function ExportMenu({ queryString }: { queryString: string }) {
   );
 }
 
+/** The pager's band, in placeholder form. Mirrors Pagination's own padding and
+    border so the card is exactly as tall before the data arrives as after. */
+function PaginationSkeleton() {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line/60 bg-card px-4 py-3"
+    >
+      <Bar w="w-24" h="h-3" />
+      <div className="flex items-center gap-1.5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <span key={i} className="skeleton inline-block size-8 rounded-md" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BulkBtn({ children, onClick, tone }: { children: React.ReactNode; onClick: () => void; tone?: "danger" }) {
   return (
     <button
@@ -573,6 +689,7 @@ function RowMenu({
   onClose,
   member,
   canEdit,
+  onEdit,
   onDelete,
 }: {
   open: boolean;
@@ -580,6 +697,7 @@ function RowMenu({
   onClose: () => void;
   member: Member;
   canEdit: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -605,9 +723,9 @@ function RowMenu({
             <Eye size={15} /> View
           </Link>
           {canEdit && (
-            <Link href={`/admin/members/${member.id}/edit`} className={item} onClick={onClose}>
+            <button onClick={() => { onClose(); onEdit(); }} className={item}>
               <Pencil size={15} /> Edit
-            </Link>
+            </button>
           )}
           <a href={`/api/admin/members/${member.id}/download/picture`} className={item} onClick={onClose}>
             <Download size={15} /> Download photo
