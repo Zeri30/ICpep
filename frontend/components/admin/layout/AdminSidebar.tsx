@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { CalendarDays, Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from "lucide-react";
 import Logo from "@/components/ui/Logo";
 import { useAdmin } from "@/components/admin/AdminProvider";
+import SignOutButton from "@/components/admin/layout/SignOutModal";
 import { useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 
@@ -60,13 +61,17 @@ export default function AdminSidebar({
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="flex items-center gap-3 border-b border-line/60 px-5 h-[72px]">
+      <Link
+        href="/admin"
+        onClick={onNavigate}
+        className="flex items-center gap-3 border-b border-line/60 px-5 h-[72px] hover:bg-secondary/30 transition-colors"
+      >
         <Logo size={34} />
         <div className="leading-tight">
           <p className="font-display text-sm font-black tracking-wide text-foreground">ICpEP.SE</p>
           <p className="font-head text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Admin</p>
         </div>
-      </div>
+      </Link>
 
       <nav className="flex-1 space-y-1 p-3">
         {nav.map(({ href, label, icon: Icon, badgeKey }) => {
@@ -95,6 +100,13 @@ export default function AdminSidebar({
           );
         })}
       </nav>
+
+      {/* Only below `sm` — the topbar has room for the sign-out button itself
+          from `sm` up (see AdminTopbar), and a second copy here would just be
+          a duplicate sitting a few pixels away from the first. */}
+      <div className="border-t border-line/60 p-3 sm:hidden">
+        <SignOutButton variant="row" />
+      </div>
     </aside>
   );
 }
