@@ -131,7 +131,7 @@ export default function MembersList() {
 
   // Hold off until the term is known, so the table never flashes the current
   // list's members while a past list is the one selected.
-  const { data, loading, error, refresh } = useAdminResource<Paginated<Member>>(
+  const { data, error, refresh } = useAdminResource<Paginated<Member>>(
     termsLoading ? null : `/members?${queryString}`,
   );
 
@@ -146,11 +146,32 @@ export default function MembersList() {
     setPage(1);
   };
 
-  const rows = data?.data ?? [];
-  // Only the very first fetch gets placeholders. A refetch — paging, sorting,
-  // a filter, a save — already has rows on screen, and replacing them with
-  // twenty shimmering bars would be a bigger disruption than the short wait.
-  const firstLoad = loading && !data;
+  // Which semester the rows in `data` were fetched for. Recorded during render
+  // on the same reset-on-change pattern as the page reset above, so no render
+  // can pair one semester's heading with another semester's members.
+  const [dataTermId, setDataTermId] = useState(term?.id);
+  const [lastData, setLastData] = useState(data);
+  if (data !== lastData) {
+    setLastData(data);
+    setDataTermId(term?.id);
+  }
+
+  // Switching semester is a different dataset, not a filter of the current one
+  // — the page reset above already says so. The rows on screen belong to the
+  // semester just left, so they are dropped rather than left sitting under the
+  // new one's heading, and the placeholders come back exactly as on a cold
+  // load. Paging, sorting and filtering keep their rows: same dataset, and
+  // swapping real content for twenty shimmering bars disrupts more than the
+  // wait does.
+  const otherTerm = data !== null && term?.id !== dataTermId;
+  const rows = otherTerm ? [] : (data?.data ?? []);
+
+  /* Deliberately not gated on the hook's `loading`: that flag starts true and
+     never goes true again, so it describes the first fetch and nothing else —
+     on a semester switch it is already false. Having no rows for the selected
+     semester is the real condition. `error` has to win over it, or a switch
+     that failed would shimmer forever instead of saying what went wrong. */
+  const awaitingRows = !error && (data === null || otherTerm);
 
   /* -------------------------------------------------------------- mutations */
 
@@ -453,7 +474,7 @@ export default function MembersList() {
         columns={columns}
         rows={rows}
         rowKey={(m) => m.id}
-        loading={firstLoad}
+        loading={awaitingRows}
         skeletonRows={SKELETON_ROWS}
         error={error}
         sort={sort}
@@ -462,7 +483,9 @@ export default function MembersList() {
         emptyDescription="Try clearing the filters, or wait for new registrations from the public form."
         // The pager is part of the card's height, so it gets a placeholder too
         // — otherwise the band appears with the data and shoves the table up.
-        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : firstLoad ? <PaginationSkeleton /> : null}
+        // It also has to give way on a semester switch, or the pager would
+        // still be reporting the previous semester's totals.
+        footer={awaitingRows ? <PaginationSkeleton /> : data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
       />
 
       {/* Editing stays on the list, so filters, term and page survive a save. */}
