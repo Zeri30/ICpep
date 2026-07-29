@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Enums\AttendanceMethod;
 use App\Enums\AttendanceStatus;
 use App\Enums\EventStatus;
+use App\Enums\Permission;
+use App\Http\Controllers\Api\Admin\AttendanceController;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -18,7 +20,7 @@ use RuntimeException;
  * One scheduled event on the organization's calendar.
  *
  * Created, edited and deleted by whoever holds
- * {@see \App\Enums\Permission::ManageSchedule} — the Secretary and the
+ * {@see Permission::ManageSchedule} — the Secretary and the
  * Assistant Secretary by default; every other officer role reads it. The
  * calendar is internal: members have no accounts and never see it.
  *
@@ -39,6 +41,7 @@ use RuntimeException;
  *
  * @property string $title
  * @property string $category
+ * @property string|null $venue
  * @property CarbonImmutable $starts_at
  * @property string|null $description
  * @property string $qr_token
@@ -88,6 +91,7 @@ class Event extends Model
     protected $fillable = [
         'title',
         'category',
+        'venue',
         'starts_at',
         'ends_at',
         'description',
@@ -300,12 +304,61 @@ class Event extends Model
      */
     public function wrapsUpAt(): CarbonImmutable
     {
-        $ends = $this->ends_at ?? $this->starts_at->addHour();
+        return $this->attendanceEndsAt()->addMinutes(self::STATUS_GRACE_MINUTES);
+    }
 
-        return $ends->addMinutes(self::STATUS_GRACE_MINUTES);
+    /**
+     * When this event ends, for anything measuring from that instant rather
+     * than from an hour past it.
+     *
+     * A row saved before end times were recorded has none to measure from, so
+     * it is taken as an hour long — the same assumption {@see self::wrapsUpAt()}
+     * makes, kept in one place so the two can never quietly disagree about
+     * what "ends" means for a legacy row.
+     */
+    private function attendanceEndsAt(): CarbonImmutable
+    {
+        return $this->ends_at ?? $this->starts_at->addHour();
     }
 
     /* --------------------------------------------------------- attendance */
+
+    /**
+     * Has this event's own end time passed?
+     *
+     * The moment the roster stops being correctable by hand and anyone still
+     * unaccounted for is recorded absent — see {@see self::recordAbsentees()}
+     * and {@see AttendanceController::update()}.
+     *
+     * Deliberately the event's own end time, with none of the hour's grace
+     * {@see self::wrapsUpAt()} gives the secretariat to decide what the event's
+     * outcome was. That grace is for a human judgment made after the fact;
+     * this is the moment the record of who was in the room closes on its own,
+     * which does not need anyone to wait for it — or to have marked the event
+     * Done at all.
+     */
+    public function attendanceLocked(): bool
+    {
+        return $this->attendanceEndsAt()->isPast();
+    }
+
+    /**
+     * Why attendance can no longer be changed by hand, in words — null while
+     * it still can be.
+     *
+     * Names the moment rather than just stating the rule, so the roster and
+     * the refusal a stale button runs into read the same sentence.
+     */
+    public function attendanceLockedReason(): ?string
+    {
+        if (! $this->attendanceLocked()) {
+            return null;
+        }
+
+        $endedAt = $this->attendanceEndsAt()->setTimezone(self::timezone())->format('g:i A');
+
+        return "This event ended at {$endedAt}. Attendance can no longer be changed by hand.";
+    }
 
     /**
      * Are this event's QR token and attendance code still good?
@@ -324,7 +377,7 @@ class Event extends Model
      * have allowed — which is correct, because closing it is someone saying it
      * is over.
      *
-     * Enforced in {@see \App\Http\Controllers\Api\Admin\AttendanceController},
+     * Enforced in {@see AttendanceController},
      * which is the only thing that turns a token or a code into a record. This
      * method is the rule, in one place; anything else accepting either must
      * check it first.

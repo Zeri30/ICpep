@@ -10,6 +10,7 @@ use App\Models\Event;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
@@ -30,16 +31,33 @@ class AttendanceTest extends TestCase
         return User::factory()->role($role)->create();
     }
 
-    /** An event happening today, so its credentials are live. */
+    /**
+     * An event under way right now, so its credentials are live and its
+     * attendance is not yet locked.
+     *
+     * Pinned to a fixed midday moment rather than the real clock: a run
+     * that happens to start within an hour of midnight in Manila — which
+     * happens, not hypothetically — would let a test's own `$this->travel()`
+     * push "today" into tomorrow and flip Event::acceptsAttendance()'s
+     * same-day rule out from under it. Noon has no such edge to trip over.
+     * The date itself doesn't matter, only that it isn't "now".
+     *
+     * `->utc()` before it reaches `starts_at`/`ends_at` is not decoration:
+     * the columns are stored in UTC (see Event::combine(), which does the
+     * same), and an org-timezone CarbonImmutable handed straight to Eloquent
+     * gets its wall-clock digits stored as if they already were UTC — an
+     * 8-hour mislabel for Manila, not merely a display quirk.
+     */
     private function liveEvent(): Event
     {
-        $today = CarbonImmutable::now(Event::timezone());
+        $this->travelTo(CarbonImmutable::parse('2026-11-03 12:00', Event::timezone()));
+        $now = CarbonImmutable::now(Event::timezone());
 
         return Event::create([
             'title' => 'General Assembly',
             'category' => 'Meeting',
-            'starts_at' => Event::combine($today->format('Y-m-d'), '09:00'),
-            'ends_at' => Event::combine($today->format('Y-m-d'), '11:00'),
+            'starts_at' => $now->subMinutes(30)->utc(),
+            'ends_at' => $now->addHours(2)->utc(),
         ]);
     }
 
@@ -408,6 +426,77 @@ class AttendanceTest extends TestCase
         ]);
     }
 
+    /* ------------------------------------------------------- automatic lock */
+
+    /**
+     * `Event::attendanceLocked()` is a plain fact about the clock — the roster
+     * reports it so the panel never has to re-derive it from a browser clock
+     * that might disagree with the server's.
+     */
+    public function test_the_roster_reports_whether_attendance_is_locked(): void
+    {
+        $secretary = $this->officer(UserRole::Secretary);
+
+        $this->actingAs($secretary)
+            ->getJson("/api/admin/events/{$this->liveEvent()->id}/attendance")
+            ->assertOk()
+            ->assertJsonPath('attendanceLocked', false)
+            ->assertJsonPath('attendanceLockedReason', null);
+
+        $this->actingAs($secretary)
+            ->getJson("/api/admin/events/{$this->pastEvent()->id}/attendance")
+            ->assertOk()
+            ->assertJsonPath('attendanceLocked', true)
+            ->assertJsonPath(
+                'attendanceLockedReason',
+                fn (string $reason) => str_starts_with($reason, 'This event ended at'),
+            );
+    }
+
+    /**
+     * Nobody has to mark the event Done for this to happen, and nobody has to
+     * open the roster again after it does — the next time anyone does, the
+     * gap has already been closed.
+     */
+    public function test_attendance_is_automatically_recorded_absent_once_the_event_ends(): void
+    {
+        $secretary = $this->officer(UserRole::Secretary);
+        $present = $this->officer(UserRole::Pro);
+        $this->officer(UserRole::Treasurer);
+
+        $event = $this->pastEvent();
+        $event->checkIn($present, AttendanceMethod::Qr);
+
+        $this->actingAs($secretary)
+            ->getJson("/api/admin/events/{$event->id}/attendance")
+            ->assertOk()
+            // The one who checked in, and the secretary plus the officer who
+            // never did — the reader of the roster is an active officer too.
+            ->assertJsonPath('summary.present', 1)
+            ->assertJsonPath('summary.absent', 2)
+            ->assertJsonPath('summary.pending', 0);
+
+        // Nobody closed it — the event is still sitting there Scheduled.
+        $this->assertSame(EventStatus::Scheduled, $event->fresh()->status);
+    }
+
+    /** Nothing took place, so nobody missed it — the same rule a manual Done applies. */
+    public function test_a_cancelled_event_gets_no_automatic_absences_once_it_ends(): void
+    {
+        $secretary = $this->officer(UserRole::Secretary);
+        $this->officer(UserRole::Pro);
+
+        $event = $this->pastEvent();
+        $event->update(['status' => EventStatus::Cancelled]);
+
+        $this->actingAs($secretary)
+            ->getJson("/api/admin/events/{$event->id}/attendance")
+            ->assertOk()
+            ->assertJsonPath('summary.absent', 0);
+
+        $this->assertSame(0, $event->attendance()->count());
+    }
+
     /* --------------------------------------------------- your own attendance */
 
     /**
@@ -455,7 +544,12 @@ class AttendanceTest extends TestCase
             ->assertJsonMissing(['name' => $present->name]);
     }
 
-    /** An expired event offers nobody a way in, recorded or not. */
+    /**
+     * An expired event offers nobody a way in, recorded or not — and reads
+     * the same as the roster would the moment anyone opens it: absent, not
+     * a lingering "not checked in" nobody can act on. See
+     * EventResource::myAttendance() and Event::attendanceLocked().
+     */
     public function test_a_passed_event_offers_no_way_to_check_in(): void
     {
         $this->pastEvent();
@@ -463,8 +557,48 @@ class AttendanceTest extends TestCase
         $this->actingAs($this->officer(UserRole::Pro))
             ->getJson('/api/admin/events')
             ->assertOk()
-            ->assertJsonPath('data.0.myAttendance.status', 'pending')
+            ->assertJsonPath('data.0.myAttendance.status', 'absent')
             ->assertJsonPath('data.0.myAttendance.canCheckIn', false);
+    }
+
+    /**
+     * The case worth testing on its own: same day, so the codes are still
+     * live by Event::acceptsAttendance()'s looser same-day rule, but the
+     * event's own end time has already passed. The panel offers no way back
+     * in even though a QR printed for it would still scan — see
+     * Event::attendanceLocked() and EventResource::myAttendance().
+     */
+    public function test_myattendance_locks_out_even_on_the_same_day_once_the_event_has_ended(): void
+    {
+        $now = CarbonImmutable::now(Event::timezone());
+
+        $event = Event::create([
+            'title' => 'Morning Meeting',
+            'category' => 'Meeting',
+            'starts_at' => $now->subHours(3)->utc(),
+            'ends_at' => $now->subHours(1)->utc(),
+        ]);
+
+        $this->assertTrue($event->acceptsAttendance(), 'Sanity: still the same day.');
+        $this->assertTrue($event->attendanceLocked(), 'Sanity: its own end time has passed.');
+
+        $this->actingAs($this->officer(UserRole::Pro))
+            ->getJson('/api/admin/events')
+            ->assertOk()
+            ->assertJsonPath('data.0.myAttendance.status', 'absent')
+            ->assertJsonPath('data.0.myAttendance.canCheckIn', false);
+    }
+
+    /** Nothing took place, so nobody missed it — even once its day has gone by. */
+    public function test_myattendance_stays_pending_for_a_cancelled_event(): void
+    {
+        $event = $this->pastEvent();
+        $event->update(['status' => EventStatus::Cancelled]);
+
+        $this->actingAs($this->officer(UserRole::Pro))
+            ->getJson('/api/admin/events')
+            ->assertOk()
+            ->assertJsonPath('data.0.myAttendance.status', 'pending');
     }
 
     /** Being closed off as absent is exactly what an officer needs to see. */
@@ -494,7 +628,7 @@ class AttendanceTest extends TestCase
         }
 
         $queries = 0;
-        \Illuminate\Support\Facades\DB::listen(function () use (&$queries): void {
+        DB::listen(function () use (&$queries): void {
             $queries++;
         });
 
@@ -576,6 +710,28 @@ class AttendanceTest extends TestCase
 
         $this->assertSame(0, $event->attendance()->count());
         $this->assertDatabaseHas('activity_logs', ['action' => 'attendance_cleared']);
+    }
+
+    /**
+     * The secretariat's ability to correct the roster by hand ends with the
+     * event itself — see Event::attendanceLocked(). Checked ahead of the
+     * permission the rest of this section exercises, so a stale button after
+     * the event has ended is told why, rather than reaching a generic error.
+     */
+    public function test_the_secretary_cannot_correct_attendance_once_the_event_has_ended(): void
+    {
+        $secretary = $this->officer(UserRole::Secretary);
+        $officer = $this->officer(UserRole::Pro);
+        $event = $this->pastEvent();
+
+        $this->actingAs($secretary)
+            ->patchJson("/api/admin/events/{$event->id}/attendance/{$officer->id}", [
+                'status' => 'present',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status');
+
+        $this->assertSame(0, $event->attendance()->count());
     }
 
     public function test_a_role_without_schedule_manage_cannot_correct_the_roster(): void

@@ -73,6 +73,8 @@ export type ScheduledEvent = {
   id: number;
   title: string;
   category: string;
+  /** Room, building or address — free text, and often unset. */
+  venue: string | null;
   /** "2026-11-03" */
   date: string;
   /** "09:00" — for the start time input. */
@@ -172,6 +174,7 @@ export type CheckInState = {
     id: number;
     title: string;
     category: string;
+    venue: string | null;
     /** "Wednesday, 29 July 2026" */
     dateLabel: string;
     /** "9:00 AM – 11:00 AM" */
@@ -219,6 +222,13 @@ export type EventRoster = {
    */
   acceptsAttendance: boolean;
   closedReason: string | null;
+  /**
+   * Has this event's own end time passed? Once true, the backend has already
+   * recorded everyone still unaccounted for as absent and refuses any further
+   * correction — see `attendanceLockedReason` for the sentence to show.
+   */
+  attendanceLocked: boolean;
+  attendanceLockedReason: string | null;
 };
 
 export type PaymentRow = {
