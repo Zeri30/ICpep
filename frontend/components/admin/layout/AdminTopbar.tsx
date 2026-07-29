@@ -1,12 +1,15 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import { Menu, QrCode } from "lucide-react";
+import { useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import SignOutButton from "@/components/admin/layout/SignOutModal";
+import CheckInModal from "@/components/attendance/CheckInModal";
 import { familyStyle, findRole } from "@/lib/roleFamily";
 
 export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
   const { officer, meta } = useAdmin();
+  const [scannerOpen, setScannerOpen] = useState(false);
   // Tinted with the officer's own branch of the organization, from the same map
   // that colours the role badges in User Management — so a colour means the same
   // thing wherever it appears. Falls back to the neutral shade when the account
@@ -30,8 +33,25 @@ export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
           </span>
           <span className="text-sm font-semibold text-foreground">{officer.name}</span>
         </div>
-        <SignOutButton />
+
+        {/* Mobile only, in the corner sign-out used to sit in — see
+            AdminSidebar for where sign-out went instead. */}
+        <button
+          type="button"
+          onClick={() => setScannerOpen(true)}
+          aria-label="Scan attendance QR"
+          title="Scan attendance QR"
+          className="grid size-10 place-items-center rounded-md border border-primary/50 text-primary transition-colors hover:bg-primary/10 sm:hidden"
+        >
+          <QrCode size={18} />
+        </button>
+
+        <div className="hidden sm:block">
+          <SignOutButton />
+        </div>
       </div>
+
+      <CheckInModal open={scannerOpen} onClose={() => setScannerOpen(false)} />
     </header>
   );
 }

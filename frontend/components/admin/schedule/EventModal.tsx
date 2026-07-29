@@ -12,7 +12,13 @@
    the status and the QR made a dialog taller than most screens, so the primary
    action sat below the fold and the whole thing scrolled as one — the fields
    are on the left, everything about the event's life on the right, and the
-   header and footer stay put while only the middle scrolls. */
+   header and footer stay put while only the middle scrolls.
+
+   The right column is itself a pair of tabs rather than three panels stacked:
+   status and the QR/code on one, attendees on the other. The same reasoning
+   as the columns applies one level down — three panels stacked there again
+   made the dialog tall for no reason once there were two unrelated jobs
+   ("what became of this event" and "who showed up") sharing one column. */
 
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -24,14 +30,16 @@ import {
   QrCode,
   Trash2,
   UserCheck,
+  Users,
   UserX,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
+import CheckInModal from "@/components/attendance/CheckInModal";
 import AttendanceCredentials from "@/components/admin/schedule/AttendanceCredentials";
 import AttendanceRoster from "@/components/admin/schedule/AttendanceRoster";
 import CategoryTag from "@/components/admin/schedule/CategoryTag";
@@ -112,6 +120,7 @@ function FieldHint({ text }: { text: string }) {
 type EventFields = {
   title: string;
   category: string;
+  venue: string | null;
   date: string;
   time: string;
   endTime: string;
@@ -130,6 +139,7 @@ function edited(event: ScheduledEvent, fields: EventFields): boolean {
   return (
     fields.title !== event.title ||
     fields.category !== event.category ||
+    (fields.venue ?? "") !== (event.venue ?? "") ||
     fields.date !== event.date ||
     fields.time !== event.time ||
     fields.endTime !== (event.endTime ?? "") ||
@@ -199,6 +209,7 @@ function EventDialog({
 
   const [title, setTitle] = useState(event?.title ?? "");
   const [category, setCategory] = useState(event?.category ?? meta.eventCategories[0] ?? "");
+  const [venue, setVenue] = useState(event?.venue ?? "");
   const [day, setDay] = useState(event?.date ?? date ?? "");
   const [time, setTime] = useState(event?.time ?? "17:00");
   const [endTime, setEndTime] = useState(event?.endTime ?? "19:00");
@@ -258,6 +269,7 @@ function EventDialog({
       const body: EventFields = {
         title: title.trim(),
         category,
+        venue: venue.trim() || null,
         date: day,
         // <input type="time"> can include seconds on some browsers; the API
         // takes H:i exactly.
@@ -333,6 +345,41 @@ function EventDialog({
   // narrow and single-column until there is something to put there.
   const twoColumn = !readOnly && current !== null;
 
+  // The right column is set to exactly whatever height the left one actually
+  // renders at — not a ceiling but the height, so a shorter tab is stretched
+  // to line up with the bottom of the fields instead of leaving a gap, and a
+  // taller one scrolls inside it instead of pushing the dialog down. Measured
+  // rather than matched with a CSS-only equal-height trick, because the two
+  // columns must NOT be free to stretch each other: the description box's
+  // length decides the left column's height, and the right one only ever
+  // follows it, never the other way round.
+  //
+  // Null below the `sm` breakpoint (matching the Tailwind prefix the grid
+  // itself switches on at), where the columns stack instead of sitting side
+  // by side and a height borrowed from the field column above would just cut
+  // the tabs off for no reason.
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const [rightHeight, setRightHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = leftColumnRef.current;
+    if (!el || !twoColumn) return;
+
+    const sideBySide = window.matchMedia("(min-width: 640px)");
+
+    const measure = () => setRightHeight(sideBySide.matches ? el.offsetHeight : null);
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    sideBySide.addEventListener("change", measure);
+    measure();
+
+    return () => {
+      observer.disconnect();
+      sideBySide.removeEventListener("change", measure);
+    };
+  }, [twoColumn]);
+
   return (
     <>
       <motion.div
@@ -403,11 +450,17 @@ function EventDialog({
               ) : (
                 <div
                   className={
-                    twoColumn ? "grid gap-6 sm:grid-cols-2 sm:gap-8" : "space-y-4"
+                    // items-start, not the grid default of stretch: stretch
+                    // would inflate the left column's own box to match the
+                    // row height before it can be measured, which is exactly
+                    // the height rightMaxHeight is measuring it for — a
+                    // stretched box always measures as tall as whichever
+                    // column is tallest, making the cap a no-op.
+                    twoColumn ? "grid items-start gap-6 sm:grid-cols-2 sm:gap-8" : "space-y-4"
                   }
                 >
                   {/* --------------------------------------- the event itself */}
-                  <div className="space-y-4">
+                  <div ref={leftColumnRef} className="space-y-4">
                     <div>
                       <label className={labelCls} htmlFor="event-title">Event name</label>
                       <input
@@ -433,6 +486,18 @@ function EventDialog({
                           <option key={c} value={c}>{c}</option>
                         ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className={labelCls} htmlFor="event-venue">Venue</label>
+                      <input
+                        id="event-venue"
+                        value={venue}
+                        onChange={(e) => setVenue(e.target.value)}
+                        maxLength={150}
+                        placeholder="e.g. Room 301, Meneses Building"
+                        className={fieldCls}
+                      />
                     </div>
 
                     <div>
@@ -518,31 +583,24 @@ function EventDialog({
                         id="event-description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        rows={twoColumn ? 5 : 4}
+                        rows={twoColumn ? 9 : 5}
                         maxLength={5000}
                         placeholder="What is it for, who should attend, anything to bring…"
-                        className={`${fieldCls} resize-y`}
+                        className={`${fieldCls} resize-none`}
                       />
                     </div>
                   </div>
 
                   {/* ------------------------------- its status and its codes */}
                   {current ? (
-                    <div className="space-y-4">
-                      <StatusControl
-                        event={current}
-                        value={status}
-                        busy={saving}
-                        onSelect={setStatus}
-                      />
-                      <AttendanceCredentials event={current} onShared={setCurrent} />
-                      {/* Below the credentials, in the order the evening runs:
-                          the QR goes up on the screen, and then the names
-                          arrive underneath it. The panel polls while this is
-                          open, so a Secretary holding the QR up watches the
-                          roster fill in on the same screen. */}
-                      <AttendanceRoster event={current} />
-                    </div>
+                    <EventSidePanel
+                      event={current}
+                      status={status}
+                      busy={saving}
+                      onSelect={setStatus}
+                      onShared={setCurrent}
+                      height={rightHeight}
+                    />
                   ) : (
                     // Nothing is generated while the form is open, so a new
                     // event has no credentials to show yet — say so rather than
@@ -614,6 +672,93 @@ function EventDialog({
   );
 }
 
+/** The right column's two tabs, and the icon each carries. */
+const SIDE_TABS = [
+  { key: "status", label: "Status & QR", Icon: QrCode },
+  { key: "attendees", label: "Attendees", Icon: Users },
+] as const;
+
+type SideTab = (typeof SIDE_TABS)[number]["key"];
+
+/**
+ * The event's status and codes on one tab, who showed up on the other.
+ *
+ * Both tabs stay mounted and only their visibility toggles, rather than one
+ * unmounting the other — the attendee list polls while the modal is open (see
+ * AttendanceRoster), and unmounting it every time the Secretary glanced at the
+ * status tab would mean a fresh loading spinner on every switch back.
+ */
+function EventSidePanel({
+  event,
+  status,
+  busy,
+  onSelect,
+  onShared,
+  height,
+}: {
+  event: ScheduledEvent;
+  status: ScheduledEvent["status"];
+  busy: boolean;
+  onSelect: (status: ScheduledEvent["status"]) => void;
+  onShared: (updated: ScheduledEvent) => void;
+  /** The left column's own rendered height — see EventDialog. Null on mobile. */
+  height: number | null;
+}) {
+  const [tab, setTab] = useState<SideTab>("status");
+
+  return (
+    // An exact height, not a cap: a shorter tab is stretched to line up with
+    // the bottom of the left column instead of leaving a gap under it, and a
+    // taller one scrolls inside it instead of pushing the dialog down. Either
+    // way the right side ends exactly where the left one does.
+    <div
+      className="flex min-h-0 flex-col gap-4"
+      style={height ? { height } : undefined}
+    >
+      <div
+        role="tablist"
+        aria-label="Event status and attendees"
+        className="flex shrink-0 rounded-lg border border-line p-0.5"
+      >
+        {SIDE_TABS.map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+              tab === key
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon size={13} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* A flex column rather than the AttendanceRoster pattern of one card
+          filling the tab: Status and Attendance are two separate cards, and
+          Attendance is the one given `flex-1` — its own border grows to meet
+          the bottom of the left column, instead of leaving blank space below
+          a card that stopped at its natural size. */}
+      <div
+        className={
+          tab === "status" ? "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" : "hidden"
+        }
+      >
+        <StatusControl event={event} value={status} busy={busy} onSelect={onSelect} />
+        <AttendanceCredentials event={event} onShared={onShared} className="flex-1" />
+      </div>
+
+      <div className={tab === "attendees" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <AttendanceRoster event={event} />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Choose what became of the event.
  *
@@ -670,7 +815,7 @@ function StatusControl({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-secondary/30 p-3">
+    <div className="shrink-0 rounded-lg border border-line bg-secondary/30 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className={labelCls + " mb-0"}>Status</p>
         {busy ? (
@@ -732,6 +877,12 @@ function ReadOnlyDetails({ event }: { event: ScheduledEvent }) {
           {formatLongDate(event.date)} · {event.timeRangeLabel}
         </span>
       </div>
+      {event.venue && (
+        <div>
+          <p className={labelCls}>Venue</p>
+          <p className="text-sm text-secondary-foreground">{event.venue}</p>
+        </div>
+      )}
       <div>
         <p className={labelCls}>Description / notes</p>
         <p className="whitespace-pre-line text-sm leading-relaxed text-secondary-foreground">
@@ -762,6 +913,7 @@ function ReadOnlyDetails({ event }: { event: ScheduledEvent }) {
  */
 function MyAttendance({ event }: { event: ScheduledEvent }) {
   const { status, statusLabel, methodLabel, checkedInLabel, canCheckIn } = event.myAttendance;
+  const [checkInOpen, setCheckInOpen] = useState(false);
 
   const tone =
     status === "present"
@@ -776,7 +928,7 @@ function MyAttendance({ event }: { event: ScheduledEvent }) {
     status === "present"
       ? [checkedInLabel && `Recorded at ${checkedInLabel}`, methodLabel].filter(Boolean).join(" · ")
       : status === "absent"
-        ? "If this is wrong, ask the Secretary to correct it on the roster."
+        ? "You didn't attend this event. If that's wrong, ask the Secretary to correct it on the roster."
         : event.acceptsAttendance
           ? "Scan the event QR, or check in with the code."
           : "No attendance was recorded for you at this event.";
@@ -795,14 +947,19 @@ function MyAttendance({ event }: { event: ScheduledEvent }) {
       {canCheckIn && (
         // No token here — the QR token is withheld from every role but the
         // secretariat, and rightly so. The code path needs nothing but the six
-        // characters read out at the event, so that is what this offers.
-        <a
-          href="/admin/check-in"
+        // characters read out at the event, so that is what this offers —
+        // the same modal the topbar's QR button opens, just landed on
+        // straight at the manual-code phase rather than the scanner.
+        <button
+          type="button"
+          onClick={() => setCheckInOpen(true)}
           className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-primary/50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary transition-colors hover:bg-primary/10"
         >
           <UserCheck size={12} /> Check in with a code
-        </a>
+        </button>
       )}
+
+      <CheckInModal open={checkInOpen} initialMode="manual" onClose={() => setCheckInOpen(false)} />
     </div>
   );
 }
