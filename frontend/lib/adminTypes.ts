@@ -43,6 +43,7 @@ export type Member = {
   surname: string;
   givenName: string;
   middleInitial: string | null;
+  studentId: string | null;
   fullName: string;
   email: string;
   phone: string;

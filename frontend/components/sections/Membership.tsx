@@ -329,6 +329,19 @@ export default function Membership() {
                   className={fieldBase}
                 />
               </div>
+              {/* Student ID */}
+              <div>
+                <Label htmlFor="studentId">Student ID</Label>
+                <input
+                  id="studentId"
+                  name="studentId"
+                  type="text"
+                  required
+                  maxLength={20}
+                  placeholder="22-1234-567"
+                  className={fieldBase}
+                />
+              </div>
               {/* Year level */}
               <div>
                 <Label htmlFor="yearLevel">Year Level</Label>

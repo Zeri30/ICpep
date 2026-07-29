@@ -163,6 +163,85 @@ class AdminApiTest extends TestCase
         $this->actingAs($admin)->getJson('/api/admin/members?trashed=only')->assertJsonCount(1, 'data');
     }
 
+    public function test_members_list_search_matches_student_id_phone_and_section(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication([
+            'surname' => 'Dela Cruz', 'given_name' => 'Juan', 'email' => 'delacruz@example.com',
+            'student_id' => '2024-00123', 'phone' => '09171234567', 'section' => 'Section A',
+        ]);
+        $this->makeApplication([
+            'surname' => 'Reyes', 'given_name' => 'Maria', 'email' => 'reyes@example.com',
+            'student_id' => '2021-00456', 'phone' => '09209876543', 'section' => 'Section B',
+        ]);
+
+        $admin = $this->admin();
+
+        // Partial + case-insensitive match on each of the new fields.
+        $this->actingAs($admin)->getJson('/api/admin/members?search=2024')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.studentId', '2024-00123');
+        $this->actingAs($admin)->getJson('/api/admin/members?search=juan')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.givenName', 'Juan');
+        $this->actingAs($admin)->getJson('/api/admin/members?search=0917')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.phone', '09171234567');
+        $this->actingAs($admin)->getJson('/api/admin/members?search='.urlencode('  Section B  '))->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.section', 'Section B');
+
+        // Combined with an existing filter: only rows matching both survive.
+        $this->actingAs($admin)
+            ->getJson('/api/admin/members?search=2024&class=3B')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_members_export_csv_respects_filters_and_search(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication(['surname' => 'ThreeA', 'given_name' => 'Juan', 'student_id' => '2024-001', 'year_level' => '3rd Year', 'section' => 'Section A']);
+        $this->makeApplication(['surname' => 'ThreeB', 'given_name' => 'Maria', 'student_id' => '2024-002', 'year_level' => '3rd Year', 'section' => 'Section B']);
+
+        $response = $this->actingAs($this->admin())
+            ->get('/api/admin/members/export/csv?class=3A')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
+
+        $this->assertSame(
+            ['Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email', 'Payment Status', 'Paid At', 'Registered At'],
+            $rows[0],
+        );
+        $this->assertCount(2, $rows); // header + the one 3A row — the 3B member is excluded.
+        $this->assertSame('2024-001', $rows[1][0]);
+    }
+
+    public function test_members_export_excel_returns_xlsx_file(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication();
+
+        $this->actingAs($this->admin())
+            ->get('/api/admin/members/export/excel')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->assertHeader('content-disposition');
+    }
+
+    public function test_members_export_pdf_includes_applied_filters(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication(['paid_at' => now()]);
+
+        $response = $this->actingAs($this->admin())
+            ->get('/api/admin/members/export/pdf?payment=paid&search=Dela')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        // dompdf's stream() writes the PDF body straight to the response content.
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+    }
+
+    public function test_members_export_requires_authentication(): void
+    {
+        $this->get('/api/admin/members/export/csv')->assertUnauthorized();
+    }
+
     public function test_member_show_includes_signed_file_urls(): void
     {
         Storage::fake('supabase');

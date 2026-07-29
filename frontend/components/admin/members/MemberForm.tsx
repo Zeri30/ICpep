@@ -28,6 +28,7 @@ type FormState = {
   surname: string;
   givenName: string;
   middleInitial: string;
+  studentId: string;
   yearLevel: string;
   section: string;
   birthday: string;
@@ -61,6 +62,7 @@ export function useMemberForm({ member, onDone }: { member: Member; onDone: () =
     surname: member.surname,
     givenName: member.givenName,
     middleInitial: member.middleInitial ?? "",
+    studentId: member.studentId ?? "",
     yearLevel: member.yearLevel,
     section: member.section,
     birthday: member.birthday ?? "",
@@ -87,6 +89,7 @@ export function useMemberForm({ member, onDone }: { member: Member; onDone: () =
         surname: form.surname,
         givenName: form.givenName,
         middleInitial: form.middleInitial || null,
+        studentId: form.studentId,
         yearLevel: form.yearLevel,
         section: form.section,
         birthday: form.birthday,
@@ -130,6 +133,7 @@ export function MemberFields({ state, boxed = true }: { state: MemberFormState; 
           <div><label className={labelCls}>Surname</label><input className={inputCls} value={form.surname} onChange={(e) => set({ surname: e.target.value })} required maxLength={100} /></div>
           <div><label className={labelCls}>Given Name</label><input className={inputCls} value={form.givenName} onChange={(e) => set({ givenName: e.target.value })} required maxLength={100} /></div>
           <div><label className={labelCls}>Middle Initial</label><input className={inputCls} value={form.middleInitial} onChange={(e) => set({ middleInitial: e.target.value })} maxLength={1} /></div>
+          <div><label className={labelCls}>Student ID</label><input className={inputCls} value={form.studentId} onChange={(e) => set({ studentId: e.target.value })} required maxLength={20} /></div>
           <div>
             <label className={labelCls}>Year Level</label>
             <select className={inputCls} value={form.yearLevel} onChange={(e) => set({ yearLevel: e.target.value })}>

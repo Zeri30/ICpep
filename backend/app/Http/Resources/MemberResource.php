@@ -33,6 +33,7 @@ class MemberResource extends JsonResource
             'surname' => $this->surname,
             'givenName' => $this->given_name,
             'middleInitial' => $this->middle_initial,
+            'studentId' => $this->student_id,
             'fullName' => $this->full_name,
             'email' => $this->email,
             'phone' => $this->phone,

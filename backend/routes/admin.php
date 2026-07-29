@@ -86,6 +86,9 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     // Members — reading needs members.view; the writes below gate more tightly.
     Route::middleware('permission:members.view')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->name('members.index');
+        Route::get('/members/export/csv', [MemberController::class, 'exportCsv'])->name('members.export.csv');
+        Route::get('/members/export/excel', [MemberController::class, 'exportExcel'])->name('members.export.excel');
+        Route::get('/members/export/pdf', [MemberController::class, 'exportPdf'])->name('members.export.pdf');
         Route::get('/members/{application}', [MemberController::class, 'show'])->withTrashed()->name('members.show');
         Route::get('/members/{application}/download/{which}', [MemberController::class, 'download'])->withTrashed()->name('members.download');
     });

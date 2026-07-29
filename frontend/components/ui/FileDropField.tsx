@@ -158,12 +158,15 @@ export default function FileDropField({
           }`}
         >
           <UploadCloud size={26} className="text-primary-glow" />
-          <p className="text-sm text-secondary-foreground">
-            <span className="text-foreground font-medium">Click to upload</span> or drag &amp; drop
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {acceptLabel} · up to {maxSizeMB} MB
-          </p>
+          <div className="max-w-[min(28ch,100%)] space-y-1">
+            <p className="text-sm leading-relaxed text-secondary-foreground text-balance">
+              <span className="whitespace-nowrap text-foreground font-medium">Click to upload</span>{" "}
+              <span className="whitespace-nowrap">or drag &amp; drop</span>
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground text-balance">
+              {acceptLabel} · up to {maxSizeMB} MB
+            </p>
+          </div>
         </div>
       )}
 

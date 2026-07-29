@@ -104,6 +104,7 @@ export default function MemberView({ id }: { id: string }) {
 
       <Section title="Member">
         <Field label="Full Name">{m.fullName}</Field>
+        <Field label="Student ID">{m.studentId ?? "—"}</Field>
         <Field label="Class"><Badge tone="red">{m.classCode}</Badge></Field>
         <Field label="Year Level">{m.yearLevel}</Field>
         <Field label="Section">{m.section}</Field>

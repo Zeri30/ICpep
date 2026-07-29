@@ -77,6 +77,7 @@ class Application extends Model
         'surname',
         'given_name',
         'middle_initial',
+        'student_id',
         'year_level',
         'section',
         'birthday',
