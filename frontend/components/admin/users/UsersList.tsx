@@ -121,12 +121,17 @@ export default function UsersList() {
     setConfirm(null);
   }
 
-  async function resetPassword(password: string, password_confirmation: string) {
-    if (!resetFor) return;
-    // Let the modal surface any error by rethrowing; only close on success.
-    await apiSend("POST", `/users/${resetFor.id}/reset-password`, { password, password_confirmation });
+  async function resetPassword(): Promise<string> {
+    if (!resetFor) throw new Error("No account selected.");
+    // Let the modal surface any error by rethrowing; it stays open afterwards
+    // to show the generated password, so this does not close it.
+    const { generatedPassword } = await apiSend<{ generatedPassword: string }>(
+      "POST",
+      `/users/${resetFor.id}/reset-password`,
+    );
+    await refresh();
     notify("Password reset");
-    setResetFor(null);
+    return generatedPassword;
   }
 
   /* ------------------------------------------------------------- columns */
@@ -254,7 +259,7 @@ export default function UsersList() {
       <ResetPasswordModal
         open={!!resetFor}
         userName={resetFor?.name ?? null}
-        onSubmit={resetPassword}
+        onConfirm={resetPassword}
         onClose={() => setResetFor(null)}
       />
 

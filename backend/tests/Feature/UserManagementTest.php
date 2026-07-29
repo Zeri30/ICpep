@@ -56,30 +56,31 @@ class UserManagementTest extends TestCase
 
     /* -------------------------------------------------------------- creation */
 
-    public function test_create_composes_the_name_hashes_the_password_and_logs(): void
+    public function test_create_composes_the_name_generates_a_password_and_logs(): void
     {
-        $this->actingAs($this->manager())
+        $response = $this->actingAs($this->manager())
             ->postJson('/api/admin/users', [
                 'first_name' => 'Jane',
                 'middle_initial' => 's',
                 'last_name' => 'Officer',
                 'email' => 'jane@example.com',
                 'role' => 'secretary',
-                'password' => 'secret1234',
-                'password_confirmation' => 'secret1234',
             ])
             ->assertCreated()
             // The form captures the parts; the displayed name is composed from
             // them, with the middle initial upper-cased and punctuated.
             ->assertJsonPath('data.name', 'Jane S. Officer')
-            ->assertJsonPath('data.isActive', true);
+            ->assertJsonPath('data.isActive', true)
+            // Handed back once, so whoever created the account can pass it on.
+            // Always lowercase, independent of the name's own display case.
+            ->assertJsonPath('generatedPassword', 'jane.officer.s');
 
         $user = User::where('email', 'jane@example.com')->first();
         $this->assertNotNull($user);
         $this->assertSame('Jane', $user->first_name);
         $this->assertSame('Officer', $user->last_name);
-        $this->assertNotSame('secret1234', $user->password);
-        $this->assertTrue(Hash::check('secret1234', $user->password));
+        $this->assertTrue($user->must_change_password);
+        $this->assertTrue(Hash::check($response->json('generatedPassword'), $user->password));
         $this->assertDatabaseHas('activity_logs', ['action' => 'user_created']);
     }
 
@@ -91,11 +92,11 @@ class UserManagementTest extends TestCase
                 'last_name' => 'Officer',
                 'email' => 'jane@example.com',
                 'role' => 'secretary',
-                'password' => 'secret1234',
-                'password_confirmation' => 'secret1234',
             ])
             ->assertCreated()
-            ->assertJsonPath('data.name', 'Jane Officer');
+            ->assertJsonPath('data.name', 'Jane Officer')
+            // No middle initial in the name, none in the generated password.
+            ->assertJsonPath('generatedPassword', 'jane.officer');
     }
 
     public function test_create_requires_the_name_parts_and_rejects_a_duplicate_email(): void
@@ -106,8 +107,6 @@ class UserManagementTest extends TestCase
             ->postJson('/api/admin/users', [
                 'email' => 'taken@example.com',
                 'role' => 'secretary',
-                'password' => 'secret1234',
-                'password_confirmation' => 'secret1234',
             ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['first_name', 'last_name', 'email']);
@@ -198,18 +197,26 @@ class UserManagementTest extends TestCase
 
     /* -------------------------------------------------------- password reset */
 
-    public function test_reset_password_changes_the_hash_and_logs(): void
+    public function test_reset_password_generates_a_first_login_password_and_forces_a_change(): void
     {
-        $target = User::factory()->create();
+        $target = User::factory()->create([
+            'first_name' => 'Jane',
+            'middle_initial' => 's',
+            'last_name' => 'Officer',
+        ]);
 
-        $this->actingAs($this->manager())
-            ->postJson("/api/admin/users/{$target->id}/reset-password", [
-                'password' => 'brandnew123',
-                'password_confirmation' => 'brandnew123',
-            ])
-            ->assertOk();
+        $response = $this->actingAs($this->manager())
+            ->postJson("/api/admin/users/{$target->id}/reset-password")
+            ->assertOk()
+            // Generated the same way account creation does — lowercase, spaces
+            // collapsed — and handed back once so it can be passed along.
+            ->assertJsonPath('generatedPassword', 'jane.officer.s');
 
-        $this->assertTrue(Hash::check('brandnew123', $target->fresh()->password));
+        $fresh = $target->fresh();
+        $this->assertTrue(Hash::check('jane.officer.s', $fresh->password));
+        // Put back into the same first-login state a newly created account
+        // starts in.
+        $this->assertTrue($fresh->must_change_password);
         $this->assertDatabaseHas('activity_logs', ['action' => 'password_reset']);
     }
 
