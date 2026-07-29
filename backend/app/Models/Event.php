@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Enums\AttendanceMethod;
+use App\Enums\AttendanceStatus;
 use App\Enums\EventStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -321,14 +324,212 @@ class Event extends Model
      * have allowed — which is correct, because closing it is someone saying it
      * is over.
      *
-     * ⚠ Nothing enforces this yet, because there is no check-in endpoint to
-     * enforce it in — the attendance module is later work. This method is the
-     * rule, in one place, for that endpoint to call. Anything accepting a QR
-     * token or an attendance code must check it first.
+     * Enforced in {@see \App\Http\Controllers\Api\Admin\AttendanceController},
+     * which is the only thing that turns a token or a code into a record. This
+     * method is the rule, in one place; anything else accepting either must
+     * check it first.
      */
     public function acceptsAttendance(): bool
     {
         return ! $this->status->isClosed() && $this->daysFromToday() >= 0;
+    }
+
+    /**
+     * Why the QR and the code are not being accepted, in words — null while
+     * they are.
+     *
+     * The one place the refusal is worded. The check-in page and the share
+     * panel both show it, so an officer whose scan is turned away and the
+     * Secretary looking at why the link died read the same sentence.
+     */
+    public function attendanceClosedReason(): ?string
+    {
+        return match (true) {
+            $this->status === EventStatus::Cancelled => 'This event was cancelled.',
+            $this->status === EventStatus::Done => 'This event has already taken place.',
+            $this->daysFromToday() < 0 => 'This event has already passed.',
+            default => null,
+        };
+    }
+
+    /** Every attendance record for this event — officers only; see the model. */
+    public function attendance(): HasMany
+    {
+        return $this->hasMany(EventAttendance::class);
+    }
+
+    /**
+     * One officer's record for this event, or null if they have none.
+     *
+     * Reads a loaded relation when there is one and falls back to a query when
+     * there is not. That is what lets the calendar send every officer their own
+     * standing without an N+1: the index constrains the relation to the signed-in
+     * officer and eager-loads it once, while the single-event responses (create,
+     * edit, share) pay for one small query rather than having to remember to
+     * load it.
+     */
+    public function attendanceFor(User $officer): ?EventAttendance
+    {
+        if ($this->relationLoaded('attendance')) {
+            return $this->attendance->firstWhere('user_id', $officer->id);
+        }
+
+        return $this->attendance()->where('user_id', $officer->id)->first();
+    }
+
+    /**
+     * Find the event a scanned QR belongs to, expired or not.
+     *
+     * Deliberately does not filter on {@see self::acceptsAttendance()}: an
+     * officer who scans last week's QR should be told the event has passed, not
+     * that the code is unrecognised. Whether to accept it is the caller's
+     * decision and a separate one.
+     */
+    public static function byQrToken(string $token): ?self
+    {
+        return static::where('qr_token', $token)->first();
+    }
+
+    /**
+     * Find the event a typed code belongs to.
+     *
+     * Matched case-insensitively, because the code is read aloud and typed on a
+     * phone keyboard that will happily offer lowercase — and the alphabet it is
+     * drawn from ({@see self::CODE_ALPHABET}) has no character whose case
+     * carries meaning, so upcasing can never turn one valid code into another.
+     */
+    public static function byAttendanceCode(string $code): ?self
+    {
+        return static::where('attendance_code', strtoupper(trim($code)))->first();
+    }
+
+    /**
+     * Record that an officer is here.
+     *
+     * Idempotent by design, and not only by the unique index: scanning the QR a
+     * second time is the most likely thing to happen in a room where the phone
+     * did not obviously respond the first time, and it must neither error nor
+     * quietly restamp the time. An officer already Present is returned
+     * untouched, so the record keeps saying when they actually arrived.
+     *
+     * An officer already marked Absent — closed off and then turning up late —
+     * is flipped to Present with the time they finally scanned, which is the
+     * whole reason the roster stays correctable.
+     *
+     * Does *not* check {@see self::acceptsAttendance()}. That is the caller's
+     * job, because the two answers ("is this event still taking attendance" and
+     * "record this") belong to different questions and only the caller knows
+     * which refusal to report.
+     */
+    public function checkIn(User $officer, AttendanceMethod $method): EventAttendance
+    {
+        $record = $this->attendance()->firstOrNew(['user_id' => $officer->id]);
+
+        if ($record->exists && $record->isPresent()) {
+            return $record;
+        }
+
+        $record->fill([
+            'status' => AttendanceStatus::Present,
+            'method' => $method,
+            'checked_in_at' => now(),
+            // Cleared, so a self check-in is never attributed to whoever last
+            // corrected the row.
+            'recorded_by' => null,
+        ])->save();
+
+        return $record;
+    }
+
+    /**
+     * Set an officer's status by hand, as the secretariat correcting the roster.
+     *
+     * Real meetings have dead phones and people who arrive after the QR has been
+     * put away. A roster that cannot be corrected is one that gets abandoned in
+     * favour of a sheet of paper, so this is a first-class action rather than a
+     * repair hatch — which is why it is stamped {@see AttendanceMethod::Override}
+     * and carries who made it.
+     */
+    public function setAttendance(User $officer, AttendanceStatus $status, User $by): EventAttendance
+    {
+        $record = $this->attendance()->firstOrNew(['user_id' => $officer->id]);
+
+        $record->fill([
+            'status' => $status,
+            'method' => AttendanceMethod::Override,
+            // An absence has no moment, so marking someone absent drops the
+            // check-in time rather than leaving one behind that contradicts it.
+            'checked_in_at' => $status === AttendanceStatus::Present
+                ? ($record->checked_in_at ?? now())
+                : null,
+            'recorded_by' => $by->id,
+        ])->save();
+
+        return $record;
+    }
+
+    /**
+     * Close attendance off: every active officer without a record is Absent.
+     *
+     * Runs when the event is marked Done. Until then the missing rows are
+     * genuinely unknown — an event still hours away has nothing to say about
+     * anyone — and this is the moment that stops being true.
+     *
+     * Cancelled events are left alone by the caller: nothing took place, so
+     * nobody missed it, and a roster of eleven absences for a meeting that never
+     * happened would be a false record rather than an empty one.
+     *
+     * The written rows carry no method, which is what marks them as nobody's
+     * decision and lets {@see self::reopenAttendance()} take them back.
+     *
+     * @return int how many absences were recorded
+     */
+    public function recordAbsentees(): int
+    {
+        $accountedFor = $this->attendance()->pluck('user_id');
+
+        $missing = User::query()
+            ->where('is_active', true)
+            ->whereNotIn('id', $accountedFor)
+            ->pluck('id');
+
+        if ($missing->isEmpty()) {
+            return 0;
+        }
+
+        $now = now();
+
+        $this->attendance()->insert($missing->map(fn (int $id): array => [
+            'event_id' => $this->id,
+            'user_id' => $id,
+            'status' => AttendanceStatus::Absent->value,
+            'method' => null,
+            'checked_in_at' => null,
+            'recorded_by' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all());
+
+        return $missing->count();
+    }
+
+    /**
+     * Take back the absences the closing wrote, and nothing else.
+     *
+     * An event closed by mistake and set back to Scheduled should not leave
+     * eleven officers marked absent from a meeting that has not happened yet.
+     * Only the rows nobody chose go: every check-in stands, and so does every
+     * correction the secretariat made by hand — those are decisions, and
+     * reopening an event is not a reason to discard them.
+     *
+     * @return int how many were withdrawn
+     */
+    public function reopenAttendance(): int
+    {
+        return $this->attendance()
+            ->where('status', AttendanceStatus::Absent)
+            ->whereNull('method')
+            ->delete();
     }
 
     /* -------------------------------------------------------------- share */
@@ -345,15 +546,16 @@ class Event extends Model
         return $this->acceptsAttendance();
     }
 
-    /** Why sharing is unavailable, in words the recipient of a dead link can use. */
+    /**
+     * Why sharing is unavailable, in words the recipient of a dead link can use.
+     *
+     * The same sentence the check-in refuses with, because it is the same rule —
+     * a share link exists to hand out credentials, and it dies exactly when they
+     * stop being accepted.
+     */
     public function shareUnavailableReason(): ?string
     {
-        return match (true) {
-            $this->status === EventStatus::Cancelled => 'This event was cancelled.',
-            $this->status === EventStatus::Done => 'This event has already taken place.',
-            $this->daysFromToday() < 0 => 'This event has already passed.',
-            default => null,
-        };
+        return $this->attendanceClosedReason();
     }
 
     /** Has the current token been withdrawn? Revoked tokens never come back. */
@@ -425,9 +627,11 @@ class Event extends Model
      * so the code a Secretary generates points at the deployed admin and not at
      * whatever host they happen to have open.
      *
-     * The route it names does not exist yet — the check-in flow is a later
-     * piece of work. The token in the URL is the part that has to be right now,
-     * because the codes being handed out today have to keep working then.
+     * ⚠ The path is load-bearing and cannot be changed: QR codes carrying it
+     * have already been handed out, and they are printed and photographed
+     * artefacts that no deploy can reach. The frontend route is a page in its
+     * own layout for exactly that reason — see the check-in page's own note on
+     * why it does not sit under the admin shell.
      */
     public function checkInUrl(): string
     {

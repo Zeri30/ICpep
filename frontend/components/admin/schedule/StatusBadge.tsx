@@ -7,7 +7,15 @@
    an event can carry the first while still waiting for the second. That gap is
    what `needsStatusUpdate` marks. */
 
-import { AlertTriangle, CalendarClock, CheckCircle2, CircleDot, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  CircleDot,
+  UserCheck,
+  UserX,
+  XCircle,
+} from "lucide-react";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
 /**
@@ -83,6 +91,46 @@ export function TimingBadge({ event }: { event: ScheduledEvent }) {
   return (
     <span className={`${pill} ${cls}`}>
       <CalendarClock size={11} /> {event.timingLabel}
+    </span>
+  );
+}
+
+/**
+ * Where *you* stand with this event — Present or Absent, and nothing when
+ * neither has been recorded.
+ *
+ * Silent on `pending` on purpose. "Not checked in" is true of every event that
+ * has not happened yet, so a badge saying it would appear on the whole calendar
+ * and mean nothing; the two states worth a marker are the two somebody has
+ * actually recorded. The modal says `pending` in words, where there is room to
+ * explain it.
+ *
+ * Shown to every role. The roster — who *else* was there — stays the
+ * secretariat's; your own line is simply yours.
+ */
+export function MyAttendanceBadge({ event }: { event: ScheduledEvent }) {
+  const { status, statusLabel, checkedInLabel } = event.myAttendance;
+
+  if (status === "pending") return null;
+
+  const present = status === "present";
+
+  return (
+    <span
+      className={`${pill} ${
+        present
+          ? "border-green-500/30 bg-green-500/10 text-green-400"
+          : "border-red-500/30 bg-red-500/10 text-red-400"
+      }`}
+      // The badge says "You: Present"; the title carries the detail that would
+      // not fit and that most readers do not need.
+      title={
+        present && checkedInLabel
+          ? `You checked in at ${checkedInLabel}`
+          : `Your attendance: ${statusLabel}`
+      }
+    >
+      {present ? <UserCheck size={11} /> : <UserX size={11} />} You: {statusLabel}
     </span>
   );
 }
