@@ -50,6 +50,7 @@ class SharedEventController extends Controller
             'available' => true,
             'title' => $event->title,
             'category' => $event->category,
+            'venue' => $event->venue,
             'date' => $event->localDate(),
             'dateLabel' => $event->starts_at->setTimezone(Event::timezone())->format('l, F j, Y'),
             'timeLabel' => $event->displayTimeRange(),
