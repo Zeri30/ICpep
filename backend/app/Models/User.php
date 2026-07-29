@@ -7,6 +7,7 @@ use App\Enums\Permission;
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -45,12 +46,27 @@ class User extends Authenticatable
     }
 
     /**
+     * This officer's attendance across every event.
+     *
+     * The roster reads it constrained to one event, which is what lets an
+     * officer with no record still appear on the list — see
+     * {@see \App\Http\Resources\EventAttendanceResource}.
+     */
+    public function attendance(): HasMany
+    {
+        return $this->hasMany(EventAttendance::class);
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
     protected $fillable = [
         'name',
+        'first_name',
+        'middle_initial',
+        'last_name',
         'username',
         'email',
         'password',

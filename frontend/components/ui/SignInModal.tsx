@@ -15,20 +15,37 @@ type Status = "idle" | "submitting";
 export default function SignInModal({
   open,
   onClose,
+  redirectTo,
 }: {
   open: boolean;
   onClose: () => void;
+  /**
+   * Where to land after signing in, overriding the backend's own answer (the
+   * admin dashboard).
+   *
+   * Set by the check-in page, which is reached by scanning a QR and must be
+   * returned to with its token intact — landing that officer on the dashboard
+   * would lose the scan and leave them to find their way back with no URL to
+   * type. Left unset everywhere else, where the dashboard is the right place.
+   */
+  redirectTo?: string;
 }) {
   // The dialog owns the form state and only exists while open, so a reopened
   // modal starts clean without any state to reset.
   return (
     <AnimatePresence>
-      {open && <SignInDialog onClose={onClose} />}
+      {open && <SignInDialog onClose={onClose} redirectTo={redirectTo} />}
     </AnimatePresence>
   );
 }
 
-function SignInDialog({ onClose }: { onClose: () => void }) {
+function SignInDialog({
+  onClose,
+  redirectTo,
+}: {
+  onClose: () => void;
+  redirectTo?: string;
+}) {
   const emailRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -83,8 +100,9 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
       }
 
       // Full navigation, not a router push: the admin is served by Laravel
-      // through the proxy, not by Next's router.
-      window.location.href = data.redirect ?? "/admin";
+      // through the proxy, not by Next's router. A caller-supplied destination
+      // wins over the backend's — see `redirectTo`.
+      window.location.href = redirectTo ?? data.redirect ?? "/admin";
     } catch {
       setError("Couldn't reach the server. Is the backend running?");
       setStatus("idle");
@@ -100,9 +118,9 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
         exit={{ opacity: 0 }}
         transition={{ duration: 0.25 }}
         onClick={onClose}
-        className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm"
+        className="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm"
       />
-      <div className="fixed inset-0 z-[90] grid place-items-center p-4 pointer-events-none">
+      <div className="fixed inset-0 z-[100] grid place-items-center p-4 pointer-events-none">
         <motion.div
           key="signin-modal"
           role="dialog"

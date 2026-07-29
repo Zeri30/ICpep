@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
+import EditMemberModal from "@/components/admin/members/EditMemberModal";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import { formatDate, formatDateTime } from "@/lib/adminFormat";
@@ -42,8 +43,9 @@ function Section({ title, children, cols = 2 }: { title: string; children: React
 export default function MemberView({ id }: { id: string }) {
   const router = useRouter();
   const { notify } = useAdmin();
-  const { data, loading, error } = useAdminResource<{ data: Member }>(`/members/${id}`);
+  const { data, loading, error, refresh } = useAdminResource<{ data: Member }>(`/members/${id}`);
   const [confirm, setConfirm] = useState<"delete" | "restore" | null>(null);
+  const [editing, setEditing] = useState(false);
   const m = data?.data;
 
   async function del() {
@@ -83,9 +85,9 @@ export default function MemberView({ id }: { id: string }) {
           <ArrowLeft size={16} /> Members List
         </Link>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/admin/members/${m.id}/edit`} className="inline-flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground">
+          <button onClick={() => setEditing(true)} className="inline-flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground">
             <Pencil size={15} /> Edit
-          </Link>
+          </button>
           {m.deletedAt ? (
             <button onClick={() => setConfirm("restore")} className="inline-flex items-center gap-2 rounded-md border border-green-500/40 px-3 py-2 text-sm text-green-400 transition-colors hover:bg-green-500/10">
               <RotateCcw size={15} /> Undo delete
@@ -142,6 +144,14 @@ export default function MemberView({ id }: { id: string }) {
           )}
         </Section>
       </div>
+
+      {/* Editing overlays the record rather than replacing it, so the details
+          are still there to compare against while typing. */}
+      <EditMemberModal
+        member={editing ? m : null}
+        onSaved={refresh}
+        onClose={() => setEditing(false)}
+      />
 
       <ConfirmDialog
         open={confirm === "delete"}

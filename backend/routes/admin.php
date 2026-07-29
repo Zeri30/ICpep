@@ -1,12 +1,15 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\ActivityController;
+use App\Http\Controllers\Api\Admin\AttendanceController;
 use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\MeController;
 use App\Http\Controllers\Api\Admin\MemberController;
 use App\Http\Controllers\Api\Admin\MembershipTermController;
 use App\Http\Controllers\Api\Admin\PaymentController;
 use App\Http\Controllers\Api\Admin\RegistrationController;
+use App\Http\Controllers\Api\Admin\RolePermissionController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +34,15 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');
 
+    // Payment History — the read-only ledger. Gated on finance.view so the
+    // module can be turned on or off per role from the Privileges panel; the
+    // same permission hides the revenue figures on the dashboard, so "access
+    // financial modules" means one consistent thing wherever it is granted.
+    // Acting on payments is a separate ability and still needs members.payment.
+    Route::middleware('permission:finance.view')->group(function () {
+        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+    });
+
     // Membership lists and the public form's open/closed state. Reading both is
     // open to any officer — the Members module shows the list selector and a
     // registration banner to everyone. Changing either is the semester rollover
@@ -41,6 +53,35 @@ Route::middleware(EnsureAdmin::class)->group(function () {
     Route::get('/registration', [RegistrationController::class, 'show'])->name('registration.show');
     Route::post('/registration/close', [RegistrationController::class, 'close'])->name('registration.close');
     Route::post('/registration/open', [RegistrationController::class, 'open'])->name('registration.open');
+
+    // The calendar. Reading is open to every officer — a schedule only some of
+    // them can see is not a schedule. Changing it needs schedule.manage, held
+    // by the Secretary alone by default, so every other role's calendar is
+    // view-only whether or not the UI offers them a button.
+    Route::get('/events', [EventController::class, 'index'])->name('events.index');
+    Route::middleware('permission:schedule.manage')->group(function () {
+        Route::post('/events', [EventController::class, 'store'])->name('events.store');
+        Route::patch('/events/{event}', [EventController::class, 'update'])->name('events.update');
+        Route::patch('/events/{event}/status', [EventController::class, 'status'])->name('events.status');
+        Route::post('/events/{event}/share', [EventController::class, 'share'])->name('events.share');
+        Route::delete('/events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
+    });
+
+    // Attendance. Checking yourself in is open to every active officer — that is
+    // the whole design, since the QR identifies the event and the session
+    // identifies the person, so anyone holding a phone in the room can do it
+    // without the Secretary touching anything.
+    //
+    // The roster is the other half and is the secretariat's: it says who missed
+    // which meeting, and it is gated on the same schedule.manage that already
+    // withholds the QR token it is built from from every other role. Authorized
+    // in the controller rather than by middleware here, so the two check-in
+    // routes and the two roster routes can sit together and be read as one
+    // module.
+    Route::get('/check-in', [AttendanceController::class, 'show'])->name('attendance.show');
+    Route::post('/check-in', [AttendanceController::class, 'store'])->name('attendance.store');
+    Route::get('/events/{event}/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+    Route::patch('/events/{event}/attendance/{user}', [AttendanceController::class, 'update'])->name('attendance.update');
 
     // Members — reading needs members.view; the writes below gate more tightly.
     Route::middleware('permission:members.view')->group(function () {
@@ -60,13 +101,14 @@ Route::middleware(EnsureAdmin::class)->group(function () {
         Route::post('/members/{application}/restore', [MemberController::class, 'restore'])->withTrashed()->name('members.restore');
     });
 
-    // Financial modules — Treasurer roles only.
-    Route::middleware('permission:finance.view')->group(function () {
-        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
-    });
-
     // User Management — administrator accounts. Programming Team only.
     Route::middleware('permission:users.manage')->group(function () {
+        // Privileges — the editable role→permission matrix. Declared before the
+        // /users/{user} routes so "roles" is never taken for an account id.
+        Route::get('/users/roles', [RolePermissionController::class, 'index'])->name('roles.index');
+        Route::put('/users/roles/{role}', [RolePermissionController::class, 'update'])->name('roles.update');
+        Route::post('/users/roles/{role}/reset', [RolePermissionController::class, 'reset'])->name('roles.reset');
+
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');

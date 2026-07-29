@@ -24,7 +24,10 @@ export default function Marquee({
     </span>
   );
 
-  const Row = ({ ariaHidden }: { ariaHidden?: boolean }) => (
+  // Built as an element rather than a nested component: a component declared in
+  // the render body is a new type on every render, so React would tear down and
+  // rebuild both rows each time instead of updating them.
+  const row = (ariaHidden?: boolean) => (
     <span className="flex items-center" aria-hidden={ariaHidden}>
       {items.map((item, i) => (
         <span key={i} className="flex items-center">
@@ -38,8 +41,10 @@ export default function Marquee({
   return (
     <div className={`marquee-wrap relative overflow-hidden ${className}`}>
       <div className={`marquee-track ${reverse ? "reverse" : ""}`}>
-        <Row />
-        <Row ariaHidden />
+        {row()}
+        {/* The duplicate is what makes the -50% loop seamless; it is hidden from
+            assistive tech so the items are not announced twice. */}
+        {row(true)}
       </div>
     </div>
   );

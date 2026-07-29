@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -37,13 +38,19 @@ class MembershipTermTest extends TestCase
         return MembershipTerm::factory()->term($from, $semester)->when($current, fn ($f) => $f->current())->create();
     }
 
+    /**
+     * The email is derived from the surname rather than fixed, so two different
+     * members can share a list — one applicant may still appear in two lists,
+     * which is what the term+email uniqueness (2026_07_23_000003) allows and
+     * what the tests below rely on.
+     */
     private function member(?MembershipTerm $term = null, string $surname = 'Dela Cruz'): Application
     {
         return Application::create([
             'membership_term_id' => $term?->id,
             'surname' => $surname, 'given_name' => 'Juan', 'middle_initial' => 'S',
             'year_level' => '3rd Year', 'section' => 'Section A', 'birthday' => '2004-01-01',
-            'address' => '123 Rizal St', 'email' => 'juan@example.com', 'phone' => '09123456789',
+            'address' => '123 Rizal St', 'email' => Str::slug($surname).'@example.com', 'phone' => '09123456789',
             'signature_path' => 'signatures/x.png', 'picture_path' => 'pictures/x.png',
         ]);
     }
