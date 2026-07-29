@@ -14,8 +14,10 @@ use App\Models\RolePermission;
  * `role_permissions` — so a grant applies to the role, and therefore to every
  * account holding it.
  *
- * The set is open to extension: add a case here, give it a label and a default
- * permission set, and seed an account for it — the rest of the system adapts.
+ * The set is open to extension: add a case here, give it a label, a family and a
+ * default permission set, and seed an account for it — the rest of the system
+ * adapts. Every match in this enum is exhaustive, so a case added without those
+ * fails loudly rather than defaulting to something nobody chose.
  */
 enum UserRole: string
 {
@@ -31,6 +33,16 @@ enum UserRole: string
     case Pro = 'pro';
     case Bod = 'bod';
 
+    // The Team Heads. Each one leads a working team under the board, and each is
+    // a role of its own rather than a variant of Bod — see the note on their
+    // entry in defaultPermissions().
+    case ProgrammingTeamHead = 'programming_team_head';
+    case DocumentationTeamHead = 'documentation_team_head';
+    case WritersTeamHead = 'writers_team_head';
+    case MultimediaTeamHead = 'multimedia_team_head';
+    case SocialMediaTeamHead = 'social_media_team_head';
+    case EsportsTeamHead = 'esports_team_head';
+
     public function label(): string
     {
         return match ($this) {
@@ -45,6 +57,47 @@ enum UserRole: string
             self::AssistantTreasurer => 'Assistant Treasurer',
             self::Pro => 'Public Relations Officer',
             self::Bod => 'Board of Directors',
+            self::ProgrammingTeamHead => 'Programming Team Head',
+            self::DocumentationTeamHead => 'Documentation Team Head',
+            self::WritersTeamHead => "Writer's Team Head",
+            self::MultimediaTeamHead => 'Multimedia Team Head',
+            self::SocialMediaTeamHead => 'Social Media Team Head',
+            self::EsportsTeamHead => 'E-sports Team Head',
+        };
+    }
+
+    /**
+     * Which branch of the organization this role sits in.
+     *
+     * Presentation only — the admin colours role badges and groups the role
+     * selects by this. Nothing authorizes on it; see {@see RoleFamily}.
+     */
+    public function family(): RoleFamily
+    {
+        return match ($this) {
+            self::President, self::Adviser, self::Vpea, self::Vpia => RoleFamily::Executive,
+
+            // Documentation keeps the chapter's written record, which is the
+            // secretariat's work rather than a communications one — they write
+            // things down, they do not publish them.
+            self::Secretary, self::AssistantSecretary,
+            self::DocumentationTeamHead => RoleFamily::Secretariat,
+
+            self::Treasurer, self::AssistantTreasurer => RoleFamily::Finance,
+
+            // Everything whose output is the chapter speaking publicly.
+            self::Pro, self::WritersTeamHead, self::MultimediaTeamHead,
+            self::SocialMediaTeamHead => RoleFamily::Communications,
+
+            self::Bod => RoleFamily::Governance,
+
+            // E-sports is the loosest fit of the seventeen: it is not technical
+            // work in the way programming is. It sits here because the family
+            // reads as "the teams that build and run things", which is what an
+            // e-sports team does, and because inventing a seventh family for one
+            // role defeats the point of having families at all.
+            self::ProgrammingTeam, self::ProgrammingTeamHead,
+            self::EsportsTeamHead => RoleFamily::Technical,
         };
     }
 
@@ -145,6 +198,26 @@ enum UserRole: string
                 Permission::ViewMembers,
                 Permission::AccessFinance,
             ],
+            // The Team Heads start on the same footing as the Board of Directors
+            // — read the members, read Payment History, change neither.
+            //
+            // Written out as its own entry rather than added to the Bod line
+            // above, and that is the whole point: a Team Head is *given* what the
+            // board has today, not tied to whatever the board has tomorrow. If
+            // the officers later decide the board should be able to edit members,
+            // the Team Heads do not quietly acquire it too — they are six
+            // separate roles in the Privileges panel, adjusted one at a time.
+            //
+            // Contrast the Secretary / Assistant Secretary line, which shares an
+            // entry precisely *because* those two are meant to move together.
+            // Sharing or splitting an entry here is the decision, not an
+            // accident of formatting.
+            self::ProgrammingTeamHead, self::DocumentationTeamHead,
+            self::WritersTeamHead, self::MultimediaTeamHead,
+            self::SocialMediaTeamHead, self::EsportsTeamHead => [
+                Permission::ViewMembers,
+                Permission::AccessFinance,
+            ],
         };
     }
 
@@ -159,15 +232,48 @@ enum UserRole: string
         return $this->hasPermission(Permission::ManageUsers);
     }
 
+    /**
+     * The role a new account starts on: the least-privileged one, so an account
+     * created without a deliberate choice can read and change nothing.
+     *
+     * Matches the `users.role` column default, and the account form preselects
+     * it. Named rather than found by position — the form used to take the last
+     * case in this enum, which was this role only until the day somebody added a
+     * case after it.
+     */
+    public static function default(): self
+    {
+        return self::Bod;
+    }
+
     /** @return list<string> the raw values, for validation rules. */
     public static function values(): array
     {
         return array_map(fn (self $r): string => $r->value, self::cases());
     }
 
-    /** @return list<array{value:string,label:string}> for the frontend selects. */
+    /**
+     * For the frontend selects. Carries the family so the options can be grouped
+     * under its heading — with seventeen roles a flat list is a scroll, not a
+     * choice — and so a role added here arrives in the UI already classified,
+     * with nothing to keep in step on the other side.
+     *
+     * `managesUsers` rides along so the role badge can mark the roles that can
+     * reach User Management. It is resolved through the live matrix rather than
+     * assumed, because that ability is editable: a UI that hard-codes "the
+     * Programming Team is the one that manages accounts" starts lying the moment
+     * somebody grants it elsewhere in the Privileges panel.
+     *
+     * @return list<array{value:string,label:string,family:string,familyLabel:string,managesUsers:bool}>
+     */
     public static function options(): array
     {
-        return array_map(fn (self $r): array => ['value' => $r->value, 'label' => $r->label()], self::cases());
+        return array_map(fn (self $r): array => [
+            'value' => $r->value,
+            'label' => $r->label(),
+            'family' => $r->family()->value,
+            'familyLabel' => $r->family()->label(),
+            'managesUsers' => $r->managesUsers(),
+        ], self::cases());
     }
 }

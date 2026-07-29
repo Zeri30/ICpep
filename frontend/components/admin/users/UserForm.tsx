@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, Loader2, Save } from "lucide-react";
 import { useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
+import RoleOptions from "@/components/admin/users/RoleOptions";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import type { AdminUser } from "@/lib/adminTypes";
 
@@ -47,7 +48,10 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
     middleInitial: user?.middleInitial ?? "",
     lastName: user?.lastName ?? "",
     email: user?.email ?? "",
-    role: user?.role ?? meta.roles[meta.roles.length - 1]?.value ?? "admin",
+    // A new account starts on the least-privileged role, named by the backend.
+    // This used to take the last option in the list, which was that role only
+    // until the day a case was added after it — as the Team Heads were.
+    role: user?.role ?? meta.defaultRole,
     password: "",
     passwordConfirmation: "",
   }));
@@ -158,9 +162,7 @@ export function AccountFields({ state, boxed = true }: { state: AccountFormState
           <div className="sm:col-span-2">
             <label className={labelCls}>Role</label>
             <select className={inputCls} value={form.role} onChange={(e) => set({ role: e.target.value })} disabled={roleLocked}>
-              {roles.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
+              <RoleOptions roles={roles} />
             </select>
             {roleLocked && <p className="mt-1.5 text-xs text-muted-foreground">You can’t change your own role.</p>}
           </div>

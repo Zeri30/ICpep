@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
 import { useAdmin } from "@/components/admin/AdminProvider";
+import RoleBadge from "@/components/admin/users/RoleBadge";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
 import type { AdminUser, PermissionInfo, PrivilegesCatalog, RolePrivileges } from "@/lib/adminTypes";
 
@@ -213,9 +214,11 @@ function PrivilegesDialog({ user, onClose }: { user: AdminUser; onClose: () => v
                   >
                     Privileges
                   </h2>
-                  <p className="text-xs text-muted-foreground">
-                    {role?.label ?? user.roleLabel ?? user.role}
-                  </p>
+                  {/* The same badge the account list shows, so the panel is
+                      visibly about the role whose row was clicked — with
+                      seventeen of them, "Privileges" alone is not enough of a
+                      title. */}
+                  <RoleBadge role={user.role} label={role?.label ?? user.roleLabel} className="mt-1" />
                 </div>
               </div>
               <button
