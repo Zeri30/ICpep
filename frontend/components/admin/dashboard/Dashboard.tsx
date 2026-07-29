@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import StatCard from "@/components/admin/dashboard/StatCard";
+import UpcomingEvents from "@/components/admin/dashboard/UpcomingEvents";
 import BarChart from "@/components/admin/ui/BarChart";
 import LineChart from "@/components/admin/ui/LineChart";
 import { useAdminResource } from "@/lib/adminApi";
@@ -27,9 +28,11 @@ function Panel({
 }) {
   return (
     <section className="rounded-xl border border-line bg-card p-5">
-      <h2 className="font-display text-lg font-bold uppercase tracking-wide text-foreground">{title}</h2>
-      {description && <p className="mb-4 mt-1 text-xs text-muted-foreground">{description}</p>}
-      <div className={description ? "" : "mt-4"}>{children}</div>
+      <div className="border-b border-line/70 pb-3">
+        <h2 className="font-display text-lg font-bold uppercase tracking-wide text-foreground">{title}</h2>
+        {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
+      </div>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
@@ -108,6 +111,9 @@ export default function Dashboard() {
           <LineChart labels={registrationsOverTime.labels} data={registrationsOverTime.data} />
         </Panel>
       </div>
+
+      {/* Calendar widget — same shared component every role sees. */}
+      <UpcomingEvents />
     </div>
   );
 }
