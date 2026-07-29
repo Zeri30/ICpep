@@ -18,7 +18,7 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import CategoryTag, { toneFor } from "@/components/admin/schedule/CategoryTag";
 import {
@@ -119,6 +119,17 @@ const EMPTY_COPY: Record<Scope, (monthName: string) => { heading: string; body: 
  * hoping nobody needed it.
  */
 const MAX_CHIPS = 3;
+
+/**
+ * How many rows the schedule list renders at a time.
+ *
+ * The list can hold a whole chapter-year's events at once — every past
+ * meeting, every deadline — and rendering all of them the moment a filter is
+ * touched is wasted work the officer scrolling three rows down never asked
+ * for. Ten is enough to fill the panel without scrolling on a normal laptop,
+ * so the first paint already looks complete.
+ */
+const PAGE_SIZE = 10;
 
 export default function EventCalendar() {
   const { meta, can } = useAdmin();
@@ -745,6 +756,50 @@ function EventList({
         }
       : EMPTY_COPY[scope](monthName);
 
+  // How many rows are on screen right now. Starts over at one page whenever
+  // the slice itself changes — a new day, outcome, or scope is a different
+  // list, and paging three screens into the old one would leave the new one
+  // looking cut off for no reason the officer caused. Reset during render
+  // (React's documented pattern for "state that tracks a prop") rather than
+  // in an effect, so the list doesn't flash a stale page before catching up.
+  const [prevEvents, setPrevEvents] = useState(events);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  if (events !== prevEvents) {
+    setPrevEvents(events);
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  const visible = events.slice(0, visibleCount);
+  const hasMore = visibleCount < events.length;
+
+  // The panel scrolls itself (see the height comment on EventCalendar's root),
+  // so the sentinel has to be watched against that div rather than the
+  // window — the default root would fire the moment the panel appears
+  // anywhere on the page, long before its own scrollbar reaches bottom.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = scrollRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        // Appends onto the list already rendered rather than replacing it, so
+        // the browser has no reason to move the scroll position it is
+        // mid-observing — a reset here is what would make "seamless" a lie.
+        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, events.length));
+      },
+      // Loads a little before the sentinel is actually on screen, so the next
+      // page is already in the DOM by the time the officer's eye gets there.
+      { root, rootMargin: "160px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [events, visibleCount]);
+
   return (
     <section ref={ref} className="flex min-h-0 flex-col rounded-xl border border-line bg-card">
       <div className="border-b border-line/60 px-4 py-3">
@@ -846,7 +901,7 @@ function EventList({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">Loading the calendar…</p>
         ) : events.length === 0 ? (
@@ -861,7 +916,7 @@ function EventList({
           </div>
         ) : (
           <ul className="divide-y divide-line/40">
-            {events.map((e) => {
+            {visible.map((e) => {
               // "Nov 04" once, rather than formatting the same date twice to
               // read one half of it each time.
               const [month, dayOfMonth] = formatShortDate(e.date).split(" ");
@@ -918,6 +973,16 @@ function EventList({
               );
             })}
           </ul>
+        )}
+
+        {/* Doubles as the infinite-scroll trigger and its own status line —
+            there is nothing to watch once every event is on screen, so it is
+            the one thing here that genuinely disappears rather than sitting
+            empty. */}
+        {hasMore && (
+          <div ref={sentinelRef} className="px-4 py-3 text-center text-[11px] text-muted-foreground">
+            Loading more events…
+          </div>
         )}
       </div>
     </section>
