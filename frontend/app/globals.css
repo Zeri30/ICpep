@@ -162,6 +162,42 @@ summary {
   animation: pulseRing 2.2s ease-out infinite;
 }
 
+/* Skeleton placeholders — the shape of a row while its data is still in flight
+   (see components/admin/ui/DataTable). A highlight sweeping across a flat bar
+   rather than a fade in and out: a fade makes twenty rows read as twenty
+   separate things blinking at you, where a sweep reads as one surface still
+   loading. Kept in CSS rather than done with motion/react because a full table
+   is ~200 of these at once, and this compositor-friendly background shift costs
+   nothing next to that many animated React components.
+
+   `background-size: 200%` makes the gradient twice the element's width, so the
+   position runs 100% → -100% to carry the highlight from the left edge clear
+   off the right one. */
+@keyframes skeletonSweep {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+.skeleton {
+  background-color: var(--color-secondary);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.07) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeletonSweep 1.6s ease-in-out infinite;
+}
+/* Matching the marquee above: the placeholder still reads as a placeholder
+   without the sweep, so reduced motion keeps the bars and drops the animation
+   rather than falling back to a spinner. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 /* Gallery placeholder patterns */
 .pat-diag {
   background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 11px);
