@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\ActivityController;
+use App\Http\Controllers\Api\Admin\AttendanceController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\MeController;
@@ -65,6 +66,22 @@ Route::middleware(EnsureAdmin::class)->group(function () {
         Route::post('/events/{event}/share', [EventController::class, 'share'])->name('events.share');
         Route::delete('/events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
     });
+
+    // Attendance. Checking yourself in is open to every active officer — that is
+    // the whole design, since the QR identifies the event and the session
+    // identifies the person, so anyone holding a phone in the room can do it
+    // without the Secretary touching anything.
+    //
+    // The roster is the other half and is the secretariat's: it says who missed
+    // which meeting, and it is gated on the same schedule.manage that already
+    // withholds the QR token it is built from from every other role. Authorized
+    // in the controller rather than by middleware here, so the two check-in
+    // routes and the two roster routes can sit together and be read as one
+    // module.
+    Route::get('/check-in', [AttendanceController::class, 'show'])->name('attendance.show');
+    Route::post('/check-in', [AttendanceController::class, 'store'])->name('attendance.store');
+    Route::get('/events/{event}/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+    Route::patch('/events/{event}/attendance/{user}', [AttendanceController::class, 'update'])->name('attendance.update');
 
     // Members — reading needs members.view; the writes below gate more tightly.
     Route::middleware('permission:members.view')->group(function () {

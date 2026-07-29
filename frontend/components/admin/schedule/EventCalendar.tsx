@@ -22,6 +22,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import CategoryTag, { toneFor } from "@/components/admin/schedule/CategoryTag";
 import {
+  MyAttendanceBadge,
   NeedsUpdateBadge,
   STATUS_ORDER,
   STATUS_TONES,
@@ -904,6 +905,11 @@ function EventList({
                       {/* "Scheduled" is the default and says nothing worth the
                           space; the two closed states do. */}
                       {e.status !== "scheduled" && <StatusBadge event={e} />}
+                      {/* Your own line, and only ever yours — who else was
+                          there is the roster's business. Silent until there is
+                          something recorded, so it does not appear on every
+                          event that has yet to happen. */}
+                      <MyAttendanceBadge event={e} />
                       {e.needsStatusUpdate && <NeedsUpdateBadge />}
                     </span>
                   </span>

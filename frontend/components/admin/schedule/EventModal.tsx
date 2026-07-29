@@ -23,6 +23,8 @@ import {
   PencilLine,
   QrCode,
   Trash2,
+  UserCheck,
+  UserX,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -31,6 +33,7 @@ import { easeOutExpo } from "@/components/ui/motion-primitives";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import AttendanceCredentials from "@/components/admin/schedule/AttendanceCredentials";
+import AttendanceRoster from "@/components/admin/schedule/AttendanceRoster";
 import CategoryTag from "@/components/admin/schedule/CategoryTag";
 import {
   NeedsUpdateBadge,
@@ -533,6 +536,12 @@ function EventDialog({
                         onSelect={setStatus}
                       />
                       <AttendanceCredentials event={current} onShared={setCurrent} />
+                      {/* Below the credentials, in the order the evening runs:
+                          the QR goes up on the screen, and then the names
+                          arrive underneath it. The panel polls while this is
+                          open, so a Secretary holding the QR up watches the
+                          roster fill in on the same screen. */}
+                      <AttendanceRoster event={current} />
                     </div>
                   ) : (
                     // Nothing is generated while the form is open, so a new
@@ -729,8 +738,70 @@ function ReadOnlyDetails({ event }: { event: ScheduledEvent }) {
           {event.description || "—"}
         </p>
       </div>
+
+      <MyAttendance event={event} />
+
       {event.createdBy && (
         <p className="text-[11px] text-muted-foreground">Scheduled by {event.createdBy}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Your own attendance at this event, and the way to record it if you still can.
+ *
+ * The counterpart to the roster, for the roles that do not get one. It answers
+ * the two questions an officer actually has about a meeting — did my scan land,
+ * and am I down as absent from something I was at — without showing them
+ * anything about anybody else.
+ *
+ * Always rendered, `pending` included. Unlike the badge in the list, there is
+ * room here to say "not checked in" and to explain that it is not the same
+ * thing as absent.
+ */
+function MyAttendance({ event }: { event: ScheduledEvent }) {
+  const { status, statusLabel, methodLabel, checkedInLabel, canCheckIn } = event.myAttendance;
+
+  const tone =
+    status === "present"
+      ? { chip: "border-green-500/40 bg-green-500/10 text-green-400", Icon: UserCheck }
+      : status === "absent"
+        ? { chip: "border-red-500/40 bg-red-500/10 text-red-400", Icon: UserX }
+        : { chip: "border-line bg-secondary/60 text-muted-foreground", Icon: UserCheck };
+
+  // What the panel says under the status. Each reading is a different question
+  // the officer might be asking, answered in the words that fit that one.
+  const explanation =
+    status === "present"
+      ? [checkedInLabel && `Recorded at ${checkedInLabel}`, methodLabel].filter(Boolean).join(" · ")
+      : status === "absent"
+        ? "If this is wrong, ask the Secretary to correct it on the roster."
+        : event.acceptsAttendance
+          ? "Scan the event QR, or check in with the code."
+          : "No attendance was recorded for you at this event.";
+
+  return (
+    <div className="rounded-lg border border-line bg-secondary/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className={labelCls + " mb-0"}>Your attendance</p>
+        <span className={`${pill} ${tone.chip}`}>
+          <tone.Icon size={11} /> {statusLabel}
+        </span>
+      </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{explanation}</p>
+
+      {canCheckIn && (
+        // No token here — the QR token is withheld from every role but the
+        // secretariat, and rightly so. The code path needs nothing but the six
+        // characters read out at the event, so that is what this offers.
+        <a
+          href="/admin/check-in"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-primary/50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary transition-colors hover:bg-primary/10"
+        >
+          <UserCheck size={12} /> Check in with a code
+        </a>
       )}
     </div>
   );

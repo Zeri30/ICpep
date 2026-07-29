@@ -49,10 +49,19 @@ class EventResource extends JsonResource
             // server's, and a browser whose clock is a few minutes fast would
             // otherwise offer a button the endpoint refuses.
             'statusEditable' => $this->statusIsEditable(),
-            // Whether the QR and code are still good. Nothing validates them
-            // yet (there is no check-in endpoint), but the calendar can already
-            // say plainly that they have expired.
+            // Whether the QR and code are still good — enforced by the check-in
+            // endpoint, and said here so the calendar can show plainly that they
+            // have expired.
             'acceptsAttendance' => $this->acceptsAttendance(),
+
+            // Where the officer reading this stands with this event.
+            //
+            // Sent to every role, unlike the roster. The roster says who missed
+            // which meeting and is the secretariat's; your own attendance is
+            // simply yours, and an officer who scanned a QR has no other way to
+            // confirm it landed — or to notice they were marked absent from
+            // something they were at, which is the case worth catching early.
+            'myAttendance' => $this->myAttendance($request),
 
             // The attendance credentials and the share link, sent only to
             // whoever runs the schedule. The token is the whole secret behind a
@@ -72,6 +81,33 @@ class EventResource extends JsonResource
 
             'createdBy' => $this->whenLoaded('creator', fn () => $this->creator?->name),
             'createdAt' => $this->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * The signed-in officer's own attendance line.
+     *
+     * Always an object rather than sometimes null, so the UI reads one shape:
+     * `pending` is the honest answer for an event nobody has taken attendance at
+     * yet, and it is the same word the roster uses for the same state.
+     *
+     * `canCheckIn` is the one thing the officer can act on — it is true only
+     * while the codes are live *and* they are not already on the record, which
+     * is exactly when showing them a way in is worth doing.
+     *
+     * @return array<string, mixed>
+     */
+    private function myAttendance(Request $request): array
+    {
+        $officer = $request->user();
+        $record = $officer ? $this->attendanceFor($officer) : null;
+
+        return [
+            'status' => $record?->status->value ?? 'pending',
+            'statusLabel' => $record?->status->label() ?? 'Not checked in',
+            'methodLabel' => $record?->method?->label(),
+            'checkedInLabel' => $record?->checkedInLabel(),
+            'canCheckIn' => $this->acceptsAttendance() && ! (bool) $record?->isPresent(),
         ];
     }
 }

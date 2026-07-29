@@ -37,10 +37,17 @@ class EventController extends Controller
      * not thousands. If that ever stops being true, a date window belongs here
      * rather than a page number — the grid asks for a month, not a page.
      */
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
         return EventResource::collection(
-            Event::with('creator')->chronological()->get(),
+            Event::with([
+                'creator',
+                // Constrained to the officer asking, so every event can carry
+                // their own attendance without a query each. Deliberately not
+                // the whole roster: that is the secretariat's and is fetched
+                // per event from its own endpoint.
+                'attendance' => fn ($query) => $query->where('user_id', $request->user()->id),
+            ])->chronological()->get(),
         );
     }
 
@@ -159,6 +166,39 @@ class EventController extends Controller
                         "Revoked the share link for {$event->title} — the event is now {$status->label()}",
                     );
                 }
+            }
+
+            // Closing the event closes attendance with it: every active officer
+            // who never checked in is recorded Absent, because this is the
+            // moment "nobody has said" stops being an honest reading of a
+            // missing row.
+            //
+            // Only for Done. A cancelled event did not take place, so nobody
+            // missed it — a roster of eleven absences for a meeting that never
+            // happened would be a false record rather than an empty one.
+            if ($status === EventStatus::Done) {
+                $absent = $event->recordAbsentees();
+
+                if ($absent > 0) {
+                    ActivityLog::record(
+                        'attendance_closed',
+                        "Recorded {$absent} ".($absent === 1 ? 'officer' : 'officers')
+                            ." absent from {$event->title}",
+                    );
+                }
+            }
+
+            // Leaving Done takes those absences back — and only those. Every
+            // check-in stands, and so does every correction the secretariat
+            // made by hand; retracting an outcome is not a reason to discard a
+            // decision somebody made.
+            //
+            // Covers Done → Cancelled as well as Done → Scheduled: an event
+            // corrected to cancelled did not take place after all, so the
+            // absences it recorded describe a meeting nobody could have
+            // attended.
+            if ($previous === EventStatus::Done && $status !== EventStatus::Done) {
+                $event->reopenAttendance();
             }
 
             ActivityLog::record(
