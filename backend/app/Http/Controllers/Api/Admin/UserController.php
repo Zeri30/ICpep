@@ -85,8 +85,24 @@ class UserController extends Controller
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', Rule::in(UserRole::values())],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
+
+        // Normalized here too, not only in the form — a name typed in all caps
+        // or all lowercase (or hit directly through the API) reads the same
+        // way everywhere it is shown.
+        $data['first_name'] = $this->titleCase($data['first_name']);
+        $data['last_name'] = $this->titleCase($data['last_name']);
+        if (! empty($data['middle_initial'])) {
+            $data['middle_initial'] = mb_strtoupper($data['middle_initial']);
+        }
+
+        // The account form no longer asks for a password — the system picks
+        // one, the officer is forced to replace it the first time they sign
+        // in (see MeController::updatePassword and EnsureAdmin), and it is
+        // handed back once below so whoever created the account can pass it
+        // along. Signing in is already by email (AdminAuthController::login),
+        // so there is no separate "username" to generate.
+        $defaultPassword = $this->generateDefaultPassword($data);
 
         $user = User::create([
             'name' => $this->composeName($data),
@@ -95,14 +111,20 @@ class UserController extends Controller
             'last_name' => $data['last_name'],
             'email' => $data['email'],
             'role' => $data['role'],
-            'password' => Hash::make($data['password']),
+            'password' => Hash::make($defaultPassword),
+            'must_change_password' => true,
             'is_active' => true,
             'email_verified_at' => now(),
         ]);
 
         ActivityLog::record('user_created', "Created admin account: {$user->name}", $user->name);
 
-        return (new UserResource($user))->response()->setStatusCode(201);
+        return response()->json([
+            'data' => (new UserResource($user))->resolve($request),
+            // Shown once, in the "account created" panel — never persisted or
+            // logged in plaintext anywhere past this response.
+            'generatedPassword' => $defaultPassword,
+        ], 201);
     }
 
     public function update(Request $request, User $user): UserResource|JsonResponse
@@ -114,6 +136,12 @@ class UserController extends Controller
             'email' => ['required', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(UserRole::values())],
         ]);
+
+        $data['first_name'] = $this->titleCase($data['first_name']);
+        $data['last_name'] = $this->titleCase($data['last_name']);
+        if (! empty($data['middle_initial'])) {
+            $data['middle_initial'] = mb_strtoupper($data['middle_initial']);
+        }
 
         // Guard against self-lockout: you can't change your own role (activate /
         // deactivate has its own dedicated, self-protected endpoint).
@@ -151,17 +179,40 @@ class UserController extends Controller
         return new UserResource($user->fresh());
     }
 
-    public function resetPassword(Request $request, User $user): JsonResponse
+    /**
+     * Put the account back into the same first-login state a newly created one
+     * starts in: a fresh system-generated password, built from the account's
+     * own name the same way {@see self::generateDefaultPassword()} builds one
+     * at creation, and {@see \App\Models\User::$must_change_password} forced
+     * back on so it must be replaced before anything else. Everything else on
+     * the account — name, email, role — is untouched.
+     *
+     * Deliberately not "let the officer resetting it type in a password of
+     * their choosing": that password is one more secret that has to be handed
+     * over safely, where a generated one that must be replaced on first sign-in
+     * never needs to stay secret past that moment.
+     */
+    public function resetPassword(User $user): JsonResponse
     {
-        $data = $request->validate([
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        $defaultPassword = $this->generateDefaultPassword([
+            'first_name' => (string) $user->first_name,
+            'middle_initial' => $user->middle_initial,
+            'last_name' => (string) $user->last_name,
         ]);
 
-        $user->update(['password' => Hash::make($data['password'])]);
+        $user->update([
+            'password' => Hash::make($defaultPassword),
+            'must_change_password' => true,
+        ]);
 
         ActivityLog::record('password_reset', "Reset the password for admin {$user->name}", $user->name);
 
-        return response()->json(['ok' => true]);
+        return response()->json([
+            'ok' => true,
+            // Shown once, the same as the password a newly created account
+            // gets — never persisted or logged in plaintext past this response.
+            'generatedPassword' => $defaultPassword,
+        ]);
     }
 
     /** Permanent, irreversible removal. Super-Admin only (route middleware). */
@@ -194,6 +245,41 @@ class UserController extends Controller
         $middle = $middle === '' ? '' : mb_strtoupper($middle).'. ';
 
         return trim($data['first_name'].' '.$middle.$data['last_name']);
+    }
+
+    /**
+     * The first-login password a newly created account starts with —
+     * "first.last.m", or "first.last" when there's no middle initial (the
+     * same name parts {@see self::composeName()} builds the display name
+     * from). Lowercased throughout and with the spaces stripped out of
+     * whichever part has them (a first or last name of more than one word),
+     * so the password an officer is read out or hands over is always one
+     * simple, unspaced token per part. The officer is forced to replace it
+     * before doing anything else.
+     *
+     * @param  array{first_name:string,middle_initial?:?string,last_name:string}  $data
+     */
+    private function generateDefaultPassword(array $data): string
+    {
+        $middle = trim((string) ($data['middle_initial'] ?? ''));
+
+        return mb_strtolower(implode('.', array_filter([
+            $this->collapseSpaces($data['first_name']),
+            $this->collapseSpaces($data['last_name']),
+            $middle === '' ? null : $middle,
+        ])));
+    }
+
+    /** "Mark  Arone " → "MarkArone" — every space gone, not just the outer ones. */
+    private function collapseSpaces(string $value): string
+    {
+        return str_replace(' ', '', trim($value));
+    }
+
+    /** "jUAN dela  CRUZ" → "Juan Dela Cruz" — normalized regardless of how it arrived. */
+    private function titleCase(string $value): string
+    {
+        return mb_convert_case(trim($value), MB_CASE_TITLE, 'UTF-8');
     }
 
     private function isSelf(Request $request, User $user): bool

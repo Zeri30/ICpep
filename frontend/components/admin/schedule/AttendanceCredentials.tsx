@@ -20,6 +20,7 @@ import {
   Link2,
   Loader2,
   Lock,
+  MapPin,
   QrCode,
   TriangleAlert,
 } from "lucide-react";
@@ -61,10 +62,18 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 export default function AttendanceCredentials({
   event,
   onShared,
+  className = "",
 }: {
   event: ScheduledEvent;
   /** Hands back the event with its new share link, so the modal can show it. */
   onShared: (updated: ScheduledEvent) => void;
+  /**
+   * Extra classes on the card itself — namely `flex-1` from EventModal, so
+   * this is the card whose border grows to close the gap when the Status &
+   * QR tab has less to show than the fields beside it, rather than leaving
+   * empty space below a card that stopped at its own natural size.
+   */
+  className?: string;
 }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +93,7 @@ export default function AttendanceCredentials({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-secondary/30 p-4">
+    <div className={`rounded-lg border border-line bg-secondary/30 p-4 ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           <QrCode size={13} /> Attendance
@@ -102,6 +111,12 @@ export default function AttendanceCredentials({
           {event.acceptsAttendance ? "Active" : "Expired"}
         </span>
       </div>
+
+      {event.venue && (
+        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-secondary-foreground">
+          <MapPin size={12} className="shrink-0 text-primary" /> {event.venue}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-4">
         {/* On white, always. A QR inverted onto a dark card is rejected by a

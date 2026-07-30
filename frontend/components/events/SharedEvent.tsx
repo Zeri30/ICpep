@@ -31,6 +31,7 @@ export type SharedEventData = {
   available: true;
   title: string;
   category: string;
+  venue: string | null;
   date: string;
   dateLabel: string;
   timeLabel: string;
@@ -211,6 +212,11 @@ export default function SharedEvent({ event }: { event: SharedEventData }) {
                     <span className="mt-1 flex items-center gap-1.5 text-sm text-secondary-foreground">
                       <Clock size={14} className="text-primary" /> {event.timeLabel}
                     </span>
+                    {event.venue && (
+                      <span className="mt-1 flex items-center gap-1.5 text-sm text-secondary-foreground">
+                        <MapPin size={14} className="text-primary" /> {event.venue}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

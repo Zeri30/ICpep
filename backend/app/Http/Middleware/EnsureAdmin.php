@@ -29,6 +29,17 @@ class EnsureAdmin
             return response()->json(['message' => 'This account cannot access the admin.'], 403);
         }
 
+        // An account still on its system-generated first-login password gets
+        // exactly two doors: reading who it is, and setting a real password.
+        // Enforced here rather than left to the frontend's own redirect, so a
+        // direct API call can't reach the rest of the admin either.
+        if ($user->must_change_password && ! $request->routeIs('admin.api.me', 'admin.api.me.password.update')) {
+            return response()->json([
+                'message' => 'You must change your password before continuing.',
+                'mustChangePassword' => true,
+            ], 423);
+        }
+
         return $next($request);
     }
 }

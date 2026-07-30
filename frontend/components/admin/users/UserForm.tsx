@@ -11,7 +11,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Eye, EyeOff, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import RoleOptions from "@/components/admin/users/RoleOptions";
@@ -22,15 +22,27 @@ const inputCls =
   "w-full rounded-md border border-line bg-secondary/60 px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary/60 disabled:opacity-60";
 const labelCls = "mb-1.5 block font-head text-[11px] font-semibold uppercase tracking-widest text-secondary-foreground";
 
+/**
+ * "juan DELA cruz" → "Juan Dela Cruz" — regardless of how it was typed, so a
+ * name pasted in from an all-caps ID or typed without the shift key still
+ * reads the way it will everywhere else in the system (the activity log, the
+ * roster, the generated password's own display name).
+ */
+function toTitleCase(value: string): string {
+  return value.replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
 type FormState = {
   firstName: string;
   middleInitial: string;
   lastName: string;
   email: string;
   role: string;
-  password: string;
-  passwordConfirmation: string;
 };
+
+/** What a successful create hands back — the system-generated first-login
+ *  password, shown once so it can be passed along to the new administrator. */
+export type CreatedAccount = { email: string; generatedPassword: string };
 
 /* ------------------------------------------------------------------- state */
 
@@ -39,7 +51,14 @@ type FormState = {
  * after a successful save so the page can navigate and the modal can close and
  * refresh the list behind it.
  */
-export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () => void }) {
+export function useAccountForm({
+  user,
+  onDone,
+}: {
+  user?: AdminUser;
+  /** Called with the generated credentials on create; with nothing on edit. */
+  onDone: (created?: CreatedAccount) => void;
+}) {
   const { meta, notify } = useAdmin();
   const editing = !!user;
 
@@ -52,10 +71,7 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
     // This used to take the last option in the list, which was that role only
     // until the day a case was added after it — as the Team Heads were.
     role: user?.role ?? meta.defaultRole,
-    password: "",
-    passwordConfirmation: "",
   }));
-  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -64,12 +80,6 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-
-    if (!editing) {
-      if (form.password.length < 8) return setFormError("Password must be at least 8 characters.");
-      if (form.password !== form.passwordConfirmation) return setFormError("The passwords do not match.");
-    }
-
     setSaving(true);
     try {
       if (editing) {
@@ -81,19 +91,21 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
           role: form.role,
         });
         notify("Account updated");
+        onDone();
       } else {
-        await apiSend("POST", "/users", {
+        // The system generates the first-login password — see
+        // UserController::store — and hands it back once so it can be shown
+        // on screen; nothing here asks the admin to choose one.
+        const created = await apiSend<{ generatedPassword: string }>("POST", "/users", {
           first_name: form.firstName,
           middle_initial: form.middleInitial,
           last_name: form.lastName,
           email: form.email,
           role: form.role,
-          password: form.password,
-          password_confirmation: form.passwordConfirmation,
         });
         notify("Administrator account created");
+        onDone({ email: form.email, generatedPassword: created.generatedPassword });
       }
-      onDone();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Could not save.");
       setSaving(false);
@@ -106,8 +118,6 @@ export function useAccountForm({ user, onDone }: { user?: AdminUser; onDone: () 
     editing,
     // You cannot change your own role from here (guarded server-side too).
     roleLocked: editing && user!.isSelf,
-    showPassword,
-    setShowPassword,
     saving,
     formError,
     submit,
@@ -125,91 +135,48 @@ export type AccountFormState = ReturnType<typeof useAccountForm>;
  * nesting one inside another.
  */
 export function AccountFields({ state, boxed = true }: { state: AccountFormState; boxed?: boolean }) {
-  const { form, set, editing, roleLocked, showPassword, setShowPassword, roles } = state;
+  const { form, set, roleLocked, roles } = state;
   const section = boxed ? "rounded-xl border border-line bg-card p-6" : "";
   const heading = `mb-5 font-display text-sm font-bold uppercase tracking-widest text-primary${boxed ? "" : " sr-only"}`;
 
   return (
-    <>
-      <section className={section}>
-        <h2 className={heading}>Account details</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
+    <section className={section}>
+      <h2 className={heading}>Account details</h2>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelCls}>First Name</label>
+          <input className={inputCls} value={form.firstName} onChange={(e) => set({ firstName: toTitleCase(e.target.value) })} required maxLength={100} autoComplete="off" placeholder="Juan" />
+        </div>
+        <div className="grid grid-cols-[6rem_1fr] gap-4">
           <div>
-            <label className={labelCls}>First Name</label>
-            <input className={inputCls} value={form.firstName} onChange={(e) => set({ firstName: e.target.value })} required maxLength={100} autoComplete="off" placeholder="Juan" />
+            <label className={labelCls}>M.I.</label>
+            <input
+              className={inputCls}
+              value={form.middleInitial}
+              onChange={(e) => set({ middleInitial: e.target.value.slice(0, 1).toUpperCase() })}
+              maxLength={1}
+              autoComplete="off"
+              placeholder="S"
+            />
           </div>
-          <div className="grid grid-cols-[6rem_1fr] gap-4">
-            <div>
-              <label className={labelCls}>M.I.</label>
-              <input
-                className={inputCls}
-                value={form.middleInitial}
-                onChange={(e) => set({ middleInitial: e.target.value.slice(0, 1) })}
-                maxLength={1}
-                autoComplete="off"
-                placeholder="S"
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Last Name</label>
-              <input className={inputCls} value={form.lastName} onChange={(e) => set({ lastName: e.target.value })} required maxLength={100} autoComplete="off" placeholder="Dela Cruz" />
-            </div>
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Email</label>
-            <input type="email" className={inputCls} value={form.email} onChange={(e) => set({ email: e.target.value })} required maxLength={150} />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Role</label>
-            <select className={inputCls} value={form.role} onChange={(e) => set({ role: e.target.value })} disabled={roleLocked}>
-              <RoleOptions roles={roles} />
-            </select>
-            {roleLocked && <p className="mt-1.5 text-xs text-muted-foreground">You can’t change your own role.</p>}
+          <div>
+            <label className={labelCls}>Last Name</label>
+            <input className={inputCls} value={form.lastName} onChange={(e) => set({ lastName: toTitleCase(e.target.value) })} required maxLength={100} autoComplete="off" placeholder="Dela Cruz" />
           </div>
         </div>
-      </section>
-
-      {!editing && (
-        <section className={section}>
-          <h2 className={heading}>Password</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className={labelCls}>Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className={`${inputCls} pr-11`}
-                  value={form.password}
-                  onChange={(e) => set({ password: e.target.value })}
-                  autoComplete="new-password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              <p className="mt-1.5 text-xs text-muted-foreground">At least 8 characters.</p>
-            </div>
-            <div>
-              <label className={labelCls}>Confirm password</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                className={inputCls}
-                value={form.passwordConfirmation}
-                onChange={(e) => set({ passwordConfirmation: e.target.value })}
-                autoComplete="new-password"
-                required
-              />
-            </div>
-          </div>
-        </section>
-      )}
-    </>
+        <div className="sm:col-span-2">
+          <label className={labelCls}>Email</label>
+          <input type="email" className={inputCls} value={form.email} onChange={(e) => set({ email: e.target.value })} required maxLength={150} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelCls}>Role</label>
+          <select className={inputCls} value={form.role} onChange={(e) => set({ role: e.target.value })} disabled={roleLocked}>
+            <RoleOptions roles={roles} />
+          </select>
+          {roleLocked && <p className="mt-1.5 text-xs text-muted-foreground">You can’t change your own role.</p>}
+        </div>
+      </div>
+    </section>
   );
 }
 
