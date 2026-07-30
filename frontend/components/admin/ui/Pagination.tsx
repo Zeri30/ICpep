@@ -41,9 +41,18 @@ function pageItems(current: number, last: number): Array<number | "gap"> {
 export default function Pagination({
   meta,
   onPage,
+  disabled = false,
 }: {
   meta: PageMeta;
   onPage: (page: number) => void;
+  /**
+   * True while the current page's data is still in flight. Blocks every page
+   * control so a click mid-fetch can't queue up a second, overlapping request
+   * — without this, a fast double-click on "Next" fires against whichever
+   * page happened to be current at the time of each click, and the two
+   * responses can land in either order.
+   */
+  disabled?: boolean;
 }) {
   const { current_page, last_page, total, from, to } = meta;
   if (total === 0) return null;
@@ -62,7 +71,7 @@ export default function Pagination({
       <div className="flex flex-wrap items-center justify-end gap-1.5">
         <button
           onClick={() => onPage(current_page - 1)}
-          disabled={current_page <= 1}
+          disabled={disabled || current_page <= 1}
           aria-label="Previous page"
           className={arrow}
         >
@@ -78,9 +87,10 @@ export default function Pagination({
             <button
               key={item}
               onClick={() => onPage(item)}
+              disabled={disabled}
               aria-label={`Page ${item}`}
               aria-current={item === current_page ? "page" : undefined}
-              className={`grid size-8 place-items-center rounded-md border tabular-nums transition-colors ${
+              className={`grid size-8 place-items-center rounded-md border tabular-nums transition-colors disabled:pointer-events-none disabled:opacity-40 ${
                 item === current_page
                   ? "border-primary/60 bg-primary/10 font-semibold text-primary"
                   : "border-line/60 hover:border-primary/60 hover:text-primary"
@@ -93,7 +103,7 @@ export default function Pagination({
 
         <button
           onClick={() => onPage(current_page + 1)}
-          disabled={current_page >= last_page}
+          disabled={disabled || current_page >= last_page}
           aria-label="Next page"
           className={arrow}
         >
