@@ -65,7 +65,7 @@ class MemberController extends Controller
             'givenName' => ['required', 'string', 'max:100'],
             'middleInitial' => ['nullable', 'string', 'max:1'],
             'studentId' => [
-                'required', 'string', 'max:20', 'regex:/^[A-Za-z0-9-]+$/',
+                'required', 'string', 'digits:10',
                 Rule::unique('applications', 'student_id')->ignore($application->id),
             ],
             'yearLevel' => ['required', Rule::in(Application::YEAR_LEVELS)],

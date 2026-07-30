@@ -336,9 +336,19 @@ export default function Membership() {
                   id="studentId"
                   name="studentId"
                   type="text"
+                  inputMode="numeric"
                   required
-                  maxLength={20}
-                  placeholder="22-1234-567"
+                  maxLength={10}
+                  pattern="\d{10}"
+                  title="Exactly 10 digits, numbers only"
+                  placeholder="2024012345"
+                  // Uncontrolled (read via FormData on submit), so digits are
+                  // stripped in place rather than through React state — strays
+                  // like a pasted dash or a leading space never reach the
+                  // backend's exact-10-digits check.
+                  onChange={(e) => {
+                    e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 10);
+                  }}
                   className={fieldBase}
                 />
               </div>

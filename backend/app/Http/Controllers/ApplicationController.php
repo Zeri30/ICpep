@@ -76,7 +76,7 @@ class ApplicationController extends Controller
             'surname'        => ['required', 'string', 'max:100'],
             'givenName'      => ['required', 'string', 'max:100'],
             'middleInitial'  => ['nullable', 'string', 'max:1'],
-            'studentId'      => ['required', 'string', 'max:20', 'regex:/^[A-Za-z0-9-]+$/', 'unique:applications,student_id'],
+            'studentId'      => ['required', 'string', 'digits:10', 'unique:applications,student_id'],
             'yearLevel'      => ['required', 'string', 'max:50'],
             'section'        => ['required', 'string', 'max:50'],
             'birthday'       => ['required', 'date'],
