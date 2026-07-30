@@ -38,9 +38,23 @@ class MemberController extends Controller
 
     /* ------------------------------------------------------------------ read */
 
+    /**
+     * Columns the list actually reads. Excludes `signature_path` (only ever
+     * needed on a single record, via MemberResource::withFiles on `show()`) and
+     * `updated_at` (not read by MemberResource at all). `address` and
+     * `birthday` stay even though the table doesn't render them: EditMemberModal
+     * opens straight off a list row with no fetch of its own, so trimming those
+     * would silently blank both fields the moment an officer edits from here.
+     */
+    private const LIST_COLUMNS = [
+        'id', 'membership_term_id', 'surname', 'given_name', 'middle_initial',
+        'student_id', 'year_level', 'section', 'birthday', 'address', 'email',
+        'phone', 'picture_path', 'paid_at', 'created_at', 'deleted_at',
+    ];
+
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = $this->applySort($this->filtered($request), $request);
+        $query = $this->applySort($this->filtered($request), $request)->select(self::LIST_COLUMNS);
 
         return MemberResource::collection($query->paginate($this->perPage($request))->withQueryString());
     }

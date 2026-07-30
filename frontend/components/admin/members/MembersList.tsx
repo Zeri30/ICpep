@@ -34,7 +34,8 @@ import DataTable, { type Column, type SortState } from "@/components/admin/ui/Da
 import Pagination from "@/components/admin/ui/Pagination";
 import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/admin/members/MembersFilters";
 import EditMemberModal from "@/components/admin/members/EditMemberModal";
-import { apiSend, useAdminResource } from "@/lib/adminApi";
+import { useMembersListResource } from "@/components/admin/members/useMembersListResource";
+import { apiSend } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
 
@@ -143,7 +144,7 @@ export default function MembersList() {
 
   // Hold off until the term is known, so the table never flashes the current
   // list's members while a past list is the one selected.
-  const { data, error, refresh } = useAdminResource<Paginated<Member>>(
+  const { data, error, fetching, refresh } = useMembersListResource<Paginated<Member>>(
     termsLoading ? null : `/members?${queryString}`,
   );
 
@@ -502,7 +503,16 @@ export default function MembersList() {
         // — otherwise the band appears with the data and shoves the table up.
         // It also has to give way on a semester switch, or the pager would
         // still be reporting the previous semester's totals.
-        footer={awaitingRows ? <PaginationSkeleton /> : data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+        footer={
+          awaitingRows ? (
+            <PaginationSkeleton />
+          ) : data ? (
+            // Disabled while a page/sort/filter fetch for this same term is in
+            // flight — a click here would otherwise queue a second, overlapping
+            // request whose response can land before or after the first.
+            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+          ) : null
+        }
       />
 
       {/* Editing stays on the list, so filters, term and page survive a save. */}
