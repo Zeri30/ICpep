@@ -33,18 +33,26 @@ export default function TermBar() {
             where two long uppercase labels otherwise wrap mid-word. */}
         {canManage && (
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-            <button
-              type="button"
-              onClick={() => setRegistrationMode(open ? "close" : "open")}
-              className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-head font-semibold uppercase tracking-widest transition-colors ${
-                open
-                  ? "border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-                  : "border-green-500/40 text-green-400 hover:bg-green-500/10"
-              }`}
-            >
-              {open ? <Lock size={14} /> : <LockOpen size={14} />}
-              {open ? "Close Registration" : "Reopen Registration"}
-            </button>
+            {/* Registration open/close always acts on the current list, never
+                the one on screen — offering it while browsing a past list
+                would let an officer "close registration" for a list that
+                isn't accepting applicants anyway, while actually closing the
+                real current one. Hidden here rather than disabled, since
+                there's no in-context action for it to explain. */}
+            {!isViewingPast && (
+              <button
+                type="button"
+                onClick={() => setRegistrationMode(open ? "close" : "open")}
+                className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-head font-semibold uppercase tracking-widest transition-colors ${
+                  open
+                    ? "border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                    : "border-green-500/40 text-green-400 hover:bg-green-500/10"
+                }`}
+              >
+                {open ? <Lock size={14} /> : <LockOpen size={14} />}
+                {open ? "Close Registration" : "Reopen Registration"}
+              </button>
+            )}
 
             <button
               type="button"
