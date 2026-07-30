@@ -2,12 +2,15 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\AttendanceStatus;
+use App\Enums\EventStatus;
+use App\Models\Event;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * @mixin \App\Models\Event
+ * @mixin Event
  */
 class EventResource extends JsonResource
 {
@@ -17,6 +20,7 @@ class EventResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'category' => $this->category,
+            'venue' => $this->venue,
 
             // The calendar day and time of day, already in the organization's
             // timezone. The grid groups on `date` and the form fills from
@@ -91,9 +95,19 @@ class EventResource extends JsonResource
      * `pending` is the honest answer for an event nobody has taken attendance at
      * yet, and it is the same word the roster uses for the same state.
      *
+     * A missing record reads as `absent` the moment the event's own end time
+     * has passed, computed here rather than waited for — the row itself is
+     * only written the next time somebody opens the roster (see
+     * AttendanceController::index() and Event::recordAbsentees()), and an
+     * officer checking their own standing should not have to wait on that.
+     * Not for a cancelled event: nothing took place, so nobody missed it.
+     *
      * `canCheckIn` is the one thing the officer can act on — it is true only
-     * while the codes are live *and* they are not already on the record, which
-     * is exactly when showing them a way in is worth doing.
+     * while the codes are live, the event's attendance is not yet locked,
+     * *and* they are not already on the record, which is exactly when
+     * showing them a way in is worth doing. Once attendance is locked, this
+     * panel is not offering a way back in even on the same day — see
+     * Event::attendanceLocked().
      *
      * @return array<string, mixed>
      */
@@ -102,12 +116,19 @@ class EventResource extends JsonResource
         $officer = $request->user();
         $record = $officer ? $this->attendanceFor($officer) : null;
 
+        $status = $record?->status
+            ?? ($this->attendanceLocked() && $this->status !== EventStatus::Cancelled
+                ? AttendanceStatus::Absent
+                : null);
+
         return [
-            'status' => $record?->status->value ?? 'pending',
-            'statusLabel' => $record?->status->label() ?? 'Not checked in',
+            'status' => $status?->value ?? 'pending',
+            'statusLabel' => $status?->label() ?? 'Not checked in',
             'methodLabel' => $record?->method?->label(),
             'checkedInLabel' => $record?->checkedInLabel(),
-            'canCheckIn' => $this->acceptsAttendance() && ! (bool) $record?->isPresent(),
+            'canCheckIn' => $this->acceptsAttendance()
+                && ! $this->attendanceLocked()
+                && ! (bool) $record?->isPresent(),
         ];
     }
 }

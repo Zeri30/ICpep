@@ -60,6 +60,7 @@ class EventController extends Controller
         $event = Event::create([
             'title' => $data['title'],
             'category' => $data['category'],
+            'venue' => $data['venue'] ?? null,
             'starts_at' => Event::combine($data['date'], $data['time']),
             'ends_at' => Event::combine($data['date'], $data['endTime']),
             'description' => $data['description'] ?? null,
@@ -93,6 +94,7 @@ class EventController extends Controller
         $event->update([
             'title' => $data['title'],
             'category' => $data['category'],
+            'venue' => $data['venue'] ?? null,
             'starts_at' => Event::combine($data['date'], $data['time']),
             'ends_at' => Event::combine($data['date'], $data['endTime']),
             'description' => $data['description'] ?? null,
@@ -270,13 +272,14 @@ class EventController extends Controller
      * Date and time arrive as the officer typed them and are combined into one
      * instant on the way to the database — see {@see Event::combine()}.
      *
-     * @return array{title:string,category:string,date:string,time:string,endTime:string,description?:string|null}
+     * @return array{title:string,category:string,venue?:string|null,date:string,time:string,endTime:string,description?:string|null}
      */
     private function validated(Request $request): array
     {
         $data = $request->validate([
             'title' => ['required', 'string', 'max:150'],
             'category' => ['required', 'string', Rule::in(Event::CATEGORIES)],
+            'venue' => ['nullable', 'string', 'max:150'],
             'date' => ['required', 'date_format:Y-m-d'],
             'time' => ['required', 'date_format:H:i'],
             'endTime' => ['required', 'date_format:H:i'],

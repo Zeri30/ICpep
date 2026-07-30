@@ -47,6 +47,10 @@ export type Officer = {
   roleLabel: string | null;
   /** True for roles allowed into User Management (Programming Team only). */
   canManageUsers: boolean;
+  /** True while the account is still on its system-generated first-login
+   *  password — the (admin) layout redirects to /change-password until it's
+   *  cleared, and the backend refuses every other endpoint in the meantime. */
+  mustChangePassword: boolean;
   /** The abilities this officer's role grants — the UI gates modules/actions on these. */
   permissions: Permission[];
 };

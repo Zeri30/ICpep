@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\RoleFamily;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\Event;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The signed-in officer plus the small pieces of config the admin UI needs to
@@ -29,6 +32,12 @@ class MeController extends Controller
                 'role' => $user->role?->value,
                 'roleLabel' => $user->role?->label(),
                 'canManageUsers' => $user->canManageUsers(),
+                // True for an account still on its system-generated
+                // first-login password — the frontend routes it to
+                // /change-password instead of the admin before anything
+                // else, and EnsureAdmin refuses every other endpoint until it
+                // is cleared.
+                'mustChangePassword' => (bool) $user->must_change_password,
                 // The ability strings the UI gates modules and actions on — the
                 // same values the backend Gates enforce.
                 'permissions' => array_map(
@@ -64,5 +73,39 @@ class MeController extends Controller
                 'timezone' => Event::timezone(),
             ],
         ]);
+    }
+
+    /**
+     * Set your own password — the only self-service write this controller
+     * does. The one route EnsureAdmin still allows an account through on its
+     * first-login default, since it is the way out of that state.
+     *
+     * Refuses a "new" password that is the one already on the account: on a
+     * first login that is almost always the officer re-typing the default
+     * they were just given rather than one they chose, which is exactly the
+     * gap a forced change exists to close.
+     */
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user = $request->user();
+
+        if (Hash::check($data['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => 'Choose a password you have not used before.',
+            ]);
+        }
+
+        $user->update([
+            'password' => Hash::make($data['password']),
+            'must_change_password' => false,
+        ]);
+
+        ActivityLog::record('password_changed', "{$user->name} changed their password", $user->name);
+
+        return response()->json(['ok' => true]);
     }
 }

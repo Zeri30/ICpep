@@ -65,6 +65,16 @@ class AdminAuthController extends Controller
         RateLimiter::clear($key);
         $request->session()->regenerate();
 
+        // A session that was last authenticated as someone else (a shared
+        // computer, a browser never explicitly signed out of) can still be
+        // carrying that account's password hash — see the 'auth.session'
+        // alias in bootstrap/app.php. regenerate() rotates the session id but
+        // does not touch this key, so a stale value here would read as this
+        // fresh login already having gone bad the moment the next request
+        // checks it. Forgetting it lets 'auth.session' re-prime itself for
+        // whoever just signed in.
+        $request->session()->forget('password_hash_web');
+
         // Land officers in the React admin on the public site's own origin.
         return response()->json(['redirect' => rtrim(config('app.frontend_url'), '/').'/admin']);
     }

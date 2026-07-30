@@ -27,9 +27,16 @@ use Illuminate\Support\Facades\Route;
 | login, since the frontend already proxies /auth and talks to it.
 */
 
-Route::middleware(EnsureAdmin::class)->group(function () {
+// 'auth.session' runs ahead of EnsureAdmin so a session whose password hash
+// has gone stale (the account was reset or changed its password elsewhere) is
+// rejected before anything else here even asks who it belongs to — see the
+// alias's own note in bootstrap/app.php for what it does and why.
+Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // Open to any active administrator.
     Route::get('/me', [MeController::class, 'show'])->name('me');
+    // The one write EnsureAdmin still lets a must-change-password account
+    // reach — see the middleware for why everything else is closed to it.
+    Route::post('/me/password', [MeController::class, 'updatePassword'])->name('me.password.update');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');

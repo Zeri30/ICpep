@@ -27,16 +27,26 @@ export default function StatCard({
 }) {
   const accent = toneColor[tone];
   return (
-    <div className="relative overflow-hidden rounded-xl border border-line bg-card p-5">
-      <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
-      <div className="flex items-start justify-between gap-3">
+    <div className="relative overflow-hidden rounded-xl border border-line bg-card p-5 transition-colors hover:border-white/15">
+      {/* Ambient corner glow instead of a flat accent bar — echoes the crimson
+          glow used across the site rather than a stock "colored stripe" tile. */}
+      <div
+        className="pointer-events-none absolute -right-8 -top-8 size-28 rounded-full blur-2xl"
+        style={{ background: accent, opacity: 0.16 }}
+      />
+      <div className="relative flex items-start justify-between gap-3">
         <p className="font-head text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
           {label}
         </p>
-        <Icon size={18} style={{ color: accent }} />
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg"
+          style={{ background: `${accent}1f`, color: accent }}
+        >
+          <Icon size={16} />
+        </span>
       </div>
-      <p className="mt-3 font-display text-3xl font-black tabular-nums text-foreground">{value}</p>
-      {description && <p className="mt-1.5 text-xs text-muted-foreground">{description}</p>}
+      <p className="relative mt-3 font-display text-3xl font-black tabular-nums text-foreground">{value}</p>
+      {description && <p className="relative mt-1.5 text-xs text-muted-foreground">{description}</p>}
     </div>
   );
 }

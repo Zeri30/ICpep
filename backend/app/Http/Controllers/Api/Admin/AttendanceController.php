@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Enums\AttendanceMethod;
 use App\Enums\AttendanceStatus;
+use App\Enums\EventStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EventAttendanceResource;
 use App\Models\ActivityLog;
@@ -166,6 +167,15 @@ class AttendanceController extends Controller
     {
         Gate::authorize('schedule.manage');
 
+        // The event's own end time closes the roster on its own, whether or
+        // not anyone has marked it Done — see Event::attendanceLocked(). A
+        // cancelled event is left alone: nothing took place, so nobody missed
+        // it, the same rule EventController::status() applies when Done is
+        // set by hand.
+        if ($event->attendanceLocked() && $event->status !== EventStatus::Cancelled) {
+            $event->recordAbsentees();
+        }
+
         $officers = User::query()
             ->where('is_active', true)
             ->with([
@@ -187,12 +197,16 @@ class AttendanceController extends Controller
                 'pending' => $this->countOf($rows, 'pending'),
                 'total' => count($rows),
             ],
-            // The two facts the roster's own controls turn on: whether the QR
-            // and code are still live, and whether the event has been closed
-            // off. Sent so the panel never re-derives either from a browser
-            // clock that may disagree with the server's.
+            // The facts the roster's own controls turn on: whether the QR and
+            // code are still live, whether the event has been closed off, and
+            // whether its own end time has passed and the roster is therefore
+            // no longer correctable at all. Sent so the panel never re-derives
+            // any of them from a browser clock that may disagree with the
+            // server's.
             'acceptsAttendance' => $event->acceptsAttendance(),
             'closedReason' => $event->attendanceClosedReason(),
+            'attendanceLocked' => $event->attendanceLocked(),
+            'attendanceLockedReason' => $event->attendanceLockedReason(),
         ]);
     }
 
@@ -211,6 +225,16 @@ class AttendanceController extends Controller
     public function update(Request $request, Event $event, User $user): JsonResponse
     {
         Gate::authorize('schedule.manage');
+
+        // Once the event's own end time has passed, the roster closes on its
+        // own — see Event::attendanceLocked(). Checked ahead of validation so
+        // a stale button reports why nothing happened rather than a generic
+        // failure.
+        if ($event->attendanceLocked()) {
+            throw ValidationException::withMessages([
+                'status' => $event->attendanceLockedReason(),
+            ]);
+        }
 
         $data = $request->validate([
             'status' => ['required', Rule::in([...AttendanceStatus::values(), 'pending'])],
@@ -308,6 +332,7 @@ class AttendanceController extends Controller
                 'id' => $event->id,
                 'title' => $event->title,
                 'category' => $event->category,
+                'venue' => $event->venue,
                 'dateLabel' => $event->starts_at->setTimezone(Event::timezone())->format('l, j F Y'),
                 'timeRangeLabel' => $event->displayTimeRange(),
                 'timingLabel' => $event->timingLabel(),
