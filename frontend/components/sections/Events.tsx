@@ -96,8 +96,15 @@ function EventPanel({ e, index }: { e: EventItem; index: number }) {
         draggable={false}
         className="select-none object-cover transition-transform duration-500 group-hover:scale-[1.04]"
       />
-      {/* legibility scrim: dark at the base, clear at the top */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/10" />
+      {/* Legibility scrim, two gradients layered rather than one flat panel:
+          a soft vignette across the whole photo keeps it readable even where
+          the image itself is busy, and a second gradient concentrated over
+          the bottom (where the text sits) stacks on top of it for the
+          contrast the date/venue/title actually need. Both fade smoothly to
+          transparent, so the top of the photo — and its colour — stays
+          visible instead of sitting under a flat black panel. */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 top-1/4 bg-gradient-to-t from-black via-black/60 to-transparent" />
       <div className="absolute top-0 inset-x-0 h-1 z-10" style={{ background: `linear-gradient(90deg, ${hex}, transparent)` }} />
       <span
         className="pointer-events-none absolute right-4 top-3 z-10 font-display font-black leading-none select-none text-5xl opacity-25"
@@ -108,15 +115,26 @@ function EventPanel({ e, index }: { e: EventItem; index: number }) {
 
       <div className="relative z-10 flex h-full flex-col p-8">
         <div className="flex items-center justify-between">
-          <Badge tone={e.tone}>{e.cat}</Badge>
+          {/* onImage: this badge sits directly on the event photo, not the
+              card background, so it needs the photo-safe treatment rather
+              than the usual near-transparent chip. */}
+          <Badge tone={e.tone} onImage>{e.cat}</Badge>
           <ArrowUpRight
             size={20}
             className="text-white/40 group-hover:text-primary group-hover:-translate-y-1 group-hover:translate-x-1 transition-all"
           />
         </div>
 
-        <div className="mt-auto">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mb-4">
+        {/* Text shadow here is a supplement to the scrim above, not a
+            replacement for it — it sharpens edges against busy photos where
+            the gradient alone can still get close on contrast. */}
+        <div className="mt-auto [text-shadow:0_1px_3px_rgba(0,0,0,0.85)]">
+          {/* text-white/90 rather than the usual text-muted-foreground: that
+              gray tops out near 4.4:1 even on a pure black backdrop, just
+              short of the 4.5:1 small-text AA floor — no amount of scrim
+              behind it closes that gap, so the colour itself has to change
+              here specifically. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/90 mb-4">
             <span className="flex items-center gap-1.5">
               <Calendar size={13} style={{ color: hex }} /> {e.month}
             </span>
