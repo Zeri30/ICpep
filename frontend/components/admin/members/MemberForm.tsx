@@ -133,7 +133,7 @@ export function MemberFields({ state, boxed = true }: { state: MemberFormState; 
           <div><label className={labelCls}>Surname</label><input className={inputCls} value={form.surname} onChange={(e) => set({ surname: e.target.value })} required maxLength={100} /></div>
           <div><label className={labelCls}>Given Name</label><input className={inputCls} value={form.givenName} onChange={(e) => set({ givenName: e.target.value })} required maxLength={100} /></div>
           <div><label className={labelCls}>Middle Initial</label><input className={inputCls} value={form.middleInitial} onChange={(e) => set({ middleInitial: e.target.value })} maxLength={1} /></div>
-          <div><label className={labelCls}>Student ID</label><input className={inputCls} value={form.studentId} onChange={(e) => set({ studentId: e.target.value })} required maxLength={20} /></div>
+          <div><label className={labelCls}>Student ID</label><input className={inputCls} value={form.studentId} onChange={(e) => set({ studentId: e.target.value.replace(/\D/g, "").slice(0, 10) })} required maxLength={10} pattern="\d{10}" inputMode="numeric" title="Exactly 10 digits, numbers only" /></div>
           <div>
             <label className={labelCls}>Year Level</label>
             <select className={inputCls} value={form.yearLevel} onChange={(e) => set({ yearLevel: e.target.value })}>

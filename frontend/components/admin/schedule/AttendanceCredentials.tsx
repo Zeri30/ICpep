@@ -13,26 +13,36 @@
    page re-checks on every request, so a link already sent dies with the event
    rather than outliving it. */
 
-import { Check, Copy, ExternalLink, Link2, Loader2, Lock, MapPin, QrCode } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Link2,
+  Loader2,
+  Lock,
+  MapPin,
+  QrCode,
+  TriangleAlert,
+} from "lucide-react";
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiSend } from "@/lib/adminApi";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
-/** A copy-to-clipboard button that says so for a moment afterwards. */
+/** A copy-to-clipboard button that says so for a moment afterwards — or, if
+    the browser refused the write (insecure origin, permission, browser
+    policy), says that instead rather than claiming success. */
 function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setStatus("copied");
     } catch {
-      // Clipboard access can be refused (an insecure origin, or a browser
-      // setting). The value is on screen either way, so there is nothing to
-      // recover from — just don't claim it was copied.
+      setStatus("error");
     }
+    setTimeout(() => setStatus("idle"), 2000);
   }
 
   return (
@@ -41,8 +51,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       onClick={copy}
       className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground"
     >
-      {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
-      {copied ? "Copied" : label}
+      {status === "idle" && <Copy size={12} />}
+      {status === "copied" && <Check size={12} className="text-green-400" />}
+      {status === "error" && <TriangleAlert size={12} className="text-red-400" />}
+      {status === "idle" ? label : status === "copied" ? "Copied" : "Couldn't copy"}
     </button>
   );
 }

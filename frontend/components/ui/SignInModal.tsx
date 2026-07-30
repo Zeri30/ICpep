@@ -137,12 +137,18 @@ function SignInDialog({
 
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 grid place-items-center w-10 h-10 rounded-md border border-line text-secondary-foreground hover:border-primary/50 hover:text-primary-glow transition-colors"
+            className="absolute top-4 right-4 z-10 grid place-items-center w-10 h-10 rounded-md border border-line text-secondary-foreground hover:border-primary/50 hover:text-primary-glow transition-colors"
             aria-label="Close"
           >
             <X size={18} />
           </button>
 
+          {/* z-10 above: this content block is `position: relative` too, and
+              with both it and the button left at their default z-index:auto,
+              CSS stacking breaks the tie by DOM order — this later block
+              would paint (and hit-test) above the button despite having no
+              visible background there, silently swallowing clicks aimed at
+              the X even though it renders looking completely normal. */}
           <div className="relative px-8 pt-12 pb-9">
             <div className="flex flex-col items-center">
               <Logo
