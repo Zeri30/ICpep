@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\RememberMeService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -211,6 +212,7 @@ class UserController extends Controller
         // get to linger until it happens to hit auth.session's stale-hash
         // check on its own next request.
         DB::table('sessions')->where('user_id', $user->id)->delete();
+        RememberMeService::forgetAllForUser($user->id);
 
         ActivityLog::record('password_reset', "Reset the password for admin {$user->name}", $user->name);
 

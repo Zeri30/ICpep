@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\Event;
+use App\Services\RememberMeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -116,6 +117,11 @@ class MeController extends Controller
             ->where('id', '!=', $request->session()->getId())
             ->delete();
 
+        // Same reasoning, extended to "remember me": a leaked password is no
+        // longer useful once changed, but a remember-me cookie issued under
+        // the old one would otherwise keep signing every other device back in.
+        RememberMeService::forgetOthersForUser($user->id, $request);
+
         ActivityLog::record('password_changed', "{$user->name} changed their password", $user->name);
 
         return response()->json(['ok' => true]);
@@ -134,6 +140,8 @@ class MeController extends Controller
             ->where('id', '!=', $request->session()->getId())
             ->delete();
 
+        RememberMeService::forgetOthersForUser($request->user()->id, $request);
+
         return response()->json(['ok' => true]);
     }
 
@@ -145,6 +153,9 @@ class MeController extends Controller
     public function logoutAllSessions(Request $request): JsonResponse
     {
         DB::table('sessions')->where('user_id', $request->user()->id)->delete();
+
+        RememberMeService::forgetAllForUser($request->user()->id);
+        RememberMeService::forgetCookie();
 
         Auth::guard('web')->logout();
         $request->session()->invalidate();
