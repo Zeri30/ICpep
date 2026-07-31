@@ -142,6 +142,12 @@ class AdminApiTest extends TestCase
             ->getJson('/api/admin/members?payment=unpaid')
             ->assertOk()
             ->assertJsonCount(2, 'data');
+
+        // Year filter — independent of section, unlike the combined class code.
+        $this->actingAs($admin)
+            ->getJson('/api/admin/members?year=3rd+Year')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
     }
 
     public function test_members_list_searches_and_excludes_trashed_by_default(): void
@@ -161,6 +167,31 @@ class AdminApiTest extends TestCase
         // Soft-deleted hidden by default, visible under the "only" trashed scope.
         $this->actingAs($admin)->getJson('/api/admin/members')->assertJsonCount(1, 'data');
         $this->actingAs($admin)->getJson('/api/admin/members?trashed=only')->assertJsonCount(1, 'data');
+    }
+
+    public function test_deleted_members_filter_expires_after_the_retention_window(): void
+    {
+        Storage::fake('supabase');
+        $recentlyDeleted = $this->makeApplication(['surname' => 'RecentlyDeleted', 'email' => 'recent@example.com']);
+        $recentlyDeleted->delete();
+        $recentlyDeleted->forceFill(['deleted_at' => now()->subDays(10)])->saveQuietly();
+
+        $longDeleted = $this->makeApplication(['surname' => 'LongDeleted', 'email' => 'long@example.com']);
+        $longDeleted->delete();
+        $longDeleted->forceFill(['deleted_at' => now()->subDays(31)])->saveQuietly();
+
+        $admin = $this->admin();
+
+        // Within the 30-day window: shows up under "Deleted members". Past the
+        // window, it's excluded from the filter too — but the row itself is
+        // untouched in the database (soft delete only, no purge).
+        $this->actingAs($admin)
+            ->getJson('/api/admin/members?trashed=only')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.surname', 'RecentlyDeleted');
+
+        $this->assertDatabaseHas('applications', ['id' => $longDeleted->id]);
     }
 
     public function test_members_list_search_matches_student_id_phone_and_section(): void

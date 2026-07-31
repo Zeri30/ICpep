@@ -1,44 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  Pencil,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
-import Badge from "@/components/ui/Badge";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import EditMemberModal from "@/components/admin/members/EditMemberModal";
+import MemberProfileSections from "@/components/admin/members/MemberProfile";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import { apiSend, useAdminResource } from "@/lib/adminApi";
-import { formatDate, formatDateTime } from "@/lib/adminFormat";
 import type { Member } from "@/lib/adminTypes";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="font-head text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
-      <div className="mt-1 text-sm text-foreground">{children}</div>
-    </div>
-  );
-}
-
-function Section({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) {
-  return (
-    <section className="rounded-xl border border-line bg-card p-6">
-      <h2 className="mb-5 font-display text-sm font-bold uppercase tracking-widest text-primary">{title}</h2>
-      <div className={`grid gap-5 ${cols === 2 ? "sm:grid-cols-2" : ""}`}>{children}</div>
-    </section>
-  );
-}
 
 export default function MemberView({ id }: { id: string }) {
   const router = useRouter();
@@ -102,48 +73,7 @@ export default function MemberView({ id }: { id: string }) {
 
       <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">{m.fullName}</h1>
 
-      <Section title="Member">
-        <Field label="Full Name">{m.fullName}</Field>
-        <Field label="Student ID">{m.studentId ?? "—"}</Field>
-        <Field label="Class"><Badge tone="red">{m.classCode}</Badge></Field>
-        <Field label="Year Level">{m.yearLevel}</Field>
-        <Field label="Section">{m.section}</Field>
-        <Field label="Birthday">{formatDate(m.birthday)}</Field>
-        <Field label="Registered">{formatDateTime(m.createdAt)}</Field>
-        <div className="sm:col-span-2"><Field label="Address">{m.address}</Field></div>
-        <Field label="Email">{m.email}</Field>
-        <Field label="Phone Number">{m.phone}</Field>
-      </Section>
-
-      <Section title="Membership Fee">
-        <Field label="Status">
-          {m.isPaid ? (
-            <span className="inline-flex items-center gap-1.5 text-green-400"><CheckCircle2 size={15} /> Paid</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground"><Clock size={15} /> Unpaid</span>
-          )}
-        </Field>
-        <Field label="Date paid">{m.paidAt ? formatDateTime(m.paidAt) : "Not paid yet"}</Field>
-      </Section>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Section title="Formal Picture" cols={1}>
-          {m.pictureUrl ? (
-            <Image src={m.pictureUrl} alt={m.fullName} width={400} height={500} unoptimized className="max-h-80 w-auto rounded-lg object-contain" />
-          ) : (
-            <p className="text-sm text-muted-foreground">No picture on file.</p>
-          )}
-        </Section>
-        <Section title="E-Signature" cols={1}>
-          {m.signatureUrl ? (
-            <a href={m.signatureUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary-glow">
-              <ArrowUpRight size={16} /> Open e-signature file
-            </a>
-          ) : (
-            <p className="text-sm text-muted-foreground">No signature on file.</p>
-          )}
-        </Section>
-      </div>
+      <MemberProfileSections member={m} />
 
       {/* Editing overlays the record rather than replacing it, so the details
           are still there to compare against while typing. */}

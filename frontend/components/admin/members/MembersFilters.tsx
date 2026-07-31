@@ -6,6 +6,7 @@ import { useAdmin } from "@/components/admin/AdminProvider";
 export type MemberFilters = {
   search: string;
   class: string;
+  year: string;
   payment: string;
   trashed: string;
 };
@@ -13,6 +14,7 @@ export type MemberFilters = {
 export const EMPTY_FILTERS: MemberFilters = {
   search: "",
   class: "",
+  year: "",
   payment: "",
   trashed: "",
 };
@@ -30,7 +32,7 @@ export default function MembersFilters({
   const { meta } = useAdmin();
   const set = (patch: Partial<MemberFilters>) => onChange({ ...value, ...patch });
 
-  const dirty = value.search || value.class || value.payment || value.trashed;
+  const dirty = value.search || value.class || value.year || value.payment || value.trashed;
 
   // A fragment, not a wrapper: the controls sit directly in the caller's flex
   // row so the bulk-action bar can share it and align to the far end.
@@ -53,6 +55,13 @@ export default function MembersFilters({
         ))}
       </select>
 
+      <select value={value.year} onChange={(e) => set({ year: e.target.value })} className={selectCls} aria-label="Year">
+        <option value="">All years</option>
+        {meta.yearLevels.map((y) => (
+          <option key={y} value={y}>{y}</option>
+        ))}
+      </select>
+
       <select value={value.payment} onChange={(e) => set({ payment: e.target.value })} className={selectCls} aria-label="Payment">
         <option value="">All payment</option>
         <option value="paid">Paid</option>
@@ -61,6 +70,9 @@ export default function MembersFilters({
 
       <select value={value.trashed} onChange={(e) => set({ trashed: e.target.value })} className={selectCls} aria-label="Trashed">
         <option value="">Active members</option>
+        {/* Soft-deleted rows only surface here for 30 days after deletion (see
+            Application::DELETED_RETENTION_DAYS on the backend) — the record
+            itself is kept forever, only its visibility here expires. */}
         <option value="only">Deleted members</option>
       </select>
 

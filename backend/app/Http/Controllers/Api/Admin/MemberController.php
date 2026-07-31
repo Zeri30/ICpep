@@ -293,6 +293,9 @@ class MemberController extends Controller
         if ($class = $request->input('class')) {
             $summary['Year & Section'] = $class;
         }
+        if ($year = $request->input('year')) {
+            $summary['Year Level'] = $year;
+        }
         if ($payment = $request->input('payment')) {
             $summary['Payment'] = ucfirst($payment);
         }
@@ -319,14 +322,25 @@ class MemberController extends Controller
             $query->forTerm($term->id);
         }
 
+        // "Deleted members" is a 30-day window, not a permanent archive: past
+        // that, a soft-deleted row stops showing up here (and under "with")
+        // even though it stays in the table untouched. See
+        // Application::DELETED_RETENTION_DAYS.
+        $retentionCutoff = now()->subDays(Application::DELETED_RETENTION_DAYS);
         match ($request->input('trashed')) {
-            'with' => $query->withTrashed(),
-            'only' => $query->onlyTrashed(),
+            'with' => $query->withTrashed()->where(function (Builder $q) use ($retentionCutoff): void {
+                $q->whereNull('deleted_at')->orWhere('deleted_at', '>=', $retentionCutoff);
+            }),
+            'only' => $query->onlyTrashed()->where('deleted_at', '>=', $retentionCutoff),
             default => $query,
         };
 
         if ($class = $request->input('class')) {
             $query->inClass($class);
+        }
+
+        if ($year = $request->input('year')) {
+            $query->yearLevel($year);
         }
 
         match ($request->input('payment')) {

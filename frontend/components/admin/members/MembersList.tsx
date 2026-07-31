@@ -8,7 +8,6 @@
    not be able to rewrite a semester's payment records. */
 
 import Image from "next/image";
-import Link from "next/link";
 import {
   Banknote,
   CheckCircle2,
@@ -34,6 +33,7 @@ import DataTable, { type Column, type SortState } from "@/components/admin/ui/Da
 import Pagination from "@/components/admin/ui/Pagination";
 import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/admin/members/MembersFilters";
 import EditMemberModal from "@/components/admin/members/EditMemberModal";
+import ViewMemberModal from "@/components/admin/members/ViewMemberModal";
 import { useMembersListResource } from "@/components/admin/members/useMembersListResource";
 import { apiSend } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -100,6 +100,7 @@ export default function MembersList() {
   const [selected, setSelected] = useState<Map<number, Member>>(new Map());
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [editing, setEditing] = useState<Member | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
   // Debounce only the free-text search; selects apply immediately.
@@ -124,6 +125,7 @@ export default function MembersList() {
     if (term) p.set("term", String(term.id));
     if (debouncedSearch) p.set("search", debouncedSearch);
     if (filters.class) p.set("class", filters.class);
+    if (filters.year) p.set("year", filters.year);
     if (filters.payment) p.set("payment", filters.payment);
     if (filters.trashed) p.set("trashed", filters.trashed);
     if (sort) {
@@ -409,6 +411,7 @@ export default function MembersList() {
               onClose={() => setMenuFor(null)}
               member={m}
               canEdit={canEdit}
+              onView={() => setViewing(m.id)}
               onEdit={() => setEditing(m)}
               onDelete={() => setConfirm({ kind: "delete", member: m })}
             />
@@ -521,6 +524,10 @@ export default function MembersList() {
         onSaved={refresh}
         onClose={() => setEditing(null)}
       />
+
+      {/* Viewing stays on the list too — no more round-trip to /admin/members/[id]
+          and back just to look at a profile. */}
+      <ViewMemberModal memberId={viewing} onClose={() => setViewing(null)} />
 
       {/* Confirmations */}
       <ConfirmDialog
@@ -699,6 +706,7 @@ function RowMenu({
   onClose,
   member,
   canEdit,
+  onView,
   onEdit,
   onDelete,
 }: {
@@ -707,6 +715,7 @@ function RowMenu({
   onClose: () => void;
   member: Member;
   canEdit: boolean;
+  onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -729,9 +738,9 @@ function RowMenu({
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-20 w-52 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)]">
-          <Link href={`/admin/members/${member.id}`} className={item} onClick={onClose}>
+          <button onClick={() => { onClose(); onView(); }} className={item}>
             <Eye size={15} /> View
-          </Link>
+          </button>
           {canEdit && (
             <button onClick={() => { onClose(); onEdit(); }} className={item}>
               <Pencil size={15} /> Edit

@@ -27,6 +27,13 @@ class Application extends Model
         '4B' => ['4th Year', 'Section B'],
     ];
 
+    /**
+     * How long a soft-deleted member stays visible under the "Deleted members"
+     * filter. The row itself is never purged — this only bounds how long it
+     * shows up in that filter (see MemberController::filtered).
+     */
+    public const DELETED_RETENTION_DAYS = 30;
+
     /** Log activity on key lifecycle events, and clean up files on permanent delete. */
     protected static function booted(): void
     {
@@ -187,6 +194,22 @@ class Application extends Model
         [$year, $section] = self::CLASS_MAP[$code];
 
         return $query->where('year_level', $year)->where('section', $section);
+    }
+
+    /**
+     * Narrow to a single year level, independent of section. An unknown value
+     * is a no-op, same as scopeInClass, so a bad filter never silently empties
+     * the list.
+     *
+     * @param  Builder<Application>  $query
+     */
+    public function scopeYearLevel(Builder $query, string $year): Builder
+    {
+        if (! in_array($year, self::YEAR_LEVELS, true)) {
+            return $query;
+        }
+
+        return $query->where('year_level', $year);
     }
 
     /** @param  Builder<Application>  $query */
