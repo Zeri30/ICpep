@@ -23,6 +23,7 @@ import { useAdmin } from "@/components/admin/AdminProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
+import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
 import UsersFilters, { EMPTY_USER_FILTERS, type UserFilters } from "@/components/admin/users/UsersFilters";
 import NewUserModal from "@/components/admin/users/NewUserModal";
 import EditUserModal from "@/components/admin/users/EditUserModal";
@@ -37,6 +38,15 @@ type Confirm =
   | { kind: "toggle"; user: AdminUser }
   | { kind: "delete"; user: AdminUser }
   | null;
+
+/**
+ * How many placeholder rows to draw while the first page is in flight.
+ *
+ * 20 because that's UserController's `perPage` default — the skeleton then
+ * occupies exactly the height the real rows are about to take, so nothing
+ * jumps when they land. See MembersList for the fuller rationale.
+ */
+const SKELETON_ROWS = 20;
 
 function StatusPill({ active }: { active: boolean }) {
   return active ? (
@@ -154,16 +164,31 @@ export default function UsersList() {
           </div>
         </div>
       ),
+      // The avatar circle sets the row's height, so its placeholder is
+      // load-bearing — see MembersList's Photo column for why.
+      skeleton: (
+        <div className="flex items-center gap-3">
+          <Circle size="size-9" />
+          <Bar w="w-32" />
+        </div>
+      ),
     },
-    { key: "email", header: "Email", render: (u) => <span className="text-secondary-foreground">{u.email}</span> },
-    { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge role={u.role} label={u.roleLabel} /> },
-    { key: "status", header: "Status", render: (u) => <StatusPill active={u.isActive} /> },
-    { key: "lastLogin", header: "Last Login", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.lastLoginAt)}</span> },
-    { key: "createdAt", header: "Created", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.createdAt)}</span> },
+    { key: "email", header: "Email", render: (u) => <span className="text-secondary-foreground">{u.email}</span>, skeleton: <Bar w="w-40" /> },
+    { key: "role", header: "Role", sortable: true, render: (u) => <RoleBadge role={u.role} label={u.roleLabel} />, skeleton: <Pill w="w-24" /> },
+    { key: "status", header: "Status", render: (u) => <StatusPill active={u.isActive} />, skeleton: <Pill w="w-20" /> },
+    { key: "lastLogin", header: "Last Login", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.lastLoginAt)}</span>, skeleton: <Bar w="w-40" /> },
+    { key: "createdAt", header: "Created", sortable: true, render: (u) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(u.createdAt)}</span>, skeleton: <Bar w="w-40" /> },
     {
       key: "actions",
       header: "",
       align: "right",
+      // Same square icon-button the real row ends with, so the column keeps
+      // its width instead of collapsing to nothing and shoving the rest left.
+      skeleton: (
+        <div className="flex justify-end">
+          <span className="skeleton inline-block size-8 rounded-md" />
+        </div>
+      ),
       render: (u) => (
         <RowMenu
           open={menuFor === u.id}
@@ -206,12 +231,19 @@ export default function UsersList() {
         rows={rows}
         rowKey={(u) => u.id}
         loading={loading && !data}
+        skeletonRows={SKELETON_ROWS}
         error={error}
         sort={sort}
         onSort={onSort}
         emptyHeading="No administrators found"
         emptyDescription="Try clearing the filters, or add a new administrator account."
-        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+        footer={
+          loading && !data ? (
+            <PaginationSkeleton />
+          ) : data ? (
+            <Pagination meta={data.meta} onPage={setPage} />
+          ) : null
+        }
       />
 
       {/* Confirmations */}

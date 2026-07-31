@@ -7,9 +7,19 @@ import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
+import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
 import { useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { ActivityRow, Paginated } from "@/lib/adminTypes";
+
+/**
+ * How many placeholder rows to draw while the first page is in flight.
+ *
+ * 20 because that's ActivityController's `perPage` default — the skeleton
+ * then occupies exactly the height the real rows are about to take, so
+ * nothing jumps when they land. See MembersList for the fuller rationale.
+ */
+const SKELETON_ROWS = 20;
 
 const selectCls =
   "rounded-md border border-line bg-secondary/60 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary/60";
@@ -59,9 +69,16 @@ export default function ActivityLog() {
   const { data, loading, error } = useAdminResource<Paginated<ActivityRow>>(`/activity?${qs}`);
 
   const columns: Column<ActivityRow>[] = [
-    { key: "when", header: "When", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.createdAt)}</span> },
-    { key: "action", header: "Action", render: (r) => <ActionBadge action={r.action} /> },
-    { key: "description", header: "Description", render: (r) => <span className="text-foreground">{r.description}</span> },
+    { key: "when", header: "When", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.createdAt)}</span>, skeleton: <Bar w="w-32" /> },
+    { key: "action", header: "Action", render: (r) => <ActionBadge action={r.action} />, skeleton: <Pill w="w-24" /> },
+    {
+      key: "description",
+      header: "Description",
+      render: (r) => <span className="text-foreground">{r.description}</span>,
+      // The widest column by far — a short bar here would leave the column
+      // collapsed to its header's width and every other column crowded left.
+      skeleton: <Bar w="w-64" />,
+    },
     {
       key: "actor",
       header: "By",
@@ -69,6 +86,13 @@ export default function ActivityLog() {
         <div className="leading-tight">
           <p className="whitespace-nowrap font-medium text-foreground">{r.actorName ?? r.actor ?? "—"}</p>
           {r.actorRoleLabel && <p className="text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
+        </div>
+      ),
+      // Two lines, because the cell has two — name over role.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-28" />
+          <Bar w="w-20" h="h-3" />
         </div>
       ),
     },
@@ -113,9 +137,16 @@ export default function ActivityLog() {
         rows={data?.data ?? []}
         rowKey={(r) => r.id}
         loading={loading && !data}
+        skeletonRows={SKELETON_ROWS}
         error={error}
         emptyHeading="No activity yet"
-        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+        footer={
+          loading && !data ? (
+            <PaginationSkeleton />
+          ) : data ? (
+            <Pagination meta={data.meta} onPage={setPage} />
+          ) : null
+        }
       />
     </div>
   );
