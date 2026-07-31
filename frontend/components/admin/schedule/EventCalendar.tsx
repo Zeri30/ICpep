@@ -41,6 +41,7 @@ import {
   todayIn,
   ymd,
 } from "@/components/admin/schedule/calendarDates";
+import { Bar, Pill } from "@/components/admin/ui/Skeleton";
 import { useAdminResource } from "@/lib/adminApi";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
@@ -130,6 +131,28 @@ const MAX_CHIPS = 3;
  * so the first paint already looks complete.
  */
 const PAGE_SIZE = 10;
+
+/** One row of the schedule list, in placeholder form. Mirrors the real row's
+    shape (date block, title, tag row) so the panel is exactly as tall while
+    the events load as once they land — see MembersList's DataTable columns
+    for the same reasoning applied to a table instead of this list. */
+function EventRowSkeleton() {
+  return (
+    <li className="flex w-full items-start gap-3 px-4 py-3">
+      <span className="mt-0.5 flex w-12 shrink-0 flex-col items-center gap-1">
+        <span className="skeleton block h-4 w-6 rounded" />
+        <span className="skeleton block h-3 w-8 rounded" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <Bar w="w-3/5" />
+        <span className="mt-2 flex items-center gap-1.5">
+          <Pill w="w-16" />
+          <Bar w="w-12" h="h-3" />
+        </span>
+      </span>
+    </li>
+  );
+}
 
 export default function EventCalendar() {
   const { meta, can } = useAdmin();
@@ -903,7 +926,19 @@ function EventList({
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">Loading the calendar…</p>
+          <>
+            {/* Hidden from assistive tech: the placeholders carry no
+                information, and a screen reader announcing ten empty rows is
+                worse than the one honest "Loading…" the status below gives. */}
+            <ul className="divide-y divide-line/40" aria-hidden="true">
+              {Array.from({ length: PAGE_SIZE }, (_, i) => (
+                <EventRowSkeleton key={i} />
+              ))}
+            </ul>
+            <span role="status" className="sr-only">
+              Loading the calendar…
+            </span>
+          </>
         ) : events.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <CalendarDays size={28} className="mx-auto text-muted-foreground/50" />

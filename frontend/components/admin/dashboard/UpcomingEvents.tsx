@@ -16,11 +16,46 @@ import { useAdmin } from "@/components/admin/AdminProvider";
 import CategoryTag from "@/components/admin/schedule/CategoryTag";
 import { TimingBadge } from "@/components/admin/schedule/StatusBadge";
 import { formatShortDate, todayIn } from "@/components/admin/schedule/calendarDates";
+import { Bar, Pill } from "@/components/admin/ui/Skeleton";
 import { useAdminResource } from "@/lib/adminApi";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
 /** Rows after the emphasized next event, before the rest defer to Calendar. */
 const MAX_LATER_ROWS = 4;
+
+/** The widget's data-dependent parts, in placeholder form — the emphasized
+    next-event block and a couple of the rows underneath, sized to what they
+    actually render so the panel doesn't grow when the real schedule lands. */
+function UpcomingEventsSkeleton() {
+  return (
+    <div aria-hidden="true">
+      <div className="mt-4 flex items-start gap-4 rounded-lg border border-line bg-secondary/20 p-3.5">
+        <span className="flex w-14 shrink-0 flex-col items-center gap-1">
+          <span className="skeleton block h-6 w-8 rounded" />
+          <span className="skeleton block h-3 w-10 rounded" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <Bar w="w-3/4" h="h-5" />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <Pill w="w-16" />
+            <Bar w="w-20" h="h-3" />
+          </div>
+        </div>
+      </div>
+      <div className="mt-1 divide-y divide-line/40">
+        {Array.from({ length: 2 }, (_, i) => (
+          <div key={i} className="flex items-center gap-3 py-2">
+            <Bar w="w-8" h="h-3" />
+            <span className="min-w-0 flex-1">
+              <Bar w="w-2/3" h="h-3.5" />
+            </span>
+            <Bar w="w-10" h="h-3" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function UpcomingEvents() {
   const { meta } = useAdmin();
@@ -67,7 +102,12 @@ export default function UpcomingEvents() {
       )}
 
       {loading && !data ? (
-        <p className="py-6 text-sm text-muted-foreground">Loading…</p>
+        <>
+          <UpcomingEventsSkeleton />
+          <span role="status" className="sr-only">
+            Loading the schedule…
+          </span>
+        </>
       ) : !next ? (
         <div className="py-8 text-center">
           <CalendarDays size={24} className="mx-auto text-muted-foreground/50" />

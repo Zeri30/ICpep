@@ -35,6 +35,7 @@ import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/
 import EditMemberModal from "@/components/admin/members/EditMemberModal";
 import ViewMemberModal from "@/components/admin/members/ViewMemberModal";
 import { useMembersListResource } from "@/components/admin/members/useMembersListResource";
+import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
 import { apiSend } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
@@ -58,16 +59,6 @@ type Confirm =
  * which is the layout shift this is here to remove.
  */
 const SKELETON_ROWS = 20;
-
-/** A placeholder bar. `w` is a Tailwind width, sized to the copy it stands in. */
-function Bar({ w, h = "h-4" }: { w: string; h?: string }) {
-  return <span className={`skeleton inline-block rounded ${h} ${w}`} />;
-}
-
-/** A placeholder for the pill-shaped cells — the class, year and payment badges. */
-function Pill({ w }: { w: string }) {
-  return <span className={`skeleton inline-block h-5 rounded-full ${w}`} />;
-}
 
 function PaymentPill({ paid }: { paid: boolean }) {
   return paid ? (
@@ -342,7 +333,7 @@ export default function MembersList() {
       // `block` rather than inline-block for the same reason — an inline box
       // sits on the text baseline and carries the descender space with it,
       // which measured 5px taller per row than the real (block) avatar.
-      skeleton: <span className="skeleton block size-10 rounded-full" />,
+      skeleton: <Circle />,
     },
     {
       key: "name",
@@ -663,24 +654,6 @@ function ExportMenu({ queryString }: { queryString: string }) {
           </a>
         </div>
       )}
-    </div>
-  );
-}
-
-/** The pager's band, in placeholder form. Mirrors Pagination's own padding and
-    border so the card is exactly as tall before the data arrives as after. */
-function PaginationSkeleton() {
-  return (
-    <div
-      aria-hidden="true"
-      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line/60 bg-card px-4 py-3"
-    >
-      <Bar w="w-24" h="h-3" />
-      <div className="flex items-center gap-1.5">
-        {Array.from({ length: 5 }, (_, i) => (
-          <span key={i} className="skeleton inline-block size-8 rounded-md" />
-        ))}
-      </div>
     </div>
   );
 }

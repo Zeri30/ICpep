@@ -9,11 +9,21 @@ import { useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
+import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
 import { useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Paginated, PaymentRow } from "@/lib/adminTypes";
+
+/**
+ * How many placeholder rows to draw while the first page is in flight.
+ *
+ * 20 because that's PaymentController's `perPage` default — the skeleton
+ * then occupies exactly the height the real rows are about to take, so
+ * nothing jumps when they land. See MembersList for the fuller rationale.
+ */
+const SKELETON_ROWS = 20;
 
 const selectCls =
   "rounded-md border border-line bg-secondary/60 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary/60";
@@ -68,10 +78,23 @@ export default function PaymentHistory() {
     return p.toString();
   }, [term, debounced, action, section, page]);
 
-  const { data, loading, error } = useAdminResource<Paginated<PaymentRow>>(
+  const { data, error } = useAdminResource<Paginated<PaymentRow>>(
     termsLoading ? null : `/payments?${qs}`,
   );
   const reset = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
+
+  // Which semester the rows in `data` were fetched for — same reset-on-change
+  // pattern as MembersList, so a term switch never shows the previous term's
+  // ledger under the new term's heading while the new page is in flight.
+  const [dataTermId, setDataTermId] = useState(term?.id);
+  const [lastData, setLastData] = useState(data);
+  if (data !== lastData) {
+    setLastData(data);
+    setDataTermId(term?.id);
+  }
+  const otherTerm = data !== null && term?.id !== dataTermId;
+  const rows = otherTerm ? [] : (data?.data ?? []);
+  const awaitingRows = !error && (data === null || otherTerm);
 
   const amountCell = (v: number) => {
     if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;
@@ -89,12 +112,25 @@ export default function PaymentHistory() {
           {r.section && <p className="text-xs text-muted-foreground">{r.section}</p>}
         </div>
       ),
+      // Two lines, because the cell has two — name over section.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-32" />
+          <Bar w="w-16" h="h-3" />
+        </div>
+      ),
     },
-    { key: "event", header: "Event", render: (r) => <EventBadge action={r.action} /> },
-    { key: "amount", header: "Amount", align: "right", render: (r) => amountCell(r.amount) },
-    { key: "yearLevel", header: "Year Level", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span> },
-    { key: "recorded", header: "Recorded", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span> },
-    { key: "actor", header: "By", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span> },
+    { key: "event", header: "Event", render: (r) => <EventBadge action={r.action} />, skeleton: <Pill w="w-20" /> },
+    {
+      key: "amount",
+      header: "Amount",
+      align: "right",
+      render: (r) => amountCell(r.amount),
+      skeleton: <Bar w="w-16" />,
+    },
+    { key: "yearLevel", header: "Year Level", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span>, skeleton: <Bar w="w-12" /> },
+    { key: "recorded", header: "Recorded", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span>, skeleton: <Bar w="w-40" /> },
+    { key: "actor", header: "By", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span>, skeleton: <Bar w="w-24" /> },
   ];
 
   return (
@@ -137,13 +173,20 @@ export default function PaymentHistory() {
       <DataTable
         fill
         columns={columns}
-        rows={data?.data ?? []}
+        rows={rows}
         rowKey={(r) => r.id}
-        loading={loading && !data}
+        loading={awaitingRows}
+        skeletonRows={SKELETON_ROWS}
         error={error}
         emptyHeading="No payments recorded yet"
         emptyDescription="Marking a member as paid in the Members List records it here."
-        footer={data ? <Pagination meta={data.meta} onPage={setPage} /> : null}
+        footer={
+          awaitingRows ? (
+            <PaginationSkeleton />
+          ) : data ? (
+            <Pagination meta={data.meta} onPage={setPage} />
+          ) : null
+        }
       />
     </div>
   );
