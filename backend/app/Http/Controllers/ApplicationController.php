@@ -82,7 +82,7 @@ class ApplicationController extends Controller
             'birthday'       => ['required', 'date'],
             'address'        => ['required', 'string', 'max:500'],
             'email'          => ['required', 'email', 'max:150'],
-            'phone'          => ['required', 'string', 'max:30'],
+            'phone'          => ['required', 'string', 'digits:11'],
             'signature'      => ['required', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],
             'picture'        => ['required', 'file', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
