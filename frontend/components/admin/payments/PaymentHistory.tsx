@@ -83,6 +83,7 @@ export default function PaymentHistory() {
     {
       key: "member",
       header: "Member",
+      width: "24%",
       render: (r) => (
         <div>
           <p className="font-medium text-foreground">{r.memberName}</p>
@@ -90,11 +91,32 @@ export default function PaymentHistory() {
         </div>
       ),
     },
-    { key: "event", header: "Event", render: (r) => <EventBadge action={r.action} /> },
-    { key: "amount", header: "Amount", align: "right", render: (r) => amountCell(r.amount) },
-    { key: "yearLevel", header: "Year Level", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span> },
-    { key: "recorded", header: "Recorded", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span> },
-    { key: "actor", header: "By", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span> },
+    { key: "event", header: "Event", width: "14%", render: (r) => <EventBadge action={r.action} /> },
+    {
+      key: "amount",
+      header: "Amount",
+      align: "right",
+      width: "16%",
+      // Fixed-width columns give every gap the same size at the default
+      // padding, but that default still reads as tight for a right-aligned
+      // number sitting next to left-aligned text — widen just this pair.
+      className: "pr-8",
+      render: (r) => amountCell(r.amount),
+    },
+    {
+      key: "yearLevel",
+      header: "Year Level",
+      width: "16%",
+      className: "pl-8",
+      render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span>,
+    },
+    {
+      key: "recorded",
+      header: "Recorded",
+      width: "18%",
+      render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span>,
+    },
+    { key: "actor", header: "By", width: "12%", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span> },
   ];
 
   return (
@@ -136,6 +158,7 @@ export default function PaymentHistory() {
 
       <DataTable
         fill
+        fixedLayout
         columns={columns}
         rows={data?.data ?? []}
         rowKey={(r) => r.id}
