@@ -400,6 +400,7 @@ export default function EventCalendar() {
           status={status}
           statusCounts={statusCounts}
           unrecorded={unrecorded}
+          canManageSchedule={canManage}
           monthName={monthLabel(cursor.year, cursor.month)}
           loading={loading && !data}
           onScope={(s) => {
@@ -681,9 +682,11 @@ function DayCell({
                     {e.title}
                   </span>
                   {/* A day cell has no room for a badge, so the two states that
-                      change what the event means each get one character. */}
+                      change what the event means each get one character. Only
+                      the secretariat can clear an unrecorded outcome, so only
+                      they get the second one — see NeedsUpdateBadge. */}
                   {e.status === "done" && <Check size={9} className="shrink-0" />}
-                  {e.needsStatusUpdate && (
+                  {canManage && e.needsStatusUpdate && (
                     <span className="ml-auto size-1 shrink-0 rounded-full bg-amber-accent" />
                   )}
                 </button>
@@ -718,6 +721,7 @@ function EventList({
   status,
   statusCounts,
   unrecorded,
+  canManageSchedule,
   monthName,
   loading,
   onScope,
@@ -732,6 +736,8 @@ function EventList({
   status: StatusFilter;
   statusCounts: StatusCounts;
   unrecorded: number;
+  /** Only the secretariat can act on an unrecorded outcome — see NeedsUpdateBadge. */
+  canManageSchedule: boolean;
   monthName: string;
   loading: boolean;
   onScope: (scope: Scope) => void;
@@ -878,8 +884,10 @@ function EventList({
                 Stays put while an outcome is chosen, unlike the scope: the
                 backlog is drawn from the Scheduled ones, so it is most worth
                 reaching from exactly the chip that would otherwise hide it.
-                Clicking clears the outcome, because the two cannot both win. */}
-            {(unrecorded > 0 || showingBacklog) && (
+                Clicking clears the outcome, because the two cannot both win.
+                Only the secretariat can clear one, so it is the only audience
+                this is shown to — see NeedsUpdateBadge for the same call. */}
+            {canManageSchedule && (unrecorded > 0 || showingBacklog) && (
               <button
                 type="button"
                 onClick={() => {
@@ -965,7 +973,7 @@ function EventList({
                           something recorded, so it does not appear on every
                           event that has yet to happen. */}
                       <MyAttendanceBadge event={e} />
-                      {e.needsStatusUpdate && <NeedsUpdateBadge />}
+                      {canManageSchedule && e.needsStatusUpdate && <NeedsUpdateBadge />}
                     </span>
                   </span>
                 </button>

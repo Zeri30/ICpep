@@ -4,9 +4,10 @@
  *
  * Not a chronological list of everything ahead — that's the Calendar module's
  * job, and it already does it. This is the two things worth a glance without
- * leaving the dashboard: what's next, and whether anything from the past
- * still needs an outcome recorded. The rest of the upcoming schedule is a
- * secondary, compact list underneath — read by every role, same as Calendar.
+ * leaving the dashboard: what's next, and — for the secretariat only, since
+ * they are the ones who can clear it — whether anything from the past still
+ * needs an outcome recorded. The rest of the upcoming schedule is a
+ * secondary, compact list underneath, read by every role, same as Calendar.
  */
 
 import { AlertTriangle, CalendarDays, ChevronRight } from "lucide-react";
@@ -23,7 +24,10 @@ import type { ScheduledEvent } from "@/lib/adminTypes";
 const MAX_LATER_ROWS = 4;
 
 export default function UpcomingEvents() {
-  const { meta } = useAdmin();
+  const { meta, can } = useAdmin();
+  // Only the secretariat can clear an unrecorded outcome — see Calendar's
+  // NeedsUpdateBadge for the same call.
+  const canManageSchedule = can("schedule.manage");
   const today = useMemo(() => todayIn(meta.timezone), [meta.timezone]);
   const { data, loading } = useAdminResource<{ data: ScheduledEvent[] }>("/events");
 
@@ -56,7 +60,7 @@ export default function UpcomingEvents() {
       {/* Only appears when there's a real backlog — someone has to mark a past
           event Done or Cancelled, and that's the one thing on this widget that
           is actually an outstanding task rather than a status to glance at. */}
-      {unrecordedCount > 0 && (
+      {canManageSchedule && unrecordedCount > 0 && (
         <Link
           href="/admin/calendar"
           className="mt-3 flex items-center gap-2 rounded-lg border border-amber-accent/30 bg-amber-accent/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-accent transition-colors hover:bg-amber-accent/15"
