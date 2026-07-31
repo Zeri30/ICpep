@@ -94,7 +94,11 @@ type Audience = (typeof AUDIENCES)[number]["value"];
  *
  * Anchored to the icon's left edge and drawn downwards. Centred would put half
  * the panel past the left of the form, where the dialog's scroll container
- * would cut it off.
+ * would cut it off. Narrower than it has room to be on a wide screen, too:
+ * on the single-column mobile layout the icon sits well inside the card
+ * rather than flush with its edge, and a wider panel ran past the card's own
+ * right edge — clipped by the same scroll container, and silently turning
+ * `overflow-y-auto` into a horizontal scrollbar for the whole form.
  */
 function FieldHint({ text }: { text: string }) {
   return (
@@ -108,7 +112,7 @@ function FieldHint({ text }: { text: string }) {
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute left-0 top-full z-10 mt-1.5 w-52 rounded-lg border border-line bg-background px-2.5 py-2 text-[11px] font-normal normal-case leading-relaxed tracking-normal text-secondary-foreground opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        className="pointer-events-none absolute left-0 top-full z-10 mt-1.5 w-44 rounded-lg border border-line bg-background px-2.5 py-2 text-[11px] font-normal normal-case leading-relaxed tracking-normal text-secondary-foreground opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
       >
         {text}
       </span>
@@ -712,7 +716,12 @@ function EventSidePanel({
     // taller one scrolls inside it instead of pushing the dialog down. Either
     // way the right side ends exactly where the left one does.
     <div
-      className="flex min-h-0 flex-col gap-4"
+      // `min-w-0`: this is the grid item beside the fields column, and without
+      // it a long, unbreakable value further inside (the share link — see
+      // AttendanceCredentials) sets this column's own minimum width instead of
+      // being clipped by its own `truncate`, pushing the whole dialog wider
+      // than the screen on a phone.
+      className="min-w-0 flex min-h-0 flex-col gap-4"
       style={height ? { height } : undefined}
     >
       <div
