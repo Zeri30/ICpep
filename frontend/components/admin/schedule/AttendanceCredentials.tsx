@@ -93,7 +93,11 @@ export default function AttendanceCredentials({
   }
 
   return (
-    <div className={`rounded-lg border border-line bg-secondary/30 p-4 ${className}`}>
+    // `min-w-0`: this is a flex item in EventSidePanel's column, and without it
+    // the share link below — one unbroken string, nowhere to wrap — sets the
+    // card's own minimum width instead of letting `truncate` clip it, pushing
+    // the whole form wider than the screen on a phone.
+    <div className={`min-w-0 rounded-lg border border-line bg-secondary/30 p-4 ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           <QrCode size={13} /> Attendance

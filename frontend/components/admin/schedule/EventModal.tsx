@@ -716,7 +716,12 @@ function EventSidePanel({
     // taller one scrolls inside it instead of pushing the dialog down. Either
     // way the right side ends exactly where the left one does.
     <div
-      className="flex min-h-0 flex-col gap-4"
+      // `min-w-0`: this is the grid item beside the fields column, and without
+      // it a long, unbreakable value further inside (the share link — see
+      // AttendanceCredentials) sets this column's own minimum width instead of
+      // being clipped by its own `truncate`, pushing the whole dialog wider
+      // than the screen on a phone.
+      className="min-w-0 flex min-h-0 flex-col gap-4"
       style={height ? { height } : undefined}
     >
       <div
