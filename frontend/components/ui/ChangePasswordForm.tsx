@@ -7,7 +7,7 @@
    authentication-adjacent screens, just as a full page rather than an
    overlay — there's nothing behind it to dim. */
 
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Loader2, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import Logo from "@/components/ui/Logo";
 import { apiSend, signOut } from "@/lib/adminApi";
@@ -16,6 +16,21 @@ const fieldBase =
   "w-full rounded-md bg-secondary/60 border border-line px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/40";
 
 type Status = "idle" | "submitting" | "done";
+
+/** Mirrors the backend's Password::min(8)->mixedCase()->numbers()->symbols() rule
+    (see MeController::updatePassword) so the officer sees exactly what will make
+    the submission pass before ever sending it. */
+const REQUIREMENTS: { label: string; test: (value: string) => boolean }[] = [
+  { label: "At least 8 characters", test: (v) => v.length >= 8 },
+  { label: "One uppercase letter", test: (v) => /[A-Z]/.test(v) },
+  { label: "One lowercase letter", test: (v) => /[a-z]/.test(v) },
+  { label: "One number", test: (v) => /[0-9]/.test(v) },
+  { label: "One special character", test: (v) => /[^A-Za-z0-9]/.test(v) },
+];
+
+function meetsAllRequirements(value: string): boolean {
+  return REQUIREMENTS.every((r) => r.test(value));
+}
 
 export default function ChangePasswordForm({ email }: { email: string }) {
   const [password, setPassword] = useState("");
@@ -28,7 +43,9 @@ export default function ChangePasswordForm({ email }: { email: string }) {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (!meetsAllRequirements(password)) {
+      return setError("Password does not meet the requirements below.");
+    }
     if (password !== confirmation) return setError("The passwords do not match.");
 
     setStatus("submitting");
@@ -105,7 +122,26 @@ export default function ChangePasswordForm({ email }: { email: string }) {
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <p className="mt-1.5 text-xs text-muted-foreground">At least 8 characters.</p>
+              <ul className="mt-2.5 space-y-1">
+                {REQUIREMENTS.map((req) => {
+                  const met = req.test(password);
+                  return (
+                    <li
+                      key={req.label}
+                      className={`flex items-center gap-1.5 text-xs transition-colors ${
+                        met ? "text-green-400" : "text-muted-foreground"
+                      }`}
+                    >
+                      {met ? (
+                        <Check size={13} className="shrink-0" />
+                      ) : (
+                        <X size={13} className="shrink-0" />
+                      )}
+                      {req.label}
+                    </li>
+                  );
+                })}
+              </ul>
 
               <label
                 htmlFor="confirm-password"

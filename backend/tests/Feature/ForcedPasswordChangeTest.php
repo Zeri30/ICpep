@@ -72,13 +72,13 @@ class ForcedPasswordChangeTest extends TestCase
         $default = $this->createAndSignIn();
 
         $this->postJson('/api/admin/me/password', [
-            'password' => 'a-brand-new-password',
-            'password_confirmation' => 'a-brand-new-password',
+            'password' => 'A-Brand-New-Password1',
+            'password_confirmation' => 'A-Brand-New-Password1',
         ])->assertOk();
 
         $user = User::where('email', 'jane@example.com')->first();
         $this->assertFalse($user->must_change_password);
-        $this->assertTrue(Hash::check('a-brand-new-password', $user->password));
+        $this->assertTrue(Hash::check('A-Brand-New-Password1', $user->password));
 
         // Unlocked now: the endpoint that was refusing a moment ago works.
         $this->getJson('/api/admin/dashboard')->assertOk();
@@ -94,7 +94,7 @@ class ForcedPasswordChangeTest extends TestCase
 
         $this->postJson('/auth/admin/login', [
             'email' => 'jane@example.com',
-            'password' => 'a-brand-new-password',
+            'password' => 'A-Brand-New-Password1',
         ])->assertOk();
     }
 
@@ -108,5 +108,23 @@ class ForcedPasswordChangeTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['password']);
+    }
+
+    public function test_new_password_must_meet_complexity_requirements(): void
+    {
+        $this->createAndSignIn();
+
+        // Long enough, but missing an uppercase letter, a number, and a symbol.
+        $this->postJson('/api/admin/me/password', [
+            'password' => 'lowercaseonly',
+            'password_confirmation' => 'lowercaseonly',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['password']);
+
+        $this->postJson('/api/admin/me/password', [
+            'password' => 'Str0ng-Pass!',
+            'password_confirmation' => 'Str0ng-Pass!',
+        ])->assertOk();
     }
 }
