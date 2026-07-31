@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\Event;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -118,5 +119,37 @@ class MeController extends Controller
         ActivityLog::record('password_changed', "{$user->name} changed their password", $user->name);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * "Manage sessions" → Log out other sessions: ends this account's
+     * sessions on every other device, but leaves the one making this request
+     * signed in. Same eviction the login flow already does automatically —
+     * this just lets an officer trigger it on demand.
+     */
+    public function logoutOtherSessions(Request $request): JsonResponse
+    {
+        DB::table('sessions')
+            ->where('user_id', $request->user()->id)
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * "Manage sessions" → Log out all sessions: ends every session this
+     * account has open, including the one making this request — so, unlike
+     * {@see self::logoutOtherSessions()}, this device signs itself out too.
+     */
+    public function logoutAllSessions(Request $request): JsonResponse
+    {
+        DB::table('sessions')->where('user_id', $request->user()->id)->delete();
+
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['redirect' => config('app.frontend_url')]);
     }
 }
