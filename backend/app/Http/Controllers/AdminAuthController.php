@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -74,6 +75,15 @@ class AdminAuthController extends Controller
         // checks it. Forgetting it lets 'auth.session' re-prime itself for
         // whoever just signed in.
         $request->session()->forget('password_hash_web');
+
+        // Only one signed-in session per officer: drop every other row this
+        // account owns in the `sessions` table (requires SESSION_DRIVER=database)
+        // so a device that was already logged in gets treated as a guest on
+        // its next request, instead of two sessions being active at once.
+        DB::table('sessions')
+            ->where('user_id', Auth::id())
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
 
         // Land officers in the React admin on the public site's own origin.
         return response()->json(['redirect' => rtrim(config('app.frontend_url'), '/').'/admin']);
