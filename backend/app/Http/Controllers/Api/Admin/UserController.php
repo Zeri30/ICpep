@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -204,6 +205,12 @@ class UserController extends Controller
             'password' => Hash::make($defaultPassword),
             'must_change_password' => true,
         ]);
+
+        // Kill every session this account already has open — a reset means
+        // the old password (and whatever was signed in under it) shouldn't
+        // get to linger until it happens to hit auth.session's stale-hash
+        // check on its own next request.
+        DB::table('sessions')->where('user_id', $user->id)->delete();
 
         ActivityLog::record('password_reset', "Reset the password for admin {$user->name}", $user->name);
 

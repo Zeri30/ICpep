@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\Event;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -103,6 +104,16 @@ class MeController extends Controller
             'password' => Hash::make($data['password']),
             'must_change_password' => false,
         ]);
+
+        // Same reasoning as the login flow (AdminAuthController::login): a
+        // password change should immediately end this account's sessions on
+        // every other device, not just wait for auth.session to notice a
+        // stale hash next time one of them makes a request. The device doing
+        // the changing keeps its own session.
+        DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
 
         ActivityLog::record('password_changed', "{$user->name} changed their password", $user->name);
 
