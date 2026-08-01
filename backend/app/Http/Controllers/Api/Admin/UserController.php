@@ -54,11 +54,14 @@ class UserController extends Controller
         };
 
         if ($search = trim((string) $request->query('search'))) {
+            // whereLike(..., caseSensitive: false) compiles to ILIKE on Postgres
+            // and a LOWER() comparison elsewhere, so this stays case-insensitive
+            // on both the sqlite test DB and the Supabase/Postgres database.
             $query->where(function (Builder $q) use ($search): void {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                $q->whereLike('name', "%{$search}%", caseSensitive: false)
+                    ->orWhereLike('first_name', "%{$search}%", caseSensitive: false)
+                    ->orWhereLike('last_name', "%{$search}%", caseSensitive: false)
+                    ->orWhereLike('email', "%{$search}%", caseSensitive: false);
             });
         }
 
