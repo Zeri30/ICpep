@@ -461,7 +461,15 @@ export default function MembersList() {
           replace nothing and push nothing down, so the table keeps its height
           whether or not rows are selected. */}
       <div className="flex flex-wrap items-center gap-2.5">
-        <MembersFilters value={filters} onChange={changeFilters} />
+        <MembersFilters
+          value={filters}
+          onChange={changeFilters}
+          // Covers both halves of the wait: the debounce timer (search text
+          // not yet matching what was last sent) and the request it fires
+          // off. Scoped to a non-empty search box so filtering by class or
+          // year alone — no search term in flight — never spins this icon.
+          searching={!!filters.search && (filters.search !== debouncedSearch || fetching)}
+        />
 
         {selected.size > 0 && (
           <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm sm:ml-auto sm:w-auto">
