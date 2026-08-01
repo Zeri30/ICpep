@@ -580,9 +580,24 @@ function EventDialog({
                     </div>
 
                     <div>
-                      <label className={labelCls} htmlFor="event-description">
-                        Description / notes
-                      </label>
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <label className={labelCls + " mb-0"} htmlFor="event-description">
+                          Description / notes
+                        </label>
+                        {/* A live count rather than a silent cap — 5000 characters
+                            is enough to type past comfortably, so the risk isn't
+                            hitting the limit, it's not noticing a long description
+                            has stopped growing readable and started scrolling. */}
+                        <span
+                          className={`shrink-0 text-[11px] tabular-nums ${
+                            description.length >= 4500
+                              ? "text-amber-accent"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {description.length}/5000
+                        </span>
+                      </div>
                       <textarea
                         id="event-description"
                         value={description}
@@ -590,7 +605,14 @@ function EventDialog({
                         rows={twoColumn ? 9 : 5}
                         maxLength={5000}
                         placeholder="What is it for, who should attend, anything to bring…"
-                        className={`${fieldCls} resize-none`}
+                        // Vertical drag-resize, not fixed rows: a short note stays
+                        // compact, and a long one can be pulled taller instead of
+                        // being read through a small scrolling window. `resize-y`
+                        // still scrolls internally once dragged past its own
+                        // content — this only changes how much fits before it has
+                        // to. Bounded so it can't be shrunk to unusable or dragged
+                        // taller than the dialog itself typically allows.
+                        className={`${fieldCls} min-h-24 max-h-112 resize-y`}
                       />
                     </div>
                   </div>
