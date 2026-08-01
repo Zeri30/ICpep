@@ -10,7 +10,7 @@ import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { useAdminResource } from "@/lib/adminApi";
+import { markModuleViewed, useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -52,6 +52,11 @@ export default function PaymentHistory() {
   const [action, setAction] = useState("");
   const [section, setSection] = useState("");
   const [page, setPage] = useState(1);
+
+  // Opening the list clears its sidebar badge — see markModuleViewed.
+  useEffect(() => {
+    markModuleViewed("payments");
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(search), 350);

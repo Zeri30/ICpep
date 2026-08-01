@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { CalendarDays, Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from "lucide-react";
 import Logo from "@/components/ui/Logo";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import SignOutButton from "@/components/admin/layout/SignOutModal";
-import { useAdminResource } from "@/lib/adminApi";
+import { MODULE_VIEWED_EVENT, useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 
 import type { Permission } from "@/lib/adminApi";
 
-type Counts = { members: number; payments: number; users: number };
+type Counts = { members: number; payments: number; users: number; activity: number };
 
 // `need` is the permission required to see the item (null = any active admin).
 const NAV = [
@@ -22,12 +23,13 @@ const NAV = [
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays, badgeKey: null, need: null },
   { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments", need: "finance.view" },
   { href: "/admin/users", label: "User Management", icon: ShieldCheck, badgeKey: "users", need: "users.manage" },
-  { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: null, need: null },
+  // Open to every role too — same reasoning as the Calendar above.
+  { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: "activity", need: null },
 ] as const satisfies ReadonlyArray<{
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  badgeKey: "members" | "payments" | "users" | null;
+  badgeKey: "members" | "payments" | "users" | "activity" | null;
   need: Permission | null;
 }>;
 
@@ -41,12 +43,20 @@ export default function AdminSidebar({
   const pathname = usePathname();
   const { can } = useAdmin();
   const { selected: term } = useTerms();
-  // Live nav counts, refreshed like Filament's badges. Scoped to the membership
-  // list on screen, so the badge matches the number of rows in the module.
-  const { data: counts } = useAdminResource<Counts>(
+  // Unread nav counts — records created since this officer last opened each
+  // module (DashboardController::counts), not the module's total row count.
+  const { data: counts, refresh: refreshCounts } = useAdminResource<Counts>(
     `/counts${term ? `?term=${term.id}` : ""}`,
     { pollMs: 30000 },
   );
+
+  // A module page marks itself viewed on mount (see markModuleViewed) and
+  // fires this event, so its badge zeroes out immediately instead of sitting
+  // stale until the next 30s poll.
+  useEffect(() => {
+    window.addEventListener(MODULE_VIEWED_EVENT, refreshCounts);
+    return () => window.removeEventListener(MODULE_VIEWED_EVENT, refreshCounts);
+  }, [refreshCounts]);
 
   // Only show modules the officer's role can reach; the backend enforces the
   // same rule regardless, so hidden modules are also inaccessible by URL.
@@ -91,7 +101,7 @@ export default function AdminSidebar({
               {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />}
               <Icon size={18} />
               <span className="flex-1 uppercase tracking-wide font-head text-xs">{label}</span>
-              {typeof badge === "number" && (
+              {typeof badge === "number" && badge > 0 && (
                 <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
                   {badge}
                 </span>

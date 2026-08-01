@@ -30,7 +30,7 @@ import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
 import RoleBadge from "@/components/admin/users/RoleBadge";
 import RolePrivilegesModal from "@/components/admin/users/RolePrivilegesModal";
-import { apiSend, useAdminResource } from "@/lib/adminApi";
+import { apiSend, markModuleViewed, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { AdminUser, Paginated } from "@/lib/adminTypes";
 
@@ -73,6 +73,11 @@ export default function UsersList() {
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
   const [privilegesFor, setPrivilegesFor] = useState<AdminUser | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+
+  // Opening the list clears its sidebar badge — see markModuleViewed.
+  useEffect(() => {
+    markModuleViewed("users");
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(filters.search), 350);

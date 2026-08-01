@@ -36,7 +36,7 @@ import EditMemberModal from "@/components/admin/members/EditMemberModal";
 import ViewMemberModal from "@/components/admin/members/ViewMemberModal";
 import { useMembersListResource } from "@/components/admin/members/useMembersListResource";
 import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { apiSend } from "@/lib/adminApi";
+import { apiSend, markModuleViewed } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
 
@@ -93,6 +93,11 @@ export default function MembersList() {
   const [editing, setEditing] = useState<Member | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+
+  // Opening the list clears its sidebar badge — see markModuleViewed.
+  useEffect(() => {
+    markModuleViewed("members");
+  }, []);
 
   // Debounce only the free-text search; selects apply immediately.
   useEffect(() => {

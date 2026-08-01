@@ -178,6 +178,23 @@ export async function logoutAllSessions(): Promise<void> {
   window.location.href = redirect ?? "/";
 }
 
+/** Fired after a module is marked viewed, so AdminSidebar's badge (a separate
+    component, polling on its own timer) can zero out immediately instead of
+    waiting for its next poll. */
+export const MODULE_VIEWED_EVENT = "icpep:module-viewed";
+
+/** "I just opened this module" — zeroes the signed-in officer's sidebar badge
+    for it (see ModuleView on the backend). Errors are swallowed: failing to
+    record a view is not worth surfacing to whoever just opened a list. */
+export async function markModuleViewed(module: "members" | "payments" | "users" | "activity"): Promise<void> {
+  try {
+    await apiSend<{ ok: true }>("POST", `/me/views/${module}`);
+    window.dispatchEvent(new Event(MODULE_VIEWED_EVENT));
+  } catch {
+    // Best-effort — see above.
+  }
+}
+
 /** Fetch a resource once, optionally re-fetching on an interval (like Filament's
     widget polling). Pass `path = null` to stay idle. */
 export function useAdminResource<T>(
