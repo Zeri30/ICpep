@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import LoadingScreen from "@/components/LoadingScreen";
 import SmoothScroll from "@/components/SmoothScroll";
 import GsapRefresher from "@/components/GsapRefresher";
@@ -16,8 +17,18 @@ import Events from "@/components/sections/Events";
 import Membership from "@/components/sections/Membership";
 import Faqs from "@/components/sections/Faqs";
 import Contact from "@/components/sections/Contact";
+import { fetchMe } from "@/lib/serverMe";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  // An officer with a live session or a valid "remember me" cookie lands
+  // straight in the admin instead of the marketing page — the same check
+  // the (admin) layout gates on, so a remembered device never has to click
+  // Sign In again just to get back in.
+  const me = await fetchMe();
+  if (me) redirect(me.user.mustChangePassword ? "/change-password" : "/admin");
+
   return (
     <>
       <LoadingScreen />
