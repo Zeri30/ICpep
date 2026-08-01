@@ -131,6 +131,24 @@ export default function UsersList() {
     setConfirm(null);
   }
 
+  /**
+   * Gate on `resetAvailableAt` before ever opening the confirm dialog — the
+   * account is on the reset-password cooldown (UserController::RESET_COOLDOWN_DAYS)
+   * until that time, so there's nothing the dialog could do here but fail.
+   * The backend enforces the same window regardless, in case this data is
+   * stale by the time the click lands.
+   */
+  function requestReset(user: AdminUser) {
+    if (user.resetAvailableAt && new Date(user.resetAvailableAt) > new Date()) {
+      notify("Password reset is on cooldown", {
+        tone: "warning",
+        body: `${user.name} was already reset recently. Try again after ${formatDateTime(user.resetAvailableAt)}.`,
+      });
+      return;
+    }
+    setResetFor(user);
+  }
+
   async function resetPassword(): Promise<string> {
     if (!resetFor) throw new Error("No account selected.");
     // Let the modal surface any error by rethrowing; it stays open afterwards
@@ -198,7 +216,7 @@ export default function UsersList() {
           onEdit={() => setEditing(u)}
           onPrivileges={() => setPrivilegesFor(u)}
           onToggle={() => setConfirm({ kind: "toggle", user: u })}
-          onReset={() => setResetFor(u)}
+          onReset={() => requestReset(u)}
           onDelete={() => setConfirm({ kind: "delete", user: u })}
         />
       ),

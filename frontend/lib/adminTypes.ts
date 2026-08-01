@@ -259,6 +259,9 @@ export type AdminUser = {
   createdAt: string | null;
   /** True on the signed-in officer's own row — used to disable self-actions. */
   isSelf: boolean;
+  /** Set only while this account's reset-password cooldown is still running
+      (see UserController::RESET_COOLDOWN_DAYS) — null once it's clear. */
+  resetAvailableAt: string | null;
 };
 
 /* -------------------------------------------------------------- privileges */
