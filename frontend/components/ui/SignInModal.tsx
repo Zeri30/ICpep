@@ -88,6 +88,7 @@ function SignInDialog({
         body: JSON.stringify({
           email: form.get("email"),
           password: form.get("password"),
+          remember: form.get("remember") === "on",
         }),
       });
 
@@ -209,6 +210,19 @@ function SignInDialog({
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+
+              <label
+                htmlFor="signin-remember"
+                className="mt-5 flex items-center gap-2.5 text-sm text-secondary-foreground select-none cursor-pointer w-fit"
+              >
+                <input
+                  id="signin-remember"
+                  name="remember"
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-line bg-secondary/60 accent-primary"
+                />
+                Remember my password
+              </label>
 
               {error && (
                 <div

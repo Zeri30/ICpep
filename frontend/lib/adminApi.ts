@@ -165,6 +165,19 @@ export async function signOut(): Promise<void> {
   window.location.href = redirect ?? "/";
 }
 
+/** "Manage sessions" — sign this account out of every other device, keeping
+    the one calling this signed in. */
+export async function logoutOtherSessions(): Promise<void> {
+  await apiSend<{ ok: true }>("POST", "/me/sessions/logout-others");
+}
+
+/** "Manage sessions" — sign this account out everywhere, including the
+    device calling this, then return the landing-page URL. */
+export async function logoutAllSessions(): Promise<void> {
+  const { redirect } = await apiSend<{ redirect: string }>("POST", "/me/sessions/logout-all");
+  window.location.href = redirect ?? "/";
+}
+
 /** Fetch a resource once, optionally re-fetching on an interval (like Filament's
     widget polling). Pass `path = null` to stay idle. */
 export function useAdminResource<T>(

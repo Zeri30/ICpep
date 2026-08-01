@@ -8,8 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\Event;
+use App\Services\RememberMeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -110,8 +113,60 @@ class MeController extends Controller
             'must_change_password' => false,
         ]);
 
+        // Same reasoning as the login flow (AdminAuthController::login): a
+        // password change should immediately end this account's sessions on
+        // every other device, not just wait for auth.session to notice a
+        // stale hash next time one of them makes a request. The device doing
+        // the changing keeps its own session.
+        DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
+
+        // Same reasoning, extended to "remember me": a leaked password is no
+        // longer useful once changed, but a remember-me cookie issued under
+        // the old one would otherwise keep signing every other device back in.
+        RememberMeService::forgetOthersForUser($user->id, $request);
+
         ActivityLog::record('password_changed', "{$user->name} changed their password", $user->name);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * "Manage sessions" → Log out other sessions: ends this account's
+     * sessions on every other device, but leaves the one making this request
+     * signed in. Same eviction the login flow already does automatically —
+     * this just lets an officer trigger it on demand.
+     */
+    public function logoutOtherSessions(Request $request): JsonResponse
+    {
+        DB::table('sessions')
+            ->where('user_id', $request->user()->id)
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
+
+        RememberMeService::forgetOthersForUser($request->user()->id, $request);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * "Manage sessions" → Log out all sessions: ends every session this
+     * account has open, including the one making this request — so, unlike
+     * {@see self::logoutOtherSessions()}, this device signs itself out too.
+     */
+    public function logoutAllSessions(Request $request): JsonResponse
+    {
+        DB::table('sessions')->where('user_id', $request->user()->id)->delete();
+
+        RememberMeService::forgetAllForUser($request->user()->id);
+        RememberMeService::forgetCookie();
+
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['redirect' => config('app.frontend_url')]);
     }
 }

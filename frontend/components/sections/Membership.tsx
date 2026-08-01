@@ -414,7 +414,25 @@ export default function Membership() {
               {/* Phone */}
               <div>
                 <Label htmlFor="phone">Phone Number</Label>
-                <input id="phone" name="phone" type="tel" required placeholder="0912 345 6789" className={fieldBase} />
+                <input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  required
+                  maxLength={11}
+                  pattern="\d{11}"
+                  title="Exactly 11 digits, numbers only"
+                  placeholder="09123456789"
+                  // Uncontrolled (read via FormData on submit), so digits are
+                  // stripped in place rather than through React state — strays
+                  // like a pasted dash or space never reach the backend's
+                  // exact-11-digits check. Mirrors the Student ID field above.
+                  onChange={(e) => {
+                    e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 11);
+                  }}
+                  className={fieldBase}
+                />
               </div>
 
               {/* E-signature — file upload (full width) */}

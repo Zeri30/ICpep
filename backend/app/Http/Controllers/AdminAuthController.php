@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\RememberMeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -45,7 +47,10 @@ class AdminAuthController extends Controller
             ], 429);
         }
 
-        if (! Auth::guard('web')->attempt($credentials, $request->boolean('remember'))) {
+        // The "remember" flag is handled entirely by RememberMeService below,
+        // not Laravel's own recaller cookie (Auth::attempt()'s second
+        // argument) — see that service's docblock for why.
+        if (! Auth::guard('web')->attempt($credentials)) {
             RateLimiter::hit($key, self::DECAY_SECONDS);
 
             return response()->json(['message' => 'Those credentials do not match our records.'], 422);
@@ -75,6 +80,24 @@ class AdminAuthController extends Controller
         // whoever just signed in.
         $request->session()->forget('password_hash_web');
 
+        // Only one signed-in session per officer: drop every other row this
+        // account owns in the `sessions` table (requires SESSION_DRIVER=database)
+        // so a device that was already logged in gets treated as a guest on
+        // its next request, instead of two sessions being active at once.
+        DB::table('sessions')
+            ->where('user_id', Auth::id())
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
+
+        // Same "one signed-in device" reasoning, extended to the remember-me
+        // cookie: a fresh sign-in starts clean rather than trusting whatever
+        // an earlier session on this or another device was issued.
+        RememberMeService::forgetAllForUser(Auth::id());
+
+        if ($request->boolean('remember')) {
+            RememberMeService::issue(Auth::user(), $request);
+        }
+
         // Land officers in the React admin on the public site's own origin.
         return response()->json(['redirect' => rtrim(config('app.frontend_url'), '/').'/admin']);
     }
@@ -86,6 +109,11 @@ class AdminAuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
+        // Revokes the remember-me cookie's token too — signing out is
+        // meaningless if the same browser gets logged back in on its next
+        // request via RememberMeService::attempt().
+        RememberMeService::forgetCurrent($request);
+
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

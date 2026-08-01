@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\MembershipTerm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -96,6 +97,47 @@ class AdminApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('redirect', config('app.frontend_url'));
 
+        $this->assertGuest();
+    }
+
+    /* -------------------------------------------------- manage sessions */
+
+    public function test_logout_other_sessions_requires_authentication(): void
+    {
+        $this->postJson('/api/admin/me/sessions/logout-others')->assertUnauthorized();
+    }
+
+    public function test_logout_other_sessions_clears_this_accounts_other_devices(): void
+    {
+        $admin = $this->admin();
+
+        DB::table('sessions')->insert([
+            ['id' => 'device-a', 'user_id' => $admin->id, 'payload' => 'x', 'last_activity' => time()],
+            ['id' => 'device-b', 'user_id' => $admin->id, 'payload' => 'y', 'last_activity' => time()],
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/me/sessions/logout-others')
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $admin->id)->count());
+    }
+
+    public function test_logout_all_sessions_signs_this_device_out_too(): void
+    {
+        $admin = $this->admin();
+
+        DB::table('sessions')->insert([
+            ['id' => 'device-a', 'user_id' => $admin->id, 'payload' => 'x', 'last_activity' => time()],
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/me/sessions/logout-all')
+            ->assertOk()
+            ->assertJsonPath('redirect', config('app.frontend_url'));
+
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $admin->id)->count());
         $this->assertGuest();
     }
 

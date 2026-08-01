@@ -114,4 +114,20 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Remember Me
+    |--------------------------------------------------------------------------
+    |
+    | Settings for the site's own "Remember me" login checkbox — see
+    | App\Services\RememberMeService. Independent of Laravel's built-in
+    | `remember_token` recaller cookie, which this app does not use.
+    |
+    */
+
+    'remember_me' => [
+        'cookie' => env('REMEMBER_ME_COOKIE', 'icpep_remember'),
+        'duration_days' => (int) env('REMEMBER_ME_DURATION_DAYS', 30),
+    ],
+
 ];

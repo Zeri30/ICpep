@@ -37,6 +37,10 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // The one write EnsureAdmin still lets a must-change-password account
     // reach — see the middleware for why everything else is closed to it.
     Route::post('/me/password', [MeController::class, 'updatePassword'])->name('me.password.update');
+    // "Manage sessions" in the account menu — see MeController for the
+    // difference between the two.
+    Route::post('/me/sessions/logout-others', [MeController::class, 'logoutOtherSessions'])->name('me.sessions.logout-others');
+    Route::post('/me/sessions/logout-all', [MeController::class, 'logoutAllSessions'])->name('me.sessions.logout-all');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');

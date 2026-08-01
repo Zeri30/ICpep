@@ -17,6 +17,15 @@ export type Column<T> = {
   render: (row: T) => React.ReactNode;
   className?: string;
   /**
+   * Column width, only honoured when the table opts into `fixedLayout`. Under
+   * the default auto layout, columns' widths depend on their content and the
+   * browser can hand narrow columns uneven leftover space — two short columns
+   * next to each other can end up looking tighter than a padding class alone
+   * would suggest. A fixed layout with explicit widths (e.g. percentages
+   * summing to 100%) makes gaps between columns depend only on padding.
+   */
+  width?: string;
+  /**
    * The placeholder shown in this cell while the first page is loading, if the
    * list opts into skeletons by passing `skeletonRows`.
    *
@@ -44,6 +53,7 @@ export default function DataTable<T>({
   fill = false,
   footer,
   skeletonRows = 0,
+  fixedLayout = false,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -75,6 +85,13 @@ export default function DataTable<T>({
   fill?: boolean;
   /** Pinned below the rows, inside the card — pagination lives here. */
   footer?: React.ReactNode;
+  /**
+   * Give each column's `width` the final say instead of letting the browser
+   * size columns off their content. Off by default so existing tables render
+   * exactly as before; a list opts in once it's supplying `width` on every
+   * column.
+   */
+  fixedLayout?: boolean;
 }) {
   const alignClass = (a?: string) =>
     a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left";
@@ -95,7 +112,17 @@ export default function DataTable<T>({
       {/* min-h-0 lets this shrink below its content inside a flex column, which
           is what makes the overflow scroll rather than pushing the page down. */}
       <div className={`overflow-x-auto ${fill ? "min-h-0 flex-1 overflow-y-auto" : ""}`}>
-        <table className="w-full min-w-[40rem] border-collapse text-sm" aria-busy={showSkeleton || undefined}>
+        <table
+          className={`w-full min-w-[40rem] border-collapse text-sm ${fixedLayout ? "table-fixed" : ""}`}
+          aria-busy={showSkeleton || undefined}
+        >
+          {fixedLayout && (
+            <colgroup>
+              {columns.map((col) => (
+                <col key={col.key} style={col.width ? { width: col.width } : undefined} />
+              ))}
+            </colgroup>
+          )}
           <thead className={fill ? "sticky top-0 z-10" : ""}>
             <tr className="border-b border-line/70 bg-secondary/40 backdrop-blur">
               {columns.map((col) => {
@@ -103,7 +130,7 @@ export default function DataTable<T>({
                 return (
                   <th
                     key={col.key}
-                    className={`px-4 py-3 font-head text-[11px] font-semibold uppercase tracking-widest text-muted-foreground ${alignClass(col.align)}`}
+                    className={`px-4 py-3 font-head text-[11px] font-semibold uppercase tracking-widest text-muted-foreground ${alignClass(col.align)} ${col.className ?? ""}`}
                   >
                     {col.sortable && onSort ? (
                       <button

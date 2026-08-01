@@ -136,9 +136,10 @@ export function MyAttendanceBadge({ event }: { event: ScheduledEvent }) {
 }
 
 /**
- * Shown when an event has finished with its outcome unrecorded. Aimed at
- * the secretariat, the only ones who can clear it — but visible to every
- * role, because "did that meeting actually happen?" is everyone's question.
+ * Shown when an event has finished with its outcome unrecorded. Aimed at,
+ * and shown only to, the secretariat — the only ones who can clear it, so
+ * the only ones for whom it is an outstanding task rather than a status
+ * nobody else can act on.
  */
 export function NeedsUpdateBadge() {
   return (

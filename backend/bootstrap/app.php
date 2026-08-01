@@ -21,6 +21,14 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Appended (not aliased) so it runs on every stateful request without
+        // routes/admin.php having to opt in — a "remember me" cookie needs to
+        // revive a guest before 'auth.session'/EnsureAdmin ever get to ask who
+        // they are. See the middleware's own docblock for the ordering.
+        $middleware->web(append: [
+            \App\Http\Middleware\AuthenticateViaRememberToken::class,
+        ]);
+
         // Route-level permission gate for the admin API, e.g.
         // ->middleware('permission:members.edit'). See App\Enums\Permission.
         //
