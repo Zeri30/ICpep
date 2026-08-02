@@ -1,0 +1,550 @@
+%PDF-1.4
+%ICpEP QA Checklist
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R] /Count 7 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 13 0 R >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 14 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 15 0 R >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 16 0 R >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 17 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 18 0 R >>
+endobj
+12 0 obj
+<< /Length 3955 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+BT /F2 10.5 Tf 50 724 Td (Build/Version: ____________________    Tester: ____________________    Date: ____________________) Tj ET
+BT /F2 10.5 Tf 50 707 Td (Environment: Local / Staging / Production    Browser/Device: ____________________) Tj ET
+BT /F1 12 Tf 50 676 Td (PUBLIC WEBSITE) Tj ET
+0.9 w 50 656 10 10 re S
+BT /F2 10.2 Tf 68 658 Td (Landing page loads without console/server errors) Tj ET
+0.9 w 50 638 10 10 re S
+BT /F2 10.2 Tf 68 640 Td (Navbar links scroll to the correct sections) Tj ET
+0.9 w 50 620 10 10 re S
+BT /F2 10.2 Tf 68 622 Td (Loading screen disappears and page is usable) Tj ET
+0.9 w 50 602 10 10 re S
+BT /F2 10.2 Tf 68 604 Td (Scroll progress bar updates while scrolling) Tj ET
+0.9 w 50 584 10 10 re S
+BT /F2 10.2 Tf 68 586 Td (Hero section displays correctly on desktop and mobile) Tj ET
+0.9 w 50 566 10 10 re S
+BT /F2 10.2 Tf 68 568 Td (About, Manifesto, Board, Teams, Events, FAQs, and Contact sections display correct content) Tj ET
+0.9 w 50 548 10 10 re S
+BT /F2 10.2 Tf 68 550 Td (Images for board/team/events load without broken placeholders) Tj ET
+0.9 w 50 530 10 10 re S
+BT /F2 10.2 Tf 68 532 Td (Layout is responsive on mobile, tablet, and desktop) Tj ET
+0.9 w 50 512 10 10 re S
+BT /F2 10.2 Tf 68 514 Td (Footer links/contact details are visible and correct) Tj ET
+0.9 w 50 494 10 10 re S
+BT /F2 10.2 Tf 68 496 Td (Edge: slow network still shows usable loading/error states) Tj ET
+0.9 w 50 476 10 10 re S
+BT /F2 10.2 Tf 68 478 Td (Edge: missing image asset does not break the whole page) Tj ET
+0.9 w 50 458 10 10 re S
+BT /F2 10.2 Tf 68 460 Td (Edge: very small mobile width does not overlap text/buttons) Tj ET
+0.9 w 50 440 10 10 re S
+BT /F2 10.2 Tf 68 442 Td (Edge: browser refresh keeps page stable) Tj ET
+0.9 w 50 422 10 10 re S
+BT /F2 10.2 Tf 68 424 Td (Edge: opening direct section links or hashes does not break scrolling) Tj ET
+BT /F1 12 Tf 50 392 Td (MEMBERSHIP REGISTRATION) Tj ET
+0.9 w 50 372 10 10 re S
+BT /F2 10.2 Tf 68 374 Td (Registration status loads from backend) Tj ET
+0.9 w 50 354 10 10 re S
+BT /F2 10.2 Tf 68 356 Td (Membership form is visible when registration is open) Tj ET
+0.9 w 50 336 10 10 re S
+BT /F2 10.2 Tf 68 338 Td (Closed registration shows the proper unavailable message) Tj ET
+0.9 w 50 318 10 10 re S
+BT /F2 10.2 Tf 68 320 Td (Required fields show validation messages when empty) Tj ET
+0.9 w 50 300 10 10 re S
+BT /F2 10.2 Tf 68 302 Td (Name, email, student ID, section, year level, and contact fields accept valid input) Tj ET
+0.9 w 50 282 10 10 re S
+BT /F2 10.2 Tf 68 284 Td (Invalid email/contact formats are rejected) Tj ET
+0.9 w 50 264 10 10 re S
+BT /F2 10.2 Tf 68 266 Td (Formal picture upload accepts valid image files) Tj ET
+0.9 w 50 246 10 10 re S
+BT /F2 10.2 Tf 68 248 Td (E-signature upload accepts valid image files) Tj ET
+0.9 w 50 228 10 10 re S
+BT /F2 10.2 Tf 68 230 Td (Invalid file type or oversized file is rejected) Tj ET
+0.9 w 50 210 10 10 re S
+BT /F2 10.2 Tf 68 212 Td (Successful submission shows confirmation message) Tj ET
+0.9 w 50 192 10 10 re S
+BT /F2 10.2 Tf 68 194 Td (Duplicate/invalid submission shows useful error message) Tj ET
+0.9 w 50 174 10 10 re S
+BT /F2 10.2 Tf 68 176 Td (Edge: double-clicking submit does not create duplicate applications) Tj ET
+0.9 w 50 156 10 10 re S
+BT /F2 10.2 Tf 68 158 Td (Edge: duplicate student ID is rejected for the same active term) Tj ET
+0.9 w 50 138 10 10 re S
+BT /F2 10.2 Tf 68 140 Td (Edge: duplicate email handling matches expected policy) Tj ET
+0.9 w 50 120 10 10 re S
+BT /F2 10.2 Tf 68 122 Td (Edge: extremely long names/addresses are rejected or displayed safely) Tj ET
+0.9 w 50 102 10 10 re S
+BT /F2 10.2 Tf 68 104 Td (Edge: special characters in names do not break saving/display) Tj ET
+0.9 w 50 84 10 10 re S
+BT /F2 10.2 Tf 68 86 Td (Edge: upload is cancelled or interrupted and user can retry) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 1 of 7) Tj ET
+
+endstream
+endobj
+13 0 obj
+<< /Length 3745 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+0.9 w 50 722 10 10 re S
+BT /F2 10.2 Tf 68 724 Td (Edge: backend offline shows a clear error) Tj ET
+0.9 w 50 704 10 10 re S
+BT /F2 10.2 Tf 68 706 Td (Edge: form remains usable after validation errors) Tj ET
+0.9 w 50 686 10 10 re S
+BT /F2 10.2 Tf 68 688 Td (Edge: closed registration blocks direct API submission too) Tj ET
+BT /F1 12 Tf 50 656 Td (ADMIN AUTHENTICATION) Tj ET
+0.9 w 50 636 10 10 re S
+BT /F2 10.2 Tf 68 638 Td (Admin/officer can open sign-in modal from public site) Tj ET
+0.9 w 50 618 10 10 re S
+BT /F2 10.2 Tf 68 620 Td (CSRF/session initializes before login) Tj ET
+0.9 w 50 600 10 10 re S
+BT /F2 10.2 Tf 68 602 Td (Valid credentials sign in successfully) Tj ET
+0.9 w 50 582 10 10 re S
+BT /F2 10.2 Tf 68 584 Td (Invalid credentials show an error and do not sign in) Tj ET
+0.9 w 50 564 10 10 re S
+BT /F2 10.2 Tf 68 566 Td (Inactive/deleted account cannot sign in) Tj ET
+0.9 w 50 546 10 10 re S
+BT /F2 10.2 Tf 68 548 Td (User with must-change-password is redirected to change password page) Tj ET
+0.9 w 50 528 10 10 re S
+BT /F2 10.2 Tf 68 530 Td (Change password rejects weak/invalid confirmation) Tj ET
+0.9 w 50 510 10 10 re S
+BT /F2 10.2 Tf 68 512 Td (Change password succeeds and unlocks admin pages) Tj ET
+0.9 w 50 492 10 10 re S
+BT /F2 10.2 Tf 68 494 Td (Sign out clears session and returns to public site) Tj ET
+0.9 w 50 474 10 10 re S
+BT /F2 10.2 Tf 68 476 Td (Expired session redirects safely to landing page) Tj ET
+0.9 w 50 456 10 10 re S
+BT /F2 10.2 Tf 68 458 Td (Edge: stale CSRF token refreshes or fails gracefully) Tj ET
+0.9 w 50 438 10 10 re S
+BT /F2 10.2 Tf 68 440 Td (Edge: browser back after logout does not show protected data) Tj ET
+0.9 w 50 420 10 10 re S
+BT /F2 10.2 Tf 68 422 Td (Edge: password reset forces password change on next login) Tj ET
+0.9 w 50 402 10 10 re S
+BT /F2 10.2 Tf 68 404 Td (Edge: changed password invalidates stale sessions as expected) Tj ET
+0.9 w 50 384 10 10 re S
+BT /F2 10.2 Tf 68 386 Td (Edge: multiple failed logins do not expose account details) Tj ET
+0.9 w 50 366 10 10 re S
+BT /F2 10.2 Tf 68 368 Td (Edge: direct admin URL access while logged out redirects safely) Tj ET
+BT /F1 12 Tf 50 336 Td (ADMIN DASHBOARD) Tj ET
+0.9 w 50 316 10 10 re S
+BT /F2 10.2 Tf 68 318 Td (Dashboard loads after login) Tj ET
+0.9 w 50 298 10 10 re S
+BT /F2 10.2 Tf 68 300 Td (Member/application counts are correct) Tj ET
+0.9 w 50 280 10 10 re S
+BT /F2 10.2 Tf 68 282 Td (Payment/revenue cards only appear for roles with finance permission) Tj ET
+0.9 w 50 262 10 10 re S
+BT /F2 10.2 Tf 68 264 Td (Upcoming events list displays correct event data) Tj ET
+0.9 w 50 244 10 10 re S
+BT /F2 10.2 Tf 68 246 Td (Empty dashboard states display cleanly) Tj ET
+0.9 w 50 226 10 10 re S
+BT /F2 10.2 Tf 68 228 Td (Dashboard refresh/polling does not duplicate data) Tj ET
+0.9 w 50 208 10 10 re S
+BT /F2 10.2 Tf 68 210 Td (Edge: dashboard handles zero members/payments/events) Tj ET
+0.9 w 50 190 10 10 re S
+BT /F2 10.2 Tf 68 192 Td (Edge: dashboard handles large member/event counts) Tj ET
+0.9 w 50 172 10 10 re S
+BT /F2 10.2 Tf 68 174 Td (Edge: revenue numbers update after payment status changes) Tj ET
+0.9 w 50 154 10 10 re S
+BT /F2 10.2 Tf 68 156 Td (Edge: role permission change hides restricted dashboard data after refresh) Tj ET
+0.9 w 50 136 10 10 re S
+BT /F2 10.2 Tf 68 138 Td (Edge: failed dashboard API request shows non-breaking error state) Tj ET
+BT /F1 12 Tf 50 106 Td (MEMBER MANAGEMENT) Tj ET
+0.9 w 50 86 10 10 re S
+BT /F2 10.2 Tf 68 88 Td (Members page loads for roles with members.view) Tj ET
+0.9 w 50 68 10 10 re S
+BT /F2 10.2 Tf 68 70 Td (Unauthorized roles cannot access member list) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 2 of 7) Tj ET
+
+endstream
+endobj
+14 0 obj
+<< /Length 4088 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+0.9 w 50 722 10 10 re S
+BT /F2 10.2 Tf 68 724 Td (Term selector loads available membership terms) Tj ET
+0.9 w 50 704 10 10 re S
+BT /F2 10.2 Tf 68 706 Td (Member filters/search return correct results) Tj ET
+0.9 w 50 686 10 10 re S
+BT /F2 10.2 Tf 68 688 Td (Pagination works without skipping/duplicating rows) Tj ET
+0.9 w 50 668 10 10 re S
+BT /F2 10.2 Tf 68 670 Td (Member detail page displays profile, payment, files, and metadata) Tj ET
+0.9 w 50 650 10 10 re S
+BT /F2 10.2 Tf 68 652 Td (Edit member form saves valid changes) Tj ET
+0.9 w 50 632 10 10 re S
+BT /F2 10.2 Tf 68 634 Td (Invalid edit data shows validation messages) Tj ET
+0.9 w 50 614 10 10 re S
+BT /F2 10.2 Tf 68 616 Td (Delete/archive member works and removes from active list) Tj ET
+0.9 w 50 596 10 10 re S
+BT /F2 10.2 Tf 68 598 Td (Restore member works from trashed/archived state) Tj ET
+0.9 w 50 578 10 10 re S
+BT /F2 10.2 Tf 68 580 Td (Bulk actions apply only to selected members) Tj ET
+0.9 w 50 560 10 10 re S
+BT /F2 10.2 Tf 68 562 Td (Edge: search with no results shows empty state) Tj ET
+0.9 w 50 542 10 10 re S
+BT /F2 10.2 Tf 68 544 Td (Edge: filters combined together return accurate results) Tj ET
+0.9 w 50 524 10 10 re S
+BT /F2 10.2 Tf 68 526 Td (Edge: changing term while a request is loading does not show stale data) Tj ET
+0.9 w 50 506 10 10 re S
+BT /F2 10.2 Tf 68 508 Td (Edge: editing archived/deleted member is blocked or handled correctly) Tj ET
+0.9 w 50 488 10 10 re S
+BT /F2 10.2 Tf 68 490 Td (Edge: concurrent edits from two admins do not silently lose important data) Tj ET
+0.9 w 50 470 10 10 re S
+BT /F2 10.2 Tf 68 472 Td (Edge: invalid member ID shows not found/unauthorized state) Tj ET
+0.9 w 50 452 10 10 re S
+BT /F2 10.2 Tf 68 454 Td (Edge: member details still load if optional fields are blank) Tj ET
+0.9 w 50 434 10 10 re S
+BT /F2 10.2 Tf 68 436 Td (Edge: bulk action with zero selected members is blocked) Tj ET
+0.9 w 50 416 10 10 re S
+BT /F2 10.2 Tf 68 418 Td (Edge: bulk action on mixed paid/unpaid members behaves correctly) Tj ET
+BT /F1 12 Tf 50 386 Td (PAYMENTS AND REGISTRATION TERMS) Tj ET
+0.9 w 50 366 10 10 re S
+BT /F2 10.2 Tf 68 368 Td (Toggle paid/unpaid updates member payment status) Tj ET
+0.9 w 50 348 10 10 re S
+BT /F2 10.2 Tf 68 350 Td (Payment transaction/history is created after payment changes) Tj ET
+0.9 w 50 330 10 10 re S
+BT /F2 10.2 Tf 68 332 Td (Payment History page loads for finance.view roles) Tj ET
+0.9 w 50 312 10 10 re S
+BT /F2 10.2 Tf 68 314 Td (Unauthorized roles cannot see payment history) Tj ET
+0.9 w 50 294 10 10 re S
+BT /F2 10.2 Tf 68 296 Td (Payment filters/search/date ranges return correct results) Tj ET
+0.9 w 50 276 10 10 re S
+BT /F2 10.2 Tf 68 278 Td (Year level and term data are shown correctly in payment records) Tj ET
+0.9 w 50 258 10 10 re S
+BT /F2 10.2 Tf 68 260 Td (Create membership term works with valid data) Tj ET
+0.9 w 50 240 10 10 re S
+BT /F2 10.2 Tf 68 242 Td (Activate membership term changes current active term) Tj ET
+0.9 w 50 222 10 10 re S
+BT /F2 10.2 Tf 68 224 Td (Opening registration allows public submissions) Tj ET
+0.9 w 50 204 10 10 re S
+BT /F2 10.2 Tf 68 206 Td (Closing registration blocks public submissions with reason) Tj ET
+0.9 w 50 186 10 10 re S
+BT /F2 10.2 Tf 68 188 Td (Registration settings persist after refresh) Tj ET
+0.9 w 50 168 10 10 re S
+BT /F2 10.2 Tf 68 170 Td (Edge: toggling payment twice creates correct audit/history trail) Tj ET
+0.9 w 50 150 10 10 re S
+BT /F2 10.2 Tf 68 152 Td (Edge: payment cannot be changed by role without members.payment) Tj ET
+0.9 w 50 132 10 10 re S
+BT /F2 10.2 Tf 68 134 Td (Edge: payment history handles empty result set) Tj ET
+0.9 w 50 114 10 10 re S
+BT /F2 10.2 Tf 68 116 Td (Edge: export after filters includes only filtered records) Tj ET
+0.9 w 50 96 10 10 re S
+BT /F2 10.2 Tf 68 98 Td (Edge: invalid/duplicate membership term is rejected) Tj ET
+0.9 w 50 78 10 10 re S
+BT /F2 10.2 Tf 68 80 Td (Edge: activating a new term does not erase old term records) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 3 of 7) Tj ET
+
+endstream
+endobj
+15 0 obj
+<< /Length 3788 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+0.9 w 50 722 10 10 re S
+BT /F2 10.2 Tf 68 724 Td (Edge: registration open/close changes are visible on public form after refresh) Tj ET
+0.9 w 50 704 10 10 re S
+BT /F2 10.2 Tf 68 706 Td (Edge: payment totals do not count archived/unpaid records incorrectly) Tj ET
+BT /F1 12 Tf 50 674 Td (EXPORTS AND FILE DOWNLOADS) Tj ET
+0.9 w 50 654 10 10 re S
+BT /F2 10.2 Tf 68 656 Td (CSV export downloads and opens with expected columns) Tj ET
+0.9 w 50 636 10 10 re S
+BT /F2 10.2 Tf 68 638 Td (Excel export downloads and opens with expected columns) Tj ET
+0.9 w 50 618 10 10 re S
+BT /F2 10.2 Tf 68 620 Td (PDF export downloads and displays correctly) Tj ET
+0.9 w 50 600 10 10 re S
+BT /F2 10.2 Tf 68 602 Td (Formal picture download opens/downloads correctly) Tj ET
+0.9 w 50 582 10 10 re S
+BT /F2 10.2 Tf 68 584 Td (E-signature download opens/downloads correctly) Tj ET
+0.9 w 50 564 10 10 re S
+BT /F2 10.2 Tf 68 566 Td (Unauthorized users cannot download protected member files) Tj ET
+0.9 w 50 546 10 10 re S
+BT /F2 10.2 Tf 68 548 Td (Edge: export with zero records still creates valid file or clear message) Tj ET
+0.9 w 50 528 10 10 re S
+BT /F2 10.2 Tf 68 530 Td (Edge: export with many records completes without timeout) Tj ET
+0.9 w 50 510 10 10 re S
+BT /F2 10.2 Tf 68 512 Td (Edge: exported special characters display correctly) Tj ET
+0.9 w 50 492 10 10 re S
+BT /F2 10.2 Tf 68 494 Td (Edge: exported data respects selected term/filter) Tj ET
+0.9 w 50 474 10 10 re S
+BT /F2 10.2 Tf 68 476 Td (Edge: missing private file shows controlled error) Tj ET
+0.9 w 50 456 10 10 re S
+BT /F2 10.2 Tf 68 458 Td (Edge: direct file URL without session is denied) Tj ET
+BT /F1 12 Tf 50 426 Td (EVENT SCHEDULING) Tj ET
+0.9 w 50 406 10 10 re S
+BT /F2 10.2 Tf 68 408 Td (Calendar page loads events) Tj ET
+0.9 w 50 388 10 10 re S
+BT /F2 10.2 Tf 68 390 Td (Month/week/day navigation works as expected) Tj ET
+0.9 w 50 370 10 10 re S
+BT /F2 10.2 Tf 68 372 Td (Create event saves title, category, date/time, venue, and description) Tj ET
+0.9 w 50 352 10 10 re S
+BT /F2 10.2 Tf 68 354 Td (Edit event updates existing event correctly) Tj ET
+0.9 w 50 334 10 10 re S
+BT /F2 10.2 Tf 68 336 Td (Delete event removes it from calendar) Tj ET
+0.9 w 50 316 10 10 re S
+BT /F2 10.2 Tf 68 318 Td (Event status changes save correctly) Tj ET
+0.9 w 50 298 10 10 re S
+BT /F2 10.2 Tf 68 300 Td (End date/time displays correctly) Tj ET
+0.9 w 50 280 10 10 re S
+BT /F2 10.2 Tf 68 282 Td (View-only roles can see calendar but cannot modify events) Tj ET
+0.9 w 50 262 10 10 re S
+BT /F2 10.2 Tf 68 264 Td (Edge: start date after end date is rejected) Tj ET
+0.9 w 50 244 10 10 re S
+BT /F2 10.2 Tf 68 246 Td (Edge: missing required title/date/category is rejected) Tj ET
+0.9 w 50 226 10 10 re S
+BT /F2 10.2 Tf 68 228 Td (Edge: overlapping events follow expected policy) Tj ET
+0.9 w 50 208 10 10 re S
+BT /F2 10.2 Tf 68 210 Td (Edge: very long title/venue/description displays safely) Tj ET
+0.9 w 50 190 10 10 re S
+BT /F2 10.2 Tf 68 192 Td (Edge: past event creation/update follows expected policy) Tj ET
+0.9 w 50 172 10 10 re S
+BT /F2 10.2 Tf 68 174 Td (Edge: event crossing midnight displays correctly) Tj ET
+0.9 w 50 154 10 10 re S
+BT /F2 10.2 Tf 68 156 Td (Edge: timezone/date boundary is correct for Asia/Singapore) Tj ET
+0.9 w 50 136 10 10 re S
+BT /F2 10.2 Tf 68 138 Td (Edge: deleting event with attendance is blocked or preserves records as expected) Tj ET
+0.9 w 50 118 10 10 re S
+BT /F2 10.2 Tf 68 120 Td (Edge: calendar handles empty month/week cleanly) Tj ET
+BT /F1 12 Tf 50 88 Td (EVENT SHARING AND ATTENDANCE) Tj ET
+0.9 w 50 68 10 10 re S
+BT /F2 10.2 Tf 68 70 Td (Secretary/authorized role can generate shared event link) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 4 of 7) Tj ET
+
+endstream
+endobj
+16 0 obj
+<< /Length 3923 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+0.9 w 50 722 10 10 re S
+BT /F2 10.2 Tf 68 724 Td (Shared event page loads with valid token) Tj ET
+0.9 w 50 704 10 10 re S
+BT /F2 10.2 Tf 68 706 Td (Invalid/revoked/expired token shows unavailable page) Tj ET
+0.9 w 50 686 10 10 re S
+BT /F2 10.2 Tf 68 688 Td (Shared event shows QR/code only when event is shareable) Tj ET
+0.9 w 50 668 10 10 re S
+BT /F2 10.2 Tf 68 670 Td (Attendance credentials display correctly) Tj ET
+0.9 w 50 650 10 10 re S
+BT /F2 10.2 Tf 68 652 Td (Officer check-in page loads event info) Tj ET
+0.9 w 50 632 10 10 re S
+BT /F2 10.2 Tf 68 634 Td (QR scanner can scan a valid attendance QR) Tj ET
+0.9 w 50 614 10 10 re S
+BT /F2 10.2 Tf 68 616 Td (Manual attendance code check-in works) Tj ET
+0.9 w 50 596 10 10 re S
+BT /F2 10.2 Tf 68 598 Td (Invalid QR/code is rejected) Tj ET
+0.9 w 50 578 10 10 re S
+BT /F2 10.2 Tf 68 580 Td (Duplicate check-in is handled properly) Tj ET
+0.9 w 50 560 10 10 re S
+BT /F2 10.2 Tf 68 562 Td (Attendance roster lists expected users) Tj ET
+0.9 w 50 542 10 10 re S
+BT /F2 10.2 Tf 68 544 Td (Manual attendance status update saves correctly) Tj ET
+0.9 w 50 524 10 10 re S
+BT /F2 10.2 Tf 68 526 Td (Unauthorized roles cannot access restricted roster actions) Tj ET
+0.9 w 50 506 10 10 re S
+BT /F2 10.2 Tf 68 508 Td (Edge: revoked shared link stops working immediately) Tj ET
+0.9 w 50 488 10 10 re S
+BT /F2 10.2 Tf 68 490 Td (Edge: regenerated share link invalidates old link if expected) Tj ET
+0.9 w 50 470 10 10 re S
+BT /F2 10.2 Tf 68 472 Td (Edge: attendance for deleted/cancelled event is blocked) Tj ET
+0.9 w 50 452 10 10 re S
+BT /F2 10.2 Tf 68 454 Td (Edge: check-in before allowed time is blocked or handled as expected) Tj ET
+0.9 w 50 434 10 10 re S
+BT /F2 10.2 Tf 68 436 Td (Edge: check-in after event ends follows expected policy) Tj ET
+0.9 w 50 416 10 10 re S
+BT /F2 10.2 Tf 68 418 Td (Edge: camera permission denied still allows manual code path) Tj ET
+0.9 w 50 398 10 10 re S
+BT /F2 10.2 Tf 68 400 Td (Edge: malformed QR/token does not crash scanner/page) Tj ET
+0.9 w 50 380 10 10 re S
+BT /F2 10.2 Tf 68 382 Td (Edge: same user cannot be counted twice) Tj ET
+0.9 w 50 362 10 10 re S
+BT /F2 10.2 Tf 68 364 Td (Edge: manual roster update creates accurate activity/audit record) Tj ET
+0.9 w 50 344 10 10 re S
+BT /F2 10.2 Tf 68 346 Td (Edge: user not assigned to roster/role is handled correctly) Tj ET
+BT /F1 12 Tf 50 314 Td (USER MANAGEMENT AND RBAC) Tj ET
+0.9 w 50 294 10 10 re S
+BT /F2 10.2 Tf 68 296 Td (Users page loads only for users.manage roles) Tj ET
+0.9 w 50 276 10 10 re S
+BT /F2 10.2 Tf 68 278 Td (Create user works with valid role and account details) Tj ET
+0.9 w 50 258 10 10 re S
+BT /F2 10.2 Tf 68 260 Td (Duplicate email/username is rejected) Tj ET
+0.9 w 50 240 10 10 re S
+BT /F2 10.2 Tf 68 242 Td (Edit user updates name, email, username, role, and status) Tj ET
+0.9 w 50 222 10 10 re S
+BT /F2 10.2 Tf 68 224 Td (Deactivate user prevents future login) Tj ET
+0.9 w 50 204 10 10 re S
+BT /F2 10.2 Tf 68 206 Td (Reactivate user restores access) Tj ET
+0.9 w 50 186 10 10 re S
+BT /F2 10.2 Tf 68 188 Td (Reset password marks user for password change) Tj ET
+0.9 w 50 168 10 10 re S
+BT /F2 10.2 Tf 68 170 Td (Role badges and role family grouping display correctly) Tj ET
+0.9 w 50 150 10 10 re S
+BT /F2 10.2 Tf 68 152 Td (Privileges modal shows role-to-permission matrix) Tj ET
+0.9 w 50 132 10 10 re S
+BT /F2 10.2 Tf 68 134 Td (Updating role permissions changes UI/API access correctly) Tj ET
+0.9 w 50 114 10 10 re S
+BT /F2 10.2 Tf 68 116 Td (Reset role privileges restores default permissions) Tj ET
+0.9 w 50 96 10 10 re S
+BT /F2 10.2 Tf 68 98 Td (Edge: user cannot remove own critical access if policy forbids it) Tj ET
+0.9 w 50 78 10 10 re S
+BT /F2 10.2 Tf 68 80 Td (Edge: deactivated user with active session loses access after refresh/request) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 5 of 7) Tj ET
+
+endstream
+endobj
+17 0 obj
+<< /Length 3906 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+0.9 w 50 722 10 10 re S
+BT /F2 10.2 Tf 68 724 Td (Edge: changing a role updates permissions without requiring database corruption fixes) Tj ET
+0.9 w 50 704 10 10 re S
+BT /F2 10.2 Tf 68 706 Td (Edge: invalid role value is rejected by API) Tj ET
+0.9 w 50 686 10 10 re S
+BT /F2 10.2 Tf 68 688 Td (Edge: duplicate username with different casing follows expected policy) Tj ET
+0.9 w 50 668 10 10 re S
+BT /F2 10.2 Tf 68 670 Td (Edge: reset password cannot expose generated password except intended flow) Tj ET
+0.9 w 50 650 10 10 re S
+BT /F2 10.2 Tf 68 652 Td (Edge: role with no permission sees only allowed pages) Tj ET
+0.9 w 50 632 10 10 re S
+BT /F2 10.2 Tf 68 634 Td (Edge: direct API calls still enforce RBAC even if UI button is hidden) Tj ET
+BT /F1 12 Tf 50 602 Td (ACTIVITY LOGS AND SECURITY) Tj ET
+0.9 w 50 582 10 10 re S
+BT /F2 10.2 Tf 68 584 Td (Activity log page loads for authorized admin users) Tj ET
+0.9 w 50 564 10 10 re S
+BT /F2 10.2 Tf 68 566 Td (Login/logout, create, update, delete, restore, payment, and schedule actions are recorded) Tj ET
+0.9 w 50 546 10 10 re S
+BT /F2 10.2 Tf 68 548 Td (Activity entries show actor name, role, IP, timestamp, and action details) Tj ET
+0.9 w 50 528 10 10 re S
+BT /F2 10.2 Tf 68 530 Td (Activity filters/search work if available) Tj ET
+0.9 w 50 510 10 10 re S
+BT /F2 10.2 Tf 68 512 Td (Sensitive secrets/passwords are never shown in logs) Tj ET
+0.9 w 50 492 10 10 re S
+BT /F2 10.2 Tf 68 494 Td (API rejects unauthenticated admin requests) Tj ET
+0.9 w 50 474 10 10 re S
+BT /F2 10.2 Tf 68 476 Td (API rejects unauthorized role actions with proper status/message) Tj ET
+0.9 w 50 456 10 10 re S
+BT /F2 10.2 Tf 68 458 Td (CSRF protection blocks unsafe requests without token) Tj ET
+0.9 w 50 438 10 10 re S
+BT /F2 10.2 Tf 68 440 Td (Uploaded private files are not publicly accessible without authorization) Tj ET
+0.9 w 50 420 10 10 re S
+BT /F2 10.2 Tf 68 422 Td (Edge: failed validation attempts do not leak sensitive details) Tj ET
+0.9 w 50 402 10 10 re S
+BT /F2 10.2 Tf 68 404 Td (Edge: deleted actor/member names still display safely in logs) Tj ET
+0.9 w 50 384 10 10 re S
+BT /F2 10.2 Tf 68 386 Td (Edge: activity log handles large history with pagination) Tj ET
+0.9 w 50 366 10 10 re S
+BT /F2 10.2 Tf 68 368 Td (Edge: session expiry during a write does not partially update silently) Tj ET
+0.9 w 50 348 10 10 re S
+BT /F2 10.2 Tf 68 350 Td (Edge: malicious text/script input is escaped in UI and exports) Tj ET
+0.9 w 50 330 10 10 re S
+BT /F2 10.2 Tf 68 332 Td (Edge: protected endpoints reject wrong HTTP method) Tj ET
+0.9 w 50 312 10 10 re S
+BT /F2 10.2 Tf 68 314 Td (Edge: private storage errors do not expose credentials/paths) Tj ET
+BT /F1 12 Tf 50 282 Td (CROSS-BROWSER AND RESPONSIVE QA) Tj ET
+0.9 w 50 262 10 10 re S
+BT /F2 10.2 Tf 68 264 Td (Chrome desktop works) Tj ET
+0.9 w 50 244 10 10 re S
+BT /F2 10.2 Tf 68 246 Td (Edge desktop works) Tj ET
+0.9 w 50 226 10 10 re S
+BT /F2 10.2 Tf 68 228 Td (Mobile viewport works at 375px width) Tj ET
+0.9 w 50 208 10 10 re S
+BT /F2 10.2 Tf 68 210 Td (Tablet viewport works around 768px width) Tj ET
+0.9 w 50 190 10 10 re S
+BT /F2 10.2 Tf 68 192 Td (Forms remain usable on small screens) Tj ET
+0.9 w 50 172 10 10 re S
+BT /F2 10.2 Tf 68 174 Td (Tables/lists do not overflow awkwardly) Tj ET
+0.9 w 50 154 10 10 re S
+BT /F2 10.2 Tf 68 156 Td (Modals fit screen and can be closed) Tj ET
+0.9 w 50 136 10 10 re S
+BT /F2 10.2 Tf 68 138 Td (No overlapping text/buttons in major pages) Tj ET
+0.9 w 50 118 10 10 re S
+BT /F2 10.2 Tf 68 120 Td (Keyboard tab navigation reaches interactive controls) Tj ET
+0.9 w 50 100 10 10 re S
+BT /F2 10.2 Tf 68 102 Td (Visible focus states appear on buttons/inputs) Tj ET
+0.9 w 50 82 10 10 re S
+BT /F2 10.2 Tf 68 84 Td (Error, loading, and empty states are understandable) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 6 of 7) Tj ET
+
+endstream
+endobj
+18 0 obj
+<< /Length 1269 >>
+stream
+BT /F1 18 Tf 50 752 Td (ICpEP.SE QA Feature Testing Checklist) Tj ET
+0.9 w 50 722 10 10 re S
+BT /F2 10.2 Tf 68 724 Td (Edge: landscape mobile orientation remains usable) Tj ET
+0.9 w 50 704 10 10 re S
+BT /F2 10.2 Tf 68 706 Td (Edge: browser zoom at 125 percent remains readable) Tj ET
+0.9 w 50 686 10 10 re S
+BT /F2 10.2 Tf 68 688 Td (Edge: reduced motion setting does not break animations) Tj ET
+0.9 w 50 668 10 10 re S
+BT /F2 10.2 Tf 68 670 Td (Edge: refresh on nested admin pages works) Tj ET
+0.9 w 50 650 10 10 re S
+BT /F2 10.2 Tf 68 652 Td (Edge: direct URL to detail/edit/shared pages works or fails gracefully) Tj ET
+BT /F1 12 Tf 50 620 Td (FINAL SIGN-OFF) Tj ET
+0.9 w 50 600 10 10 re S
+BT /F2 10.2 Tf 68 602 Td (All critical paths passed) Tj ET
+0.9 w 50 582 10 10 re S
+BT /F2 10.2 Tf 68 584 Td (All edge cases passed or documented) Tj ET
+0.9 w 50 564 10 10 re S
+BT /F2 10.2 Tf 68 566 Td (All failed items have issue/ticket numbers) Tj ET
+0.9 w 50 546 10 10 re S
+BT /F2 10.2 Tf 68 548 Td (Retest completed after fixes) Tj ET
+0.9 w 50 528 10 10 re S
+BT /F2 10.2 Tf 68 530 Td (QA lead reviewed open known issues) Tj ET
+0.9 w 50 510 10 10 re S
+BT /F2 10.2 Tf 68 512 Td (Product owner/admin accepted release candidate) Tj ET
+BT /F2 9 Tf 500 28 Td (Page 7 of 7) Tj ET
+
+endstream
+endobj
+xref
+0 19
+0000000000 65535 f 
+0000000029 00000 n 
+0000000078 00000 n 
+0000000173 00000 n 
+0000000248 00000 n 
+0000000318 00000 n 
+0000000455 00000 n 
+0000000592 00000 n 
+0000000729 00000 n 
+0000000866 00000 n 
+0000001003 00000 n 
+0000001141 00000 n 
+0000001279 00000 n 
+0000005287 00000 n 
+0000009085 00000 n 
+0000013226 00000 n 
+0000017067 00000 n 
+0000021043 00000 n 
+0000025002 00000 n 
+trailer
+<< /Size 19 /Root 1 0 R >>
+startxref
+26324
+%%EOF
