@@ -101,7 +101,7 @@ export default function ActivityLog() {
     return p.toString();
   }, [debounced, action, from, until, page]);
 
-  const { data, loading, error } = useAdminResource<Paginated<ActivityRow>>(`/activity?${qs}`);
+  const { data, loading, fetching, error } = useAdminResource<Paginated<ActivityRow>>(`/activity?${qs}`);
 
   const applyPreset = (range: { from: string; until: string }) => {
     setFrom(range.from);
@@ -239,7 +239,7 @@ export default function ActivityLog() {
           loading && !data ? (
             <PaginationSkeleton />
           ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} />
+            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
           ) : null
         }
       />

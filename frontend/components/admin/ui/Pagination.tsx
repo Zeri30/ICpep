@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 export type PageMeta = {
   current_page: number;
@@ -62,8 +62,17 @@ export default function Pagination({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line/60 bg-card px-4 py-3 text-xs text-muted-foreground">
-      <span className="tabular-nums">
+      <span className="flex items-center gap-2 tabular-nums">
         {from ?? 0}–{to ?? 0} of {total}
+        {/* The only sign a page click did anything for lists that keep the
+            previous page's rows on screen while the next page loads (rather
+            than swapping in a full-table skeleton) — without it, a disabled
+            button mid-click reads as nothing happening. */}
+        {disabled && (
+          <span className="inline-flex items-center gap-1 text-primary">
+            <Loader2 size={12} className="animate-spin" /> Loading…
+          </span>
+        )}
       </span>
 
       {/* Wraps: up to seven page buttons plus both arrows is wider than a

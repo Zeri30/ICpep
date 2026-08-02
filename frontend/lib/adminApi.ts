@@ -216,6 +216,13 @@ export function useAdminResource<T>(
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Unlike `loading` (which starts true and never goes true again — it
+  // describes only the very first fetch), this is true for every in-flight
+  // request against the current `path`, including a page/filter/sort change
+  // well after the initial load. Callers with a pager use it to disable the
+  // page controls while a click's request is still outstanding, so a second
+  // click can't queue an overlapping request — see Pagination's `disabled`.
+  const [fetching, setFetching] = useState(false);
   const { pollMs } = opts;
 
   /**
@@ -232,6 +239,7 @@ export function useAdminResource<T>(
   const load = useCallback(async () => {
     if (path === null) return;
     const mine = ++requestId.current;
+    setFetching(true);
     try {
       const next = await apiGet<T>(path);
       if (mine !== requestId.current) return;
@@ -243,7 +251,10 @@ export function useAdminResource<T>(
     } finally {
       // Guarded too: a superseded request must not report that the current one
       // has finished loading.
-      if (mine === requestId.current) setLoading(false);
+      if (mine === requestId.current) {
+        setLoading(false);
+        setFetching(false);
+      }
     }
   }, [path]);
 
@@ -257,5 +268,5 @@ export function useAdminResource<T>(
     return () => clearInterval(id);
   }, [load, pollMs]);
 
-  return { data, error, loading, refresh: load };
+  return { data, error, loading, fetching, refresh: load };
 }

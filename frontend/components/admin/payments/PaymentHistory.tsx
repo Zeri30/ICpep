@@ -83,7 +83,7 @@ export default function PaymentHistory() {
     return p.toString();
   }, [term, debounced, action, section, page]);
 
-  const { data, error } = useAdminResource<Paginated<PaymentRow>>(
+  const { data, error, fetching } = useAdminResource<Paginated<PaymentRow>>(
     termsLoading ? null : `/payments?${qs}`,
   );
   const reset = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
@@ -207,7 +207,7 @@ export default function PaymentHistory() {
           awaitingRows ? (
             <PaginationSkeleton />
           ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} />
+            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
           ) : null
         }
       />

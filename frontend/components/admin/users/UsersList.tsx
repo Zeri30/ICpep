@@ -99,7 +99,7 @@ export default function UsersList() {
     return p.toString();
   }, [debouncedSearch, filters, sort, page]);
 
-  const { data, loading, error, refresh } = useAdminResource<Paginated<AdminUser>>(`/users?${queryString}`);
+  const { data, loading, fetching, error, refresh } = useAdminResource<Paginated<AdminUser>>(`/users?${queryString}`);
 
   const changeFilters = (next: UserFilters) => {
     setFilters(next);
@@ -281,7 +281,7 @@ export default function UsersList() {
           loading && !data ? (
             <PaginationSkeleton />
           ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} />
+            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
           ) : null
         }
       />
