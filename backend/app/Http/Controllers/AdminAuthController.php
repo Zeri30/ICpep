@@ -59,12 +59,19 @@ class AdminAuthController extends Controller
         // A valid password is not enough if the account is not permitted into
         // the admin — otherwise we would leave a signed-in session behind for
         // someone EnsureAdmin would turn away on the next request.
+        //
+        // canAccessAdmin() is just is_active today (see User::canAccessAdmin),
+        // so failing here always means one specific thing — say so plainly
+        // rather than the vaguer "cannot access the admin", which read like a
+        // permissions problem rather than a deactivated account.
         if (! Auth::user()->canAccessAdmin()) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             RateLimiter::hit($key, self::DECAY_SECONDS);
 
-            return response()->json(['message' => 'This account cannot access the admin.'], 403);
+            return response()->json([
+                'message' => 'This account has been deactivated. Contact an administrator for access.',
+            ], 403);
         }
 
         RateLimiter::clear($key);

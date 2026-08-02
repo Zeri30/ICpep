@@ -26,7 +26,13 @@ class EnsureAdmin
         }
 
         if (! $user->canAccessAdmin()) {
-            return response()->json(['message' => 'This account cannot access the admin.'], 403);
+            // Same wording as AdminAuthController::login's rejection — this is
+            // the same condition (canAccessAdmin() is just is_active), hit
+            // mid-session instead of at the login form (e.g. deactivated
+            // while signed in elsewhere).
+            return response()->json([
+                'message' => 'This account has been deactivated. Contact an administrator for access.',
+            ], 403);
         }
 
         // An account still on its system-generated first-login password gets
