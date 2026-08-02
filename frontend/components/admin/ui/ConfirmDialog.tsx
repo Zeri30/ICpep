@@ -26,6 +26,13 @@ export default function ConfirmDialog({
   cancelLabel = "Cancel",
   tone = "primary",
   icon,
+  /**
+   * The exact (case-sensitive) word the officer must type before Confirm
+   * does anything — the GitHub "type the repo name to delete it" pattern,
+   * for actions too consequential for a click alone (see UsersList's "Log
+   * out all admins").
+   */
+  typeToConfirm,
   onConfirm,
   onClose,
 }: {
@@ -36,14 +43,23 @@ export default function ConfirmDialog({
   cancelLabel?: string;
   tone?: ConfirmTone;
   icon?: React.ReactNode;
+  typeToConfirm?: string;
   onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [typed, setTyped] = useState("");
   // Portal target only exists on the client; mount after hydration.
   const [mounted, setMounted] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount guard for the portal
   useEffect(() => setMounted(true), []);
+
+  // Fresh input every time the dialog opens, so a stale match from a
+  // previous open can't slip a confirm through.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the typed-confirmation field per open, not derivable from render
+  useEffect(() => {
+    if (open) setTyped("");
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +68,10 @@ export default function ConfirmDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, busy, onClose]);
 
+  const canConfirm = typeToConfirm === undefined || typed === typeToConfirm;
+
   async function handleConfirm() {
+    if (!canConfirm) return;
     try {
       setBusy(true);
       await onConfirm();
@@ -96,19 +115,45 @@ export default function ConfirmDialog({
                 {description && (
                   <div className="mt-3 text-sm leading-relaxed text-muted-foreground">{description}</div>
                 )}
-                <div className="mt-6 flex items-center justify-center gap-3">
+                {typeToConfirm !== undefined && (
+                  <div className="mt-4">
+                    <label className="mb-1.5 block text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Type <span className="font-mono normal-case text-foreground">{typeToConfirm}</span> to proceed
+                    </label>
+                    <input
+                      autoFocus
+                      value={typed}
+                      onChange={(e) => setTyped(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && !busy && canConfirm && handleConfirm()}
+                      placeholder={typeToConfirm}
+                      disabled={busy}
+                      className="w-full rounded-md border border-line bg-secondary/60 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary/60 disabled:opacity-70"
+                    />
+                  </div>
+                )}
+                {/* Stacked full-width on narrow screens rather than a side-by-side
+                    row: the confirm button's label shares space with a spinner
+                    once `busy` is true, and a row too narrow to absorb that extra
+                    width would otherwise wrap or squeeze mid-click, changing the
+                    modal's layout right as it's being confirmed. */}
+                <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
                   <button
                     onClick={handleConfirm}
-                    disabled={busy}
-                    className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-70 ${toneBtn[tone]}`}
+                    disabled={busy || !canConfirm}
+                    className={`inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto ${toneBtn[tone]}`}
                   >
-                    {busy && <Loader2 size={15} className="animate-spin" />}
+                    {/* Fixed-width slot reserved regardless of `busy`, so the
+                        label doesn't shift sideways the moment the spinner
+                        appears. */}
+                    <span className="grid w-3.75 shrink-0 place-items-center">
+                      {busy && <Loader2 size={15} className="animate-spin" />}
+                    </span>
                     {confirmLabel}
                   </button>
                   <button
                     onClick={onClose}
                     disabled={busy}
-                    className="rounded-lg border border-line px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-70"
+                    className="w-full whitespace-nowrap rounded-lg border border-line px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-70 sm:w-auto"
                   >
                     {cancelLabel}
                   </button>
