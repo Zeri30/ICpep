@@ -18,7 +18,7 @@ import CategoryTag from "@/components/admin/schedule/CategoryTag";
 import { TimingBadge } from "@/components/admin/schedule/StatusBadge";
 import { formatShortDate, todayIn } from "@/components/admin/schedule/calendarDates";
 import { Bar, Pill } from "@/components/admin/ui/Skeleton";
-import { useAdminResource } from "@/lib/adminApi";
+import { useEventsResource } from "@/components/admin/useEventsResource";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
 /** Rows after the emphasized next event, before the rest defer to Calendar. */
@@ -64,7 +64,7 @@ export default function UpcomingEvents() {
   // NeedsUpdateBadge for the same call.
   const canManageSchedule = can("schedule.manage");
   const today = useMemo(() => todayIn(meta.timezone), [meta.timezone]);
-  const { data, loading } = useAdminResource<{ data: ScheduledEvent[] }>("/events");
+  const { data, loading } = useEventsResource<{ data: ScheduledEvent[] }>();
 
   const { next, later, unrecordedCount } = useMemo(() => {
     const events = data?.data ?? [];
