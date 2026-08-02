@@ -158,16 +158,16 @@ function SignInDialog({
               />
               <h2
                 id="signin-modal-title"
-                className="mt-5 font-display font-bold tracking-widest text-lg text-foreground"
+                className="mt-5 font-display font-bold tracking-widest text-xl text-foreground"
               >
                 SIGN <span className="text-primary">IN</span>
               </h2>
               <p className="mt-2.5 text-center text-xs text-muted-foreground">
-                ICpEP.SE officers only.
+                Enter your credentials to continue.
               </p>
             </div>
 
-            <form onSubmit={onSubmit} className="mt-7">
+            <form onSubmit={onSubmit} className="mt-8">
               <label
                 htmlFor="signin-email"
                 className="block mb-2 text-xs font-head font-semibold uppercase tracking-widest text-secondary-foreground"
