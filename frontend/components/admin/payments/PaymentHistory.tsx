@@ -130,12 +130,11 @@ export default function PaymentHistory() {
     {
       key: "amount",
       header: "Amount",
-      align: "right",
       width: "16%",
-      // Fixed-width columns give every gap the same size at the default
-      // padding, but that default still reads as tight for a right-aligned
-      // number sitting next to left-aligned text — widen just this pair.
-      className: "pr-8",
+      // Left-aligned like every other column, so the fixed-width layout's
+      // default padding gives every column boundary the same visual gap —
+      // right-aligning just this one pushed its short text away from its
+      // neighbors on one side and left a wide gap on the other.
       render: (r) => amountCell(r.amount),
       skeleton: <Bar w="w-16" />,
     },
@@ -143,7 +142,6 @@ export default function PaymentHistory() {
       key: "yearLevel",
       header: "Year Level",
       width: "16%",
-      className: "pl-8",
       render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span>,
       skeleton: <Bar w="w-12" />,
     },
