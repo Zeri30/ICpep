@@ -80,6 +80,9 @@ class AdminAuthController extends Controller
         // whoever just signed in.
         $request->session()->forget('password_hash_web');
 
+        // Starts the 6-hour inactivity clock fresh — see EnforceIdleTimeout.
+        $request->session()->put('last_meaningful_activity', now()->timestamp);
+
         // Only one signed-in session per officer: drop every other row this
         // account owns in the `sessions` table (requires SESSION_DRIVER=database)
         // so a device that was already logged in gets treated as a guest on

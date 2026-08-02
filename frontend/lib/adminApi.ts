@@ -195,6 +195,18 @@ export async function markModuleViewed(module: "members" | "payments" | "users" 
   }
 }
 
+/** Real-interaction heartbeat for the 6-hour inactivity timeout (see
+    components/admin/IdleLogout.tsx and the backend's EnforceIdleTimeout).
+    Errors are swallowed — a missed heartbeat just means the next one, or the
+    server's own check on any other request, settles it. */
+export async function pingActivity(): Promise<void> {
+  try {
+    await apiSend<{ ok: true }>("POST", "/me/activity-ping");
+  } catch {
+    // Best-effort — see above.
+  }
+}
+
 /** Fetch a resource once, optionally re-fetching on an interval (like Filament's
     widget polling). Pass `path = null` to stay idle. */
 export function useAdminResource<T>(

@@ -25,6 +25,20 @@ use Illuminate\Validation\ValidationException;
  */
 class MeController extends Controller
 {
+    /**
+     * A near-free "am I still signed in" check — no queries beyond auth
+     * resolution. Polled frequently by SessionWatchdog.tsx so a session ended
+     * remotely (an officer's own password reset, or User Management's "log
+     * out all admins") is noticed within seconds rather than waiting on
+     * whatever page-specific polling happens to be running, or a navigation.
+     * EnsureAdmin/EnforceIdleTimeout already do the actual work; this route
+     * just gives the frontend something cheap to poll that goes through them.
+     */
+    public function ping(): JsonResponse
+    {
+        return response()->json(['ok' => true]);
+    }
+
     public function show(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -169,6 +183,20 @@ class MeController extends Controller
         $request->session()->regenerateToken();
 
         return response()->json(['redirect' => config('app.frontend_url')]);
+    }
+
+    /**
+     * Heartbeat for the 6-hour inactivity timeout (see EnforceIdleTimeout):
+     * called by the frontend only on genuine interaction while the tab is
+     * visible, throttled — so this moves 'last_meaningful_activity' forward,
+     * unlike the routine polling several admin pages already do on their own
+     * timers, which deliberately does not.
+     */
+    public function activityPing(Request $request): JsonResponse
+    {
+        $request->session()->put('last_meaningful_activity', now()->timestamp);
+
+        return response()->json(['ok' => true]);
     }
 
     /**

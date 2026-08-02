@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Admin\PaymentController;
 use App\Http\Controllers\Api\Admin\RegistrationController;
 use App\Http\Controllers\Api\Admin\RolePermissionController;
 use App\Http\Controllers\Api\Admin\UserController;
+use App\Http\Middleware\EnforceIdleTimeout;
 use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -31,9 +32,12 @@ use Illuminate\Support\Facades\Route;
 // has gone stale (the account was reset or changed its password elsewhere) is
 // rejected before anything else here even asks who it belongs to — see the
 // alias's own note in bootstrap/app.php for what it does and why.
-Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
+Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class])->group(function () {
     // Open to any active administrator.
     Route::get('/me', [MeController::class, 'show'])->name('me');
+    // Polled by SessionWatchdog.tsx to notice a remotely-ended session fast —
+    // see MeController::ping.
+    Route::get('/me/ping', [MeController::class, 'ping'])->name('me.ping');
     // The one write EnsureAdmin still lets a must-change-password account
     // reach — see the middleware for why everything else is closed to it.
     Route::post('/me/password', [MeController::class, 'updatePassword'])->name('me.password.update');
@@ -41,6 +45,11 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // difference between the two.
     Route::post('/me/sessions/logout-others', [MeController::class, 'logoutOtherSessions'])->name('me.sessions.logout-others');
     Route::post('/me/sessions/logout-all', [MeController::class, 'logoutAllSessions'])->name('me.sessions.logout-all');
+    // The 6-hour inactivity timeout's heartbeat — see EnforceIdleTimeout and
+    // components/admin/IdleLogout.tsx. Deliberately not itself exempt from
+    // EnforceIdleTimeout: an officer's first action after 6+ idle hours
+    // should end the session, not extend it.
+    Route::post('/me/activity-ping', [MeController::class, 'activityPing'])->name('me.activity-ping');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');

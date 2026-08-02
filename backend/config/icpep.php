@@ -34,4 +34,16 @@ return [
     | a relative path against. Same value CORS allows (see config/cors.php).
     */
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin idle timeout
+    |--------------------------------------------------------------------------
+    | Minutes of no genuine officer activity before a signed-in admin session
+    | is forced out — see App\Http\Middleware\EnforceIdleTimeout. Distinct
+    | from SESSION_LIFETIME (config/session.php): that resets on any request,
+    | including the admin UI's own background polling, so it does not reflect
+    | whether anyone is actually there.
+    */
+    'idle_timeout_minutes' => (int) env('ADMIN_IDLE_TIMEOUT_MINUTES', 360),
 ];
