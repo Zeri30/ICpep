@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\MemberResource;
 use App\Models\Application;
 use App\Models\MembershipTerm;
+use App\Models\PaymentTransaction;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -13,6 +14,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -158,18 +162,105 @@ class MemberController extends Controller
         // Payment actions and edit actions are separate permissions.
         Gate::authorize(in_array($data['action'], ['paid', 'unpaid'], true) ? 'members.payment' : 'members.edit');
 
-        $members = Application::withTrashed()->whereIn('id', $data['ids'])->get();
+        // Atomic: a bulk run that fails partway must leave no member changed,
+        // rather than some marked paid with no matching ledger/activity row.
+        [$count, $updated] = DB::transaction(function () use ($data) {
+            $members = Application::withTrashed()->whereIn('id', $data['ids'])->get();
 
-        match ($data['action']) {
-            // Skip members already in the target state so a bulk run never
-            // rewrites a payment date that is already on record.
-            'paid' => $members->whereNull('paid_at')->each->update(['paid_at' => now()]),
-            'unpaid' => $members->whereNotNull('paid_at')->each->update(['paid_at' => null]),
-            'delete' => $members->whereNull('deleted_at')->each->delete(),
-            'restore' => $members->whereNotNull('deleted_at')->each->restore(),
-        };
+            $updated = match ($data['action']) {
+                // Skip members already in the target state so a bulk run never
+                // rewrites a payment date that is already on record.
+                'paid' => $this->bulkTogglePaid($members->whereNull('paid_at'), true),
+                'unpaid' => $this->bulkTogglePaid($members->whereNotNull('paid_at'), false),
+                'delete' => $this->bulkDelete($members->whereNull('deleted_at')),
+                'restore' => $this->bulkRestore($members->whereNotNull('deleted_at')),
+            };
 
-        return response()->json(['count' => $members->count()]);
+            return [$members->count(), $updated];
+        });
+
+        // `updated` lets the client patch the rows it already has in place
+        // instead of re-fetching the whole page — populated for paid/unpaid
+        // only, since delete/restore change which page a row belongs on.
+        return response()->json(['count' => $count, 'updated' => $updated]);
+    }
+
+    /**
+     * Marks every given (already-filtered-to-eligible) member paid or unpaid
+     * in one batched UPDATE, then writes the payment-ledger row each member's
+     * model event would otherwise have written one at a time — as one bulk
+     * insert instead of N. Model events don't fire on a mass update, so those
+     * rows are built here from the still-in-memory pre-update snapshot,
+     * mirroring Application::recordPaymentTransaction(). Payment History is
+     * the ledger for this; it isn't also logged to the Activity Log.
+     *
+     * @param  Collection<int, Application>  $members
+     * @return list<array{id: int, isPaid: bool, paidAt: ?string}>
+     */
+    private function bulkTogglePaid(Collection $members, bool $paid): array
+    {
+        if ($members->isEmpty()) {
+            return [];
+        }
+
+        $now = Carbon::now();
+        $fee = (float) config('icpep.membership_fee');
+        $user = Auth::user();
+
+        Application::withTrashed()->whereIn('id', $members->modelKeys())
+            ->update(['paid_at' => $paid ? $now : null, 'updated_at' => $now]);
+
+        $transactions = [];
+        $updated = [];
+
+        foreach ($members as $member) {
+            // Pre-update snapshot: $member was loaded before the batched
+            // UPDATE above, so paid_at here is still the member's old value.
+            $previous = $member->paid_at;
+            [$action, $amount, $effectiveAt] = $paid
+                // Unpaid -> paid.
+                ? [PaymentTransaction::PAID, $fee, $now]
+                // Paid -> unpaid. Stamped against the original payment date,
+                // so the reversal lands in the period it cancels.
+                : [PaymentTransaction::REVOKED, -$fee, $previous];
+
+            $transactions[] = [
+                'application_id' => $member->id,
+                'membership_term_id' => $member->membership_term_id,
+                'action' => $action,
+                'amount' => $amount,
+                'effective_at' => $effectiveAt,
+                'previous_effective_at' => $previous,
+                'actor' => $user?->email,
+                'member_name' => $member->full_name,
+                'section' => $member->section,
+                'year_level' => $member->year_level,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+
+            $updated[] = ['id' => $member->id, 'isPaid' => $paid, 'paidAt' => $paid ? $now->toIso8601String() : null];
+        }
+
+        PaymentTransaction::insert($transactions);
+
+        return $updated;
+    }
+
+    /** @param  Collection<int, Application>  $members */
+    private function bulkDelete(Collection $members): array
+    {
+        $members->each->delete();
+
+        return [];
+    }
+
+    /** @param  Collection<int, Application>  $members */
+    private function bulkRestore(Collection $members): array
+    {
+        $members->each->restore();
+
+        return [];
     }
 
     /** Stream a private file (picture|signature) to the officer as a download. */

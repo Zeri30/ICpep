@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\MembershipTerm;
+use App\Models\PaymentTransaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -471,6 +473,72 @@ class AdminApiTest extends TestCase
         // Already paid: the original date stands, and no second fee is recorded.
         $this->assertTrue($paid->fresh()->paid_at->isSameDay(now()->subDays(5)));
         $this->assertSame(0, $paid->paymentTransactions()->count());
+    }
+
+    public function test_bulk_mark_paid_writes_the_ledger_in_bulk_and_reports_updates(): void
+    {
+        config(['icpep.membership_fee' => 75]);
+
+        $a = $this->makeApplication(['email' => 'a@example.com', 'surname' => 'Alpha']);
+        $b = $this->makeApplication(['email' => 'b@example.com', 'surname' => 'Bravo']);
+
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'paid'])
+            ->assertOk()
+            ->assertJsonPath('count', 2)
+            ->assertJsonCount(2, 'updated');
+
+        $updated = collect($response->json('updated'))->keyBy('id');
+        $this->assertTrue($updated[$a->id]['isPaid']);
+        $this->assertNotNull($updated[$a->id]['paidAt']);
+
+        // One ledger row per member — written as one bulk insert rather than
+        // one round trip per member. Payment History is the ledger for this;
+        // it isn't also duplicated into the Activity Log.
+        $this->assertSame(1, $a->paymentTransactions()->where('action', PaymentTransaction::PAID)->count());
+        $this->assertSame(1, $b->paymentTransactions()->where('action', PaymentTransaction::PAID)->count());
+        $this->assertSame(75.0, (float) $a->paymentTransactions()->sole()->amount);
+        $this->assertSame(0, ActivityLog::where('action', 'paid')->count());
+    }
+
+    public function test_bulk_mark_unpaid_reverses_against_the_original_date(): void
+    {
+        $paidOn = now()->subDays(5);
+        $member = $this->makeApplication(['email' => 'c@example.com', 'paid_at' => $paidOn]);
+        $member->paymentTransactions()->delete(); // isolate this test's own ledger row
+
+        $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'unpaid'])
+            ->assertOk()
+            ->assertJsonPath('updated.0.isPaid', false)
+            ->assertJsonPath('updated.0.paidAt', null);
+
+        $tx = $member->paymentTransactions()->sole();
+        $this->assertSame(PaymentTransaction::REVOKED, $tx->action);
+        // The reversal is stamped against the original payment date, not today.
+        $this->assertTrue($tx->effective_at->isSameDay($paidOn));
+        $this->assertNull($member->fresh()->paid_at);
+    }
+
+    public function test_bulk_delete_and_restore_report_no_row_patch(): void
+    {
+        $member = $this->makeApplication(['email' => 'd@example.com']);
+        $admin = $this->admin();
+
+        // delete/restore change which page a row belongs on, so the client
+        // still needs a real refetch for these — `updated` stays empty.
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'delete'])
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('updated', []);
+        $this->assertSoftDeleted('applications', ['id' => $member->id]);
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'restore'])
+            ->assertOk()
+            ->assertJsonPath('updated', []);
+        $this->assertNotSoftDeleted('applications', ['id' => $member->id]);
     }
 
     /**

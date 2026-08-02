@@ -49,6 +49,9 @@ type Confirm =
   | { kind: "payment"; action: "paid" | "unpaid"; eligible: number; skipped: number }
   | null;
 
+/** What `POST /members/bulk` reports changed, for a paid/unpaid action. */
+type BulkPaymentUpdate = { id: number; isPaid: boolean; paidAt: string | null };
+
 /**
  * How many placeholder rows to draw while the first page is in flight.
  *
@@ -142,7 +145,7 @@ export default function MembersList() {
 
   // Hold off until the term is known, so the table never flashes the current
   // list's members while a past list is the one selected.
-  const { data, error, fetching, refresh } = useMembersListResource<Paginated<Member>>(
+  const { data, error, fetching, refresh, mutate } = useMembersListResource<Paginated<Member>>(
     termsLoading ? null : `/members?${queryString}`,
   );
 
@@ -230,6 +233,40 @@ export default function MembersList() {
     setConfirm({ kind: "payment", action, eligible: eligible.length, skipped: members.length - eligible.length });
   }
 
+  /**
+   * Patches the rows a bulk payment action reports as changed, instead of
+   * paying for a full re-fetch of the page just to repaint fields whose new
+   * values are already known — see useMembersListResource's `mutate`. A row
+   * that no longer matches the active Payment filter is dropped from the
+   * page rather than patched in place, since patching it would leave (say) a
+   * newly-"Paid" row sitting under the "Unpaid" filter until the next real
+   * refresh caught up.
+   */
+  function applyPaymentUpdate(updates: BulkPaymentUpdate[]) {
+    if (updates.length === 0) return;
+    const byId = new Map(updates.map((u) => [u.id, u]));
+
+    mutate((prev) => {
+      if (!prev) return prev;
+      let dropped = 0;
+      const rows = prev.data.flatMap((row) => {
+        const change = byId.get(row.id);
+        if (!change) return [row];
+        if (filters.payment && filters.payment !== (change.isPaid ? "paid" : "unpaid")) {
+          dropped++;
+          return [];
+        }
+        return [{ ...row, isPaid: change.isPaid, paidAt: change.paidAt }];
+      });
+
+      if (dropped === 0) return { ...prev, data: rows };
+      return {
+        data: rows,
+        meta: { ...prev.meta, total: prev.meta.total - dropped, to: prev.meta.to === null ? prev.meta.to : prev.meta.to - dropped },
+      };
+    });
+  }
+
   async function confirmAction() {
     if (!confirm) return;
     const ids = [...selected.keys()];
@@ -252,16 +289,26 @@ export default function MembersList() {
       }, "Bulk update applied");
     } else if (confirm.kind === "payment") {
       const { action, eligible, skipped } = confirm;
-      await run(
-        async () => {
-          await apiSend("POST", "/members/bulk", { ids, action });
-          setSelected(new Map());
-        },
-        // The endpoint counts every id it was handed, including ones it skipped,
-        // so the figure reported here is our own — the members that changed.
-        `${eligible} member${eligible === 1 ? "" : "s"} marked as ${action}`,
-        skipped > 0 ? `${skipped} already ${action} — left unchanged.` : undefined,
-      );
+      // Not routed through `run()`: that helper always follows up with a full
+      // refetch, which is exactly the round trip this path exists to skip —
+      // the endpoint already reports what changed, so the rows are patched
+      // in place from its response instead.
+      try {
+        const { updated } = await apiSend<{ count: number; updated: BulkPaymentUpdate[] }>(
+          "POST", "/members/bulk", { ids, action },
+        );
+        applyPaymentUpdate(updated);
+        setSelected(new Map());
+        notify(
+          // The endpoint counts every id it was handed, including ones it
+          // skipped, so the figure reported here is our own — the members
+          // that changed.
+          `${eligible} member${eligible === 1 ? "" : "s"} marked as ${action}`,
+          skipped > 0 ? { body: `${skipped} already ${action} — left unchanged.` } : undefined,
+        );
+      } catch (e) {
+        notify("Action failed", { tone: "warning", body: e instanceof Error ? e.message : undefined });
+      }
     }
 
     setConfirm(null);

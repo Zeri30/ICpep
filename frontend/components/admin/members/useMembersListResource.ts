@@ -125,5 +125,21 @@ export function useMembersListResource<T>(path: string | null) {
     return load(true);
   }, [load]);
 
-  return { data, error, loading, fetching, refresh };
+  /**
+   * Patches this page's already-loaded rows in place — for a mutation (like a
+   * bulk payment toggle) that reports exactly what changed, so the caller
+   * doesn't have to pay for a full round trip just to repaint fields it
+   * already knows the new value of. Only ever narrows or edits the current
+   * page's `data`; it cannot know about rows on other pages, so those stay
+   * whatever they were until a real refresh visits them.
+   */
+  const mutate = useCallback((updater: (prev: T | null) => T | null) => {
+    setData((prev) => {
+      const next = updater(prev);
+      if (path !== null && next !== null) cacheSet(path, next);
+      return next;
+    });
+  }, [path]);
+
+  return { data, error, loading, fetching, refresh, mutate };
 }
