@@ -326,7 +326,7 @@ export default function EventCalendar() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">
-            Calendar
+            Schedules
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {canManage

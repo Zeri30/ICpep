@@ -89,7 +89,7 @@ enum Permission: string
             self::ViewRevenue => 'See the revenue figures and payment summary on the dashboard. Does not open Payment History.',
             self::ManageUsers => 'Open User Management: create accounts, reset passwords and set privileges.',
             self::ManageTerms => "Create each semester's membership list, switch the current one, and open or close the public registration form.",
-            self::ManageSchedule => 'Add, edit and delete events on the Calendar. Every officer can already read it — this is the ability to change it.',
+            self::ManageSchedule => 'Add, edit and delete events on Schedules. Every officer can already read it — this is the ability to change it.',
         };
     }
 
