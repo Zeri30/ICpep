@@ -31,7 +31,8 @@ import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
 import RoleBadge from "@/components/admin/users/RoleBadge";
 import RolePrivilegesModal from "@/components/admin/users/RolePrivilegesModal";
-import { apiSend, markModuleViewed, useAdminResource } from "@/lib/adminApi";
+import { apiSend, markModuleViewed } from "@/lib/adminApi";
+import { useUsersListResource } from "@/components/admin/users/useUsersListResource";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { AdminUser, Paginated } from "@/lib/adminTypes";
 
@@ -99,7 +100,7 @@ export default function UsersList() {
     return p.toString();
   }, [debouncedSearch, filters, sort, page]);
 
-  const { data, loading, fetching, error, refresh } = useAdminResource<Paginated<AdminUser>>(`/users?${queryString}`);
+  const { data, loading, fetching, error, refresh } = useUsersListResource<Paginated<AdminUser>>(`/users?${queryString}`);
 
   const changeFilters = (next: UserFilters) => {
     setFilters(next);
