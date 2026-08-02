@@ -4,18 +4,69 @@ import Image from "next/image";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { Hand } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SectionHeading from "@/components/ui/SectionHeading";
-import { OFFICERS, type Officer } from "@/lib/data";
+import { API_URL } from "@/lib/config";
+import { OFFICER_META, initialsOf, type Officer } from "@/lib/data";
 
 gsap.registerPlugin(useGSAP);
 
 const accentOf = (o: Officer) => (o.featured ? "#f59e0b" : "#dc2626");
 
-/** Adviser first, then officers in roster order. */
-function useRoster() {
-  const adviser = OFFICERS.find((o) => o.featured);
-  const rest = OFFICERS.filter((o) => !o.featured);
+/** One row of GET /api/officers — see backend OfficerController. */
+type OfficerRow = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  roleLabel: string;
+  isAdviser: boolean;
+};
+
+/**
+ * The live roster from the admin's `users` table, merged with OFFICER_META
+ * for the presentation that table has no column for. Adviser first regardless
+ * of fetch order — the API already sends it first, but the deck's "front
+ * card" assumption is worth keeping independent of that.
+ *
+ * Empty (not the old hardcoded fallback) while loading or on a failed fetch:
+ * showing stale names would defeat the point of no longer hardcoding them.
+ */
+function useRoster(): Officer[] {
+  const [rows, setRows] = useState<OfficerRow[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`${API_URL}/api/officers`, { headers: { Accept: "application/json" }, cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { data: OfficerRow[] } | null) => {
+        if (!cancelled) setRows(data?.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRows([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const officers: Officer[] = rows.map((r) => {
+    const meta = OFFICER_META[r.email];
+    return {
+      name: r.name,
+      role: r.isAdviser ? "Organization Adviser" : r.roleLabel,
+      detail: meta?.detail ?? r.roleLabel,
+      initials: initialsOf(r.name),
+      featured: r.isAdviser,
+      photo: meta?.photo,
+      plainPortrait: meta?.plainPortrait,
+    };
+  });
+
+  const adviser = officers.find((o) => o.featured);
+  const rest = officers.filter((o) => !o.featured);
   return adviser ? [adviser, ...rest] : rest;
 }
 
@@ -142,11 +193,16 @@ export default function Board() {
   const [active, setActive] = useState(0);
   const [flipped, setFlipped] = useState<Set<number>>(() => new Set());
 
-  const wrap = useCallback((i: number) => ((i % n) + n) % n, [n]);
+  // Guarded against n === 0 — briefly true while the roster is still loading,
+  // and `i % 0` is NaN rather than a thrown error, which would otherwise
+  // silently poison active/posRef the moment a key or drag event landed
+  // during that window.
+  const wrap = useCallback((i: number) => (n === 0 ? 0 : ((i % n) + n) % n), [n]);
 
   /** Shortest signed ring distance from `pos` to card `i`. */
   const delta = useCallback(
     (i: number, pos: number) => {
+      if (n === 0) return 0;
       let d = (((i - pos) % n) + n) % n;
       if (d > n / 2) d -= n;
       return d;
@@ -383,9 +439,11 @@ export default function Board() {
           <Hand size={14} className="text-primary/70" /> Drag to browse · Tap a card to flip
         </p>
 
-        <p aria-live="polite" className="sr-only">
-          {roster[active].name}, {roster[active].role}
-        </p>
+        {roster[active] && (
+          <p aria-live="polite" className="sr-only">
+            {roster[active].name}, {roster[active].role}
+          </p>
+        )}
       </div>
     </section>
   );

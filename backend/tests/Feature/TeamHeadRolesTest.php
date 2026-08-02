@@ -75,7 +75,7 @@ class TeamHeadRolesTest extends TestCase
 
     public function test_the_six_team_head_roles_exist(): void
     {
-        $this->assertCount(17, UserRole::cases());
+        $this->assertCount(18, UserRole::cases());
 
         foreach (self::TEAM_HEADS as $role) {
             $this->assertNotNull(UserRole::tryFrom($role->value));
@@ -91,7 +91,7 @@ class TeamHeadRolesTest extends TestCase
             ->assertOk()
             ->json('meta.roles');
 
-        $this->assertCount(17, $roles);
+        $this->assertCount(18, $roles);
         $this->assertEqualsCanonicalizing(
             UserRole::values(),
             array_column($roles, 'value'),
@@ -331,8 +331,8 @@ class TeamHeadRolesTest extends TestCase
     {
         $this->seed(RoleAccountsSeeder::class);
 
-        // Sixteen single-seat roles plus four directors.
-        $this->assertSame(20, User::query()->count());
+        // Seventeen single-seat roles plus four directors.
+        $this->assertSame(21, User::query()->count());
 
         foreach (UserRole::cases() as $role) {
             $accounts = User::query()->where('role', $role->value)->get();
@@ -405,7 +405,7 @@ class TeamHeadRolesTest extends TestCase
         User::query()->where('email', 'esports.team.head@icpep.se')->delete();
         $this->seed(RoleAccountsSeeder::class);
 
-        $this->assertSame(20, User::query()->count());
+        $this->assertSame(21, User::query()->count());
         $this->assertDatabaseHas('users', ['email' => 'esports.team.head@icpep.se']);
 
         $director = $director->fresh();

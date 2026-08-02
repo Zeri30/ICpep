@@ -1,12 +1,17 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\OfficerController;
 use App\Http\Controllers\SharedEventController;
 use Illuminate\Support\Facades\Route;
 
 // Public: whether the membership form is accepting submissions, and the reason
 // if it isn't. The landing page asks before rendering the form.
 Route::get('/registration-status', [ApplicationController::class, 'status']);
+
+// Public: the executive board, read from the same accounts User Management
+// edits — see OfficerController for which roles are shown.
+Route::get('/officers', [OfficerController::class, 'index']);
 
 // Public: submit a membership application (multipart form-data with files).
 Route::post('/applications', [ApplicationController::class, 'store']);

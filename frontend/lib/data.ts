@@ -101,6 +101,20 @@ export const ACTIVITIES: { icon: LucideIcon; label: string }[] = [
 
 /* ---------------------------------------------------------------------------
    Executive board
+
+   Officer *identity* — who holds a role, and their name — is no longer
+   hardcoded here. It comes live from GET /api/officers (backend
+   OfficerController), which reads the same `users` table User Management
+   edits: renaming an officer or handing a role to someone else there is what
+   the public site shows, with no code change. See components/sections/Board.tsx
+   for the fetch.
+
+   What's left here is presentation the accounts table has no column for —
+   a portrait and a year/program line — keyed by the officer's admin email
+   (the seeded, stable ...@icpep.se address), since that outlives a name
+   change. An account with no entry below still shows: the board falls back to
+   an initials monogram card and no detail line, which is exactly right for a
+   newly-filled seat nobody has curated art for yet.
 --------------------------------------------------------------------------- */
 export interface Officer {
   name: string;
@@ -116,22 +130,36 @@ export interface Officer {
   plainPortrait?: boolean;
 }
 
-export const OFFICERS: Officer[] = [
-  { name: "Engr. Amanda Fe H. Abelardo", role: "Organization Adviser", detail: "Faculty Adviser · CCpE, MSCpE", initials: "AA", featured: true, photo: "/board/amanda-abelardo-photo.jpg", plainPortrait: true },
-  { name: "Archie R. Baltazar", role: "President", detail: "BS Computer Engineering – 4th Year", initials: "AB", photo: "/board/archie-baltazar.jpg" },
-  { name: "Julia Mae D. Narne", role: "Vice President – External", detail: "BS Computer Engineering – 3rd Year", initials: "JN", photo: "/board/julia-mae-narne.jpg" },
-  { name: "John Quelvin B. Rosales", role: "Vice President – Internal", detail: "BS Computer Engineering – 3rd Year", initials: "JR", photo: "/board/john-quelvin-rosales.jpg" },
-  { name: "Clint Kelvin H. Ignacio", role: "Secretary", detail: "BS Computer Engineering – 3rd Year", initials: "CI", photo: "/board/clint-kelvin-ignacio.jpg" },
-  { name: "Shyrra Mhay F. Poral", role: "Assistant Secretary", detail: "BS Computer Engineering – 3rd Year", initials: "SP", photo: "/board/shyrra-mhay-poral.jpg" },
-  { name: "Hazel Rose V. De Guzman", role: "Treasurer", detail: "BS Computer Engineering – 4th Year", initials: "HD", photo: "/board/hazel-rose-de-guzman.jpg" },
-  { name: "Ma. Kathleen D. Gutierrez", role: "Assistant Treasurer", detail: "BS Computer Engineering – 3rd Year", initials: "MG", photo: "/board/ma-kathleen-gutierrez.jpg" },
-  { name: "Diana Lyn N. Sulit", role: "Auditor", detail: "BS Computer Engineering – 4th Year", initials: "DS", photo: "/board/diana-lyn-sulit.jpg" },
-  { name: "Jherylyn R. Cala", role: "Public Relations Officer", detail: "BS Computer Engineering – 3rd Year", initials: "JC", photo: "/board/jherylyn-cala.jpg" },
-  { name: "Michaella Denise S. San Pedro", role: "Board Director", detail: "BS Computer Engineering – 3rd Year", initials: "MS", photo: "/board/michaella-san-pedro.jpg" },
-  { name: "Shieryl P. Martinez", role: "Board Director", detail: "BS Computer Engineering – 3rd Year", initials: "SM", photo: "/board/shieryl-martinez.jpg" },
-  { name: "Marielle L. Bauto", role: "Board Director", detail: "BS Computer Engineering – 4th Year", initials: "MB", photo: "/board/marielle-bauto.jpg" },
-  { name: "Marc Julian A. Marcelo", role: "Board Director", detail: "BS Computer Engineering – 4th Year", initials: "MM", photo: "/board/marc-julian.jpg" },
-];
+export type OfficerMeta = { detail: string; photo?: string; plainPortrait?: boolean };
+
+export const OFFICER_META: Record<string, OfficerMeta> = {
+  "adviser@icpep.se": { detail: "Faculty Adviser · CCpE, MSCpE", photo: "/board/amanda-abelardo-photo.jpg", plainPortrait: true },
+  "president@icpep.se": { detail: "BS Computer Engineering – 4th Year", photo: "/board/archie-baltazar.jpg" },
+  "vpea@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/julia-mae-narne.jpg" },
+  "vpia@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/john-quelvin-rosales.jpg" },
+  "secretary@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/clint-kelvin-ignacio.jpg" },
+  "assistant.secretary@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/shyrra-mhay-poral.jpg" },
+  "treasurer@icpep.se": { detail: "BS Computer Engineering – 4th Year", photo: "/board/hazel-rose-de-guzman.jpg" },
+  "assistant.treasurer@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/ma-kathleen-gutierrez.jpg" },
+  "auditor@icpep.se": { detail: "BS Computer Engineering – 4th Year", photo: "/board/diana-lyn-sulit.jpg" },
+  "pro@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/jherylyn-cala.jpg" },
+  "bod@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/michaella-san-pedro.jpg" },
+  "bod.2@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/shieryl-martinez.jpg" },
+  "bod.3@icpep.se": { detail: "BS Computer Engineering – 4th Year", photo: "/board/marc-julian.jpg" },
+  "marielle@gmail.com": { detail: "BS Computer Engineering – 4th Year", photo: "/board/marielle-bauto.jpg" },
+};
+
+/** "Julia Mae D. Narne" → "JN" — first letter of the given name plus first
+    letter of the surname, skipping single-letter middle initials ("D."). Only
+    ever a fallback: every officer with curated art above never reaches this,
+    and a card that does is a seat filled since. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => !/^[A-Za-z]\.$/.test(w));
+  if (words.length === 0) return "?";
+  const first = words[0][0] ?? "";
+  const last = words[words.length - 1][0] ?? first;
+  return (first + last).toUpperCase();
+}
 
 /* ---------------------------------------------------------------------------
    Teams

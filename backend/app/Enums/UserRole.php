@@ -30,6 +30,7 @@ enum UserRole: string
     case AssistantSecretary = 'assistant_secretary';
     case Treasurer = 'treasurer';
     case AssistantTreasurer = 'assistant_treasurer';
+    case Auditor = 'auditor';
     case Pro = 'pro';
     case Bod = 'bod';
 
@@ -55,6 +56,7 @@ enum UserRole: string
             self::AssistantSecretary => 'Assistant Secretary',
             self::Treasurer => 'Treasurer',
             self::AssistantTreasurer => 'Assistant Treasurer',
+            self::Auditor => 'Auditor',
             self::Pro => 'Public Relations Officer',
             self::Bod => 'Board of Directors',
             self::ProgrammingTeamHead => 'Programming Team Head',
@@ -89,7 +91,9 @@ enum UserRole: string
             self::Pro, self::WritersTeamHead, self::MultimediaTeamHead,
             self::SocialMediaTeamHead => RoleFamily::Communications,
 
-            self::Bod => RoleFamily::Governance,
+            // Oversight rather than day-to-day treasury work, so it sits with
+            // the board rather than in Finance alongside the Treasurer.
+            self::Bod, self::Auditor => RoleFamily::Governance,
 
             // E-sports is the loosest fit of the seventeen: it is not technical
             // work in the way programming is. It sits here because the family
@@ -197,6 +201,15 @@ enum UserRole: string
             self::Pro, self::Bod => [
                 Permission::ViewMembers,
                 Permission::AccessFinance,
+            ],
+            // Same view-only footing as the board, plus the revenue figures —
+            // reviewing them is the point of the role, unlike Pro/Bod who read
+            // the ledger but not the totals. Still no UpdatePayment: auditing
+            // the books and recording payments stay separate abilities.
+            self::Auditor => [
+                Permission::ViewMembers,
+                Permission::AccessFinance,
+                Permission::ViewRevenue,
             ],
             // The Team Heads start on the same footing as the Board of Directors
             // — read the members, read Payment History, change neither.
