@@ -20,6 +20,7 @@ class ActivityController extends Controller
         'registered', 'updated', 'deleted', 'restored', 'login', 'paid', 'unpaid',
         // User Management.
         'user_created', 'user_updated', 'user_activated', 'user_deactivated', 'user_deleted', 'password_reset',
+        'users_logged_out_all',
     ];
 
     public function index(Request $request): AnonymousResourceCollection

@@ -11,6 +11,7 @@
 
 import {
   KeyRound,
+  LogOut,
   MoreVertical,
   Pencil,
   Power,
@@ -37,6 +38,7 @@ import type { AdminUser, Paginated } from "@/lib/adminTypes";
 type Confirm =
   | { kind: "toggle"; user: AdminUser }
   | { kind: "delete"; user: AdminUser }
+  | { kind: "logout-all" }
   | null;
 
 /**
@@ -132,6 +134,11 @@ export default function UsersList() {
       );
     } else if (confirm.kind === "delete") {
       await run(() => apiSend("DELETE", `/users/${confirm.user.id}`), "Account permanently deleted");
+    } else if (confirm.kind === "logout-all") {
+      await run(
+        () => apiSend("POST", "/users/logout-all-sessions"),
+        "Every other administrator has been signed out",
+      );
     }
     setConfirm(null);
   }
@@ -232,21 +239,31 @@ export default function UsersList() {
     // Fills the space below the topbar and scrolls rows internally — see
     // MembersList for the height maths.
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">User Management</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Administrator accounts and their access.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent sm:w-auto"
-        >
-          <UserPlus size={16} /> New administrator
-        </button>
+      <div>
+        <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">User Management</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Administrator accounts and their access.</p>
       </div>
 
-      <UsersFilters value={filters} onChange={changeFilters} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <UsersFilters value={filters} onChange={changeFilters} />
+        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setConfirm({ kind: "logout-all" })}
+            title="Force every other signed-in administrator to sign back in — useful after a permissions or role change"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-red-500/50 hover:text-red-400 sm:w-auto"
+          >
+            <LogOut size={16} /> Log out all admins
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent sm:w-auto"
+          >
+            <UserPlus size={16} /> New administrator
+          </button>
+        </div>
+      </div>
 
       <DataTable
         fill
@@ -295,6 +312,16 @@ export default function UsersList() {
         }
         confirmLabel="Delete permanently"
         tone="danger"
+        onConfirm={confirmAction}
+        onClose={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm?.kind === "logout-all"}
+        title="Log out all admins"
+        description={`Every other signed-in administrator, on every device, will be signed out and have to log back in. You’ll stay signed in on this device. Type "Confirm" below to go ahead.`}
+        confirmLabel="Log everyone out"
+        tone="danger"
+        typeToConfirm="Confirm"
         onConfirm={confirmAction}
         onClose={() => setConfirm(null)}
       />

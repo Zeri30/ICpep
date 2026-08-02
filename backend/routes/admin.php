@@ -138,6 +138,9 @@ Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/me/views/users', [MeController::class, 'viewedUsers'])->name('me.views.users');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
+        // Declared before /users/{user} for the same reason /users/roles is —
+        // otherwise "logout-all-sessions" would be taken for an account id.
+        Route::post('/users/logout-all-sessions', [UserController::class, 'logoutAllAdminSessions'])->name('users.logoutAllSessions');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
         Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');

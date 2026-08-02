@@ -64,6 +64,7 @@ const ACTION_CLS: Record<string, string> = {
   password_reset: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   user_deactivated: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
   user_deleted: "border-red-500/30 bg-red-500/10 text-red-400",
+  users_logged_out_all: "border-red-500/30 bg-red-500/10 text-red-400",
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -175,6 +176,7 @@ export default function ActivityLog() {
             <option value="user_deactivated">User deactivated</option>
             <option value="user_deleted">User deleted</option>
             <option value="password_reset">Password reset</option>
+            <option value="users_logged_out_all">Logged out all admins</option>
           </optgroup>
           <option value="login">Login</option>
         </select>
