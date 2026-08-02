@@ -71,6 +71,7 @@ class User extends Authenticatable
         'email',
         'password',
         'must_change_password',
+        'password_reset_at',
         'role',
         'is_active',
         'last_login_at',
@@ -96,6 +97,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'password_reset_at' => 'datetime',
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
             'role' => UserRole::class,

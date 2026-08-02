@@ -221,7 +221,7 @@ function SignInDialog({
                   type="checkbox"
                   className="h-4 w-4 rounded border-line bg-secondary/60 accent-primary"
                 />
-                Remember my password
+                Remember me
               </label>
 
               {error && (

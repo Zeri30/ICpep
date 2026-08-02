@@ -220,6 +220,46 @@ class UserManagementTest extends TestCase
         $this->assertDatabaseHas('activity_logs', ['action' => 'password_reset']);
     }
 
+    public function test_reset_password_refuses_a_second_reset_within_the_cooldown(): void
+    {
+        $target = User::factory()->create(['password_reset_at' => now()]);
+        $manager = $this->manager();
+
+        $originalHash = $target->password;
+
+        $this->actingAs($manager)
+            ->postJson("/api/admin/users/{$target->id}/reset-password")
+            ->assertUnprocessable()
+            ->assertJsonStructure(['message', 'availableAt']);
+
+        // Refused before ever touching the account.
+        $this->assertSame($originalHash, $target->fresh()->password);
+
+        // The list surfaces the same cooldown so the UI can warn up front.
+        $this->actingAs($manager)
+            ->getJson('/api/admin/users')
+            ->assertOk()
+            ->assertJsonPath(
+                'data.0.resetAvailableAt',
+                fn ($value) => $value !== null,
+            );
+    }
+
+    public function test_reset_password_is_allowed_again_after_the_cooldown(): void
+    {
+        $target = User::factory()->create([
+            'first_name' => 'Jane',
+            'middle_initial' => 's',
+            'last_name' => 'Officer',
+            'password_reset_at' => now()->subDays(7)->subMinute(),
+        ]);
+
+        $this->actingAs($this->manager())
+            ->postJson("/api/admin/users/{$target->id}/reset-password")
+            ->assertOk()
+            ->assertJsonPath('generatedPassword', 'jane.officer.s');
+    }
+
     /* --------------------------------------------------------------- destroy */
 
     public function test_delete_removes_the_account_and_logs(): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Controllers\Api\Admin\UserController;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -29,6 +30,10 @@ class UserResource extends JsonResource
             'isActive' => (bool) $this->is_active,
             'lastLoginAt' => optional($this->last_login_at)->toIso8601String(),
             'createdAt' => optional($this->created_at)->toIso8601String(),
+            // Set only while the reset-password cooldown is still running, so
+            // the UI can warn before even opening the confirm dialog instead
+            // of round-tripping to find out.
+            'resetAvailableAt' => optional(UserController::resetAvailableAt($this->resource))->toIso8601String(),
             // Lets the UI disable the self-destructive actions on the caller's
             // own row without a second lookup.
             'isSelf' => $request->user()?->id === $this->id,

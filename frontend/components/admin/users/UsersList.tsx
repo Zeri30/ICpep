@@ -30,7 +30,7 @@ import EditUserModal from "@/components/admin/users/EditUserModal";
 import ResetPasswordModal from "@/components/admin/users/ResetPasswordModal";
 import RoleBadge from "@/components/admin/users/RoleBadge";
 import RolePrivilegesModal from "@/components/admin/users/RolePrivilegesModal";
-import { apiSend, useAdminResource } from "@/lib/adminApi";
+import { apiSend, markModuleViewed, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { AdminUser, Paginated } from "@/lib/adminTypes";
 
@@ -73,6 +73,11 @@ export default function UsersList() {
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
   const [privilegesFor, setPrivilegesFor] = useState<AdminUser | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+
+  // Opening the list clears its sidebar badge — see markModuleViewed.
+  useEffect(() => {
+    markModuleViewed("users");
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(filters.search), 350);
@@ -129,6 +134,24 @@ export default function UsersList() {
       await run(() => apiSend("DELETE", `/users/${confirm.user.id}`), "Account permanently deleted");
     }
     setConfirm(null);
+  }
+
+  /**
+   * Gate on `resetAvailableAt` before ever opening the confirm dialog — the
+   * account is on the reset-password cooldown (UserController::RESET_COOLDOWN_DAYS)
+   * until that time, so there's nothing the dialog could do here but fail.
+   * The backend enforces the same window regardless, in case this data is
+   * stale by the time the click lands.
+   */
+  function requestReset(user: AdminUser) {
+    if (user.resetAvailableAt && new Date(user.resetAvailableAt) > new Date()) {
+      notify("Password reset is on cooldown", {
+        tone: "warning",
+        body: `${user.name} was already reset recently. Try again after ${formatDateTime(user.resetAvailableAt)}.`,
+      });
+      return;
+    }
+    setResetFor(user);
   }
 
   async function resetPassword(): Promise<string> {
@@ -198,7 +221,7 @@ export default function UsersList() {
           onEdit={() => setEditing(u)}
           onPrivileges={() => setPrivilegesFor(u)}
           onToggle={() => setConfirm({ kind: "toggle", user: u })}
-          onReset={() => setResetFor(u)}
+          onReset={() => requestReset(u)}
           onDelete={() => setConfirm({ kind: "delete", user: u })}
         />
       ),

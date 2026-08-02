@@ -40,6 +40,14 @@ class ActivityController extends Controller
             });
         }
 
+        // Inclusive range over `created_at` — the only date an activity row
+        // has. The frontend's Today/Last 7 days/Last 30 days presets just
+        // fill in these same two fields, so there is one code path here
+        // whether the range came from a preset or the date pickers directly.
+        $query
+            ->when($request->query('from'), fn (Builder $q, $d): Builder => $q->whereDate('created_at', '>=', $d))
+            ->when($request->query('until'), fn (Builder $q, $d): Builder => $q->whereDate('created_at', '<=', $d));
+
         $perPage = (int) $request->integer('perPage', 20);
         $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 20;
 

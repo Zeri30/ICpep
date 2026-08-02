@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\Event;
+use App\Models\ModuleView;
 use App\Services\RememberMeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -168,5 +169,39 @@ class MeController extends Controller
         $request->session()->regenerateToken();
 
         return response()->json(['redirect' => config('app.frontend_url')]);
+    }
+
+    /**
+     * "I just opened this module" — zeroes this officer's sidebar badge for
+     * it. One thin method per module (rather than a `{module}` route
+     * wildcard) so each can sit behind that module's own permission
+     * middleware in routes/admin.php: marking Payment History viewed
+     * shouldn't be reachable by a role that can't see it in the first place.
+     */
+    public function viewedMembers(Request $request): JsonResponse
+    {
+        return $this->markViewed($request, 'members');
+    }
+
+    public function viewedPayments(Request $request): JsonResponse
+    {
+        return $this->markViewed($request, 'payments');
+    }
+
+    public function viewedUsers(Request $request): JsonResponse
+    {
+        return $this->markViewed($request, 'users');
+    }
+
+    public function viewedActivity(Request $request): JsonResponse
+    {
+        return $this->markViewed($request, 'activity');
+    }
+
+    private function markViewed(Request $request, string $module): JsonResponse
+    {
+        ModuleView::markViewed($request->user(), $module);
+
+        return response()->json(['ok' => true]);
     }
 }

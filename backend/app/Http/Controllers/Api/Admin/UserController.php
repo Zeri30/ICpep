@@ -29,6 +29,9 @@ use Illuminate\Validation\Rule;
  */
 class UserController extends Controller
 {
+    /** Days that must pass between two resets of the same account. */
+    private const RESET_COOLDOWN_DAYS = 7;
+
     /** Columns the list may be sorted by, mapped to real DB columns. */
     private const SORTABLE = [
         'name' => 'name',
@@ -54,11 +57,14 @@ class UserController extends Controller
         };
 
         if ($search = trim((string) $request->query('search'))) {
+            // whereLike(..., caseSensitive: false) compiles to ILIKE on Postgres
+            // and a LOWER() comparison elsewhere, so this stays case-insensitive
+            // on both the sqlite test DB and the Supabase/Postgres database.
             $query->where(function (Builder $q) use ($search): void {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                $q->whereLike('name', "%{$search}%", caseSensitive: false)
+                    ->orWhereLike('first_name', "%{$search}%", caseSensitive: false)
+                    ->orWhereLike('last_name', "%{$search}%", caseSensitive: false)
+                    ->orWhereLike('email', "%{$search}%", caseSensitive: false);
             });
         }
 
@@ -193,9 +199,22 @@ class UserController extends Controller
      * their choosing": that password is one more secret that has to be handed
      * over safely, where a generated one that must be replaced on first sign-in
      * never needs to stay secret past that moment.
+     *
+     * Rate-limited to once every {@see self::RESET_COOLDOWN_DAYS} per account —
+     * resetting signs the account out everywhere (see below), so back-to-back
+     * resets are also a way to repeatedly lock a coworker out.
      */
     public function resetPassword(User $user): JsonResponse
     {
+        $availableAt = self::resetAvailableAt($user);
+
+        if ($availableAt?->isFuture()) {
+            return response()->json([
+                'message' => "This account was already reset recently. Try again after {$availableAt->format('M j, Y g:i A')}.",
+                'availableAt' => $availableAt->toIso8601String(),
+            ], 422);
+        }
+
         $defaultPassword = $this->generateDefaultPassword([
             'first_name' => (string) $user->first_name,
             'middle_initial' => $user->middle_initial,
@@ -205,6 +224,7 @@ class UserController extends Controller
         $user->update([
             'password' => Hash::make($defaultPassword),
             'must_change_password' => true,
+            'password_reset_at' => now(),
         ]);
 
         // Kill every session this account already has open — a reset means
@@ -289,6 +309,23 @@ class UserController extends Controller
     private function titleCase(string $value): string
     {
         return mb_convert_case(trim($value), MB_CASE_TITLE, 'UTF-8');
+    }
+
+    /**
+     * When this account's reset-password cooldown ends, or null if it has
+     * never been reset (or the cooldown has already passed). Shared by the
+     * write path above and the list's `resetAvailableAt` column, so both read
+     * the same 7-day window off the same `password_reset_at` timestamp.
+     */
+    public static function resetAvailableAt(User $user): ?\Illuminate\Support\Carbon
+    {
+        if (! $user->password_reset_at) {
+            return null;
+        }
+
+        $availableAt = $user->password_reset_at->copy()->addDays(self::RESET_COOLDOWN_DAYS);
+
+        return $availableAt->isFuture() ? $availableAt : null;
     }
 
     private function isSelf(Request $request, User $user): bool

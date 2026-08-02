@@ -3,14 +3,39 @@
 /* Activity Log — the React parity of the read-only Filament history: an action
    filter, search, and pagination. */
 
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { useAdminResource } from "@/lib/adminApi";
+import { markModuleViewed, useAdminResource } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { ActivityRow, Paginated } from "@/lib/adminTypes";
+
+/** Local calendar date as YYYY-MM-DD — what a `<input type="date">` reads and
+    writes, and what the backend's `from`/`until` (whereDate) expect. Not
+    `toISOString`, which is UTC and can name the wrong day for anyone not at
+    UTC+0 (e.g. 11pm PHT is already tomorrow in UTC). */
+function dateInput(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Today, and N-1 days ago — the two ends of an "N days" preset, both inclusive. */
+function lastNDays(n: number): { from: string; until: string } {
+  const until = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - (n - 1));
+  return { from: dateInput(from), until: dateInput(until) };
+}
+
+const DATE_PRESETS: { label: string; range: () => { from: string; until: string } }[] = [
+  { label: "Today", range: () => lastNDays(1) },
+  { label: "Last 7 days", range: () => lastNDays(7) },
+  { label: "Last 30 days", range: () => lastNDays(30) },
+];
 
 /**
  * How many placeholder rows to draw while the first page is in flight.
@@ -51,7 +76,14 @@ export default function ActivityLog() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [action, setAction] = useState("");
+  const [from, setFrom] = useState("");
+  const [until, setUntil] = useState("");
   const [page, setPage] = useState(1);
+
+  // Opening the log clears its sidebar badge — see markModuleViewed.
+  useEffect(() => {
+    markModuleViewed("activity");
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(search), 350);
@@ -62,11 +94,28 @@ export default function ActivityLog() {
     const p = new URLSearchParams();
     if (debounced) p.set("search", debounced);
     if (action) p.set("action", action);
+    if (from) p.set("from", from);
+    if (until) p.set("until", until);
     p.set("page", String(page));
     return p.toString();
-  }, [debounced, action, page]);
+  }, [debounced, action, from, until, page]);
 
   const { data, loading, error } = useAdminResource<Paginated<ActivityRow>>(`/activity?${qs}`);
+
+  const applyPreset = (range: { from: string; until: string }) => {
+    setFrom(range.from);
+    setUntil(range.until);
+    setPage(1);
+  };
+  const activePreset = DATE_PRESETS.find((p) => {
+    const r = p.range();
+    return r.from === from && r.until === until;
+  })?.label;
+  const clearDates = () => {
+    setFrom("");
+    setUntil("");
+    setPage(1);
+  };
 
   const columns: Column<ActivityRow>[] = [
     { key: "when", header: "When", render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.createdAt)}</span>, skeleton: <Bar w="w-32" /> },
@@ -129,6 +178,50 @@ export default function ActivityLog() {
           </optgroup>
           <option value="login">Login</option>
         </select>
+
+        <div className="mx-1 hidden h-6 w-px bg-line sm:block" />
+
+        {DATE_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => applyPreset(p.range())}
+            className={`rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
+              activePreset === p.label
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-line text-secondary-foreground hover:border-primary/50 hover:text-foreground"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+
+        <input
+          type="date"
+          value={from}
+          max={until || undefined}
+          onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+          aria-label="From date"
+          className={selectCls}
+        />
+        <span className="text-xs text-muted-foreground">to</span>
+        <input
+          type="date"
+          value={until}
+          min={from || undefined}
+          onChange={(e) => { setUntil(e.target.value); setPage(1); }}
+          aria-label="Until date"
+          className={selectCls}
+        />
+
+        {(from || until) && (
+          <button
+            onClick={clearDates}
+            className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+          >
+            <X size={13} /> Clear dates
+          </button>
+        )}
       </div>
 
       <DataTable

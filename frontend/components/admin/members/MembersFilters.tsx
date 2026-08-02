@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 
 export type MemberFilters = {
@@ -25,9 +25,14 @@ const selectCls =
 export default function MembersFilters({
   value,
   onChange,
+  searching = false,
 }: {
   value: MemberFilters;
   onChange: (next: MemberFilters) => void;
+  /** A search request for the typed-in term is pending or in flight — swaps
+      the search icon for a spinner so a slow lookup reads as "loading",
+      not as the input having silently dropped the keystroke. */
+  searching?: boolean;
 }) {
   const { meta } = useAdmin();
   const set = (patch: Partial<MemberFilters>) => onChange({ ...value, ...patch });
@@ -39,7 +44,14 @@ export default function MembersFilters({
   return (
     <>
       <div className="relative w-full sm:w-auto">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        {searching ? (
+          <Loader2
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 animate-spin text-primary"
+          />
+        ) : (
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        )}
         <input
           value={value.search}
           onChange={(e) => set({ search: e.target.value })}

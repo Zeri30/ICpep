@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\MembershipTerm;
+use App\Models\ModuleView;
 use App\Models\PaymentTransaction;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -45,21 +47,47 @@ class DashboardController extends Controller
         ]);
     }
 
-    /** Live counts for the sidebar nav badges (members, payment records). */
+    /**
+     * Unread counts for the sidebar nav badges — records created since this
+     * officer last opened each module (see ModuleView), not the module's
+     * total. An officer who has never opened a module sees everything in it
+     * as unread, same as a first-time inbox.
+     */
     public function counts(Request $request): JsonResponse
     {
         $term = MembershipTerm::resolve($request->query('term'));
+        $lastViewed = ModuleView::lastViewedFor($request->user());
+
+        $members = $this->members($term);
+        if ($since = $lastViewed->get('members')) {
+            $members->where('created_at', '>', $since);
+        }
 
         $payments = PaymentTransaction::query();
         if ($term) {
             $payments->forTerm($term->id);
         }
+        if ($since = $lastViewed->get('payments')) {
+            $payments->where('created_at', '>', $since);
+        }
+
+        // Accounts are organization-wide, not per-semester.
+        $users = User::query();
+        if ($since = $lastViewed->get('users')) {
+            $users->where('created_at', '>', $since);
+        }
+
+        // Not scoped to the term — the log itself isn't either.
+        $activity = ActivityLog::query();
+        if ($since = $lastViewed->get('activity')) {
+            $activity->where('created_at', '>', $since);
+        }
 
         return response()->json([
-            'members' => $this->members($term)->count(),
+            'members' => $members->count(),
             'payments' => $payments->count(),
-            // Accounts are organization-wide, not per-semester.
-            'users' => User::count(),
+            'users' => $users->count(),
+            'activity' => $activity->count(),
         ]);
     }
 

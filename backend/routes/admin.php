@@ -44,6 +44,7 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');
+    Route::post('/me/views/activity', [MeController::class, 'viewedActivity'])->name('me.views.activity');
 
     // Payment History — the read-only ledger. Gated on finance.view so the
     // module can be turned on or off per role from the Privileges panel; the
@@ -52,6 +53,7 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // Acting on payments is a separate ability and still needs members.payment.
     Route::middleware('permission:finance.view')->group(function () {
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+        Route::post('/me/views/payments', [MeController::class, 'viewedPayments'])->name('me.views.payments');
     });
 
     // Membership lists and the public form's open/closed state. Reading both is
@@ -97,6 +99,7 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // Members — reading needs members.view; the writes below gate more tightly.
     Route::middleware('permission:members.view')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->name('members.index');
+        Route::post('/me/views/members', [MeController::class, 'viewedMembers'])->name('me.views.members');
         Route::get('/members/export/csv', [MemberController::class, 'exportCsv'])->name('members.export.csv');
         Route::get('/members/export/excel', [MemberController::class, 'exportExcel'])->name('members.export.excel');
         Route::get('/members/export/pdf', [MemberController::class, 'exportPdf'])->name('members.export.pdf');
@@ -124,6 +127,7 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
         Route::post('/users/roles/{role}/reset', [RolePermissionController::class, 'reset'])->name('roles.reset');
 
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::post('/me/views/users', [MeController::class, 'viewedUsers'])->name('me.views.users');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
         Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
