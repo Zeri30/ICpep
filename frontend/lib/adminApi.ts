@@ -107,16 +107,47 @@ async function getCsrf(force = false): Promise<string> {
   return token;
 }
 
+/** Fired once when a 401 reveals the session is already gone — e.g. idle
+    timeout, User Management's "log out all admins", or a deactivation —
+    picked up by SessionEndedModal.tsx to explain why before redirecting,
+    instead of the officer just silently landing back on the public site
+    mid-click with no idea why. */
+export const SESSION_ENDED_EVENT = "icpep:session-ended";
+export type SessionEndedDetail = { message: string };
+
+const GENERIC_SESSION_ENDED_MESSAGE =
+  "You've been signed out. This can happen if your session ended, your account was deactivated, or an administrator signed every admin out.";
+
+// Only the first 401 announces — SessionWatchdog's poll and whatever request
+// actually triggered this can both land around the same time, and only one
+// modal should show.
+let sessionEndedAnnounced = false;
+
+function announceSessionEnded(message: string): void {
+  if (sessionEndedAnnounced || typeof window === "undefined") return;
+  sessionEndedAnnounced = true;
+  window.dispatchEvent(
+    new CustomEvent<SessionEndedDetail>(SESSION_ENDED_EVENT, { detail: { message } }),
+  );
+}
+
 async function parse(res: Response): Promise<unknown> {
   const data = await res.json().catch(() => ({}));
   if (res.ok) return data;
 
-  // Session expired or signed out elsewhere — return to the public site.
-  if (res.status === 401 && typeof window !== "undefined") {
-    window.location.href = "/";
-  }
   const message =
     (data as { message?: string }).message ?? "Something went wrong. Please try again.";
+
+  // Session expired or signed out elsewhere. EnforceIdleTimeout sends a
+  // `reason` alongside a message that already explains itself (e.g. "Your
+  // session ended after being inactive for too long.") — anything else that
+  // 401s (a deleted session row, a deactivated account) just says
+  // "Unauthenticated." on its own, so a generic explanation stands in.
+  if (res.status === 401) {
+    announceSessionEnded(
+      typeof (data as { reason?: string }).reason === "string" ? message : GENERIC_SESSION_ENDED_MESSAGE,
+    );
+  }
   throw new ApiError(res.status, message);
 }
 

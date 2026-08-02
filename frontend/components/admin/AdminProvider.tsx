@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { AdminMeta, Officer, Permission } from "@/lib/adminApi";
 import IdleLogout from "@/components/admin/IdleLogout";
+import SessionEndedModal from "@/components/admin/SessionEndedModal";
 import SessionWatchdog from "@/components/admin/SessionWatchdog";
 import Toaster, { type Toast, type ToastTone } from "@/components/admin/ui/Toaster";
 
@@ -70,6 +71,7 @@ export default function AdminProvider({
       {children}
       <IdleLogout />
       <SessionWatchdog />
+      <SessionEndedModal />
       <Toaster toasts={toasts} onDismiss={dismiss} />
     </AdminContext.Provider>
   );
