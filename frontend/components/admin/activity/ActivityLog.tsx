@@ -54,7 +54,6 @@ const selectCls =
 const ACTION_CLS: Record<string, string> = {
   registered: "border-green-500/30 bg-green-500/10 text-green-400",
   restored: "border-green-500/30 bg-green-500/10 text-green-400",
-  paid: "border-green-500/30 bg-green-500/10 text-green-400",
   deleted: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
   updated: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   login: "border-line bg-white/5 text-secondary-foreground",
@@ -167,8 +166,6 @@ export default function ActivityLog() {
             <option value="updated">Edited</option>
             <option value="deleted">Deleted</option>
             <option value="restored">Restored</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
           </optgroup>
           <optgroup label="User management">
             <option value="user_created">User created</option>

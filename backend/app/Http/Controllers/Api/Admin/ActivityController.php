@@ -13,11 +13,14 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * Read-only activity history. Filter by action (registered / updated / deleted /
  * restored / login) and search over the description and actor, mirroring the
  * Filament resource.
+ *
+ * Payment events (paid/unpaid) are deliberately not among these — that ledger
+ * lives in Payment History (payment_transactions) only, not here too.
  */
 class ActivityController extends Controller
 {
     private const ACTIONS = [
-        'registered', 'updated', 'deleted', 'restored', 'login', 'paid', 'unpaid',
+        'registered', 'updated', 'deleted', 'restored', 'login',
         // User Management.
         'user_created', 'user_updated', 'user_activated', 'user_deactivated', 'user_deleted', 'password_reset',
         'users_logged_out_all',
@@ -25,7 +28,10 @@ class ActivityController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = ActivityLog::query()->latest();
+        // Historical rows from before payments moved to their own ledger —
+        // excluded outright rather than left reachable only by bypassing the
+        // dropdown, since the whole point is that they no longer belong here.
+        $query = ActivityLog::query()->whereNotIn('action', ['paid', 'unpaid'])->latest();
 
         if (($action = $request->query('action')) && in_array($action, self::ACTIONS, true)) {
             $query->where('action', $action);

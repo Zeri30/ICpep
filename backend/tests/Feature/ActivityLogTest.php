@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
+use App\Models\Application;
+use App\Models\MembershipTerm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -24,6 +26,30 @@ class ActivityLogTest extends TestCase
         $log->forceFill(['created_at' => $when])->save();
 
         return $log;
+    }
+
+    /* ---------------------------------------------------------- payment writes */
+
+    /**
+     * Payment History (payment_transactions) is the dedicated ledger for
+     * paid/unpaid events — they used to also write an Activity Log entry, but
+     * that duplicated the same information in two places.
+     */
+    public function test_marking_paid_does_not_write_to_the_activity_log(): void
+    {
+        $member = Application::create([
+            'membership_term_id' => MembershipTerm::current()?->id,
+            'surname' => 'Dela Cruz', 'given_name' => 'Juan', 'middle_initial' => 'S',
+            'year_level' => '3rd Year', 'section' => 'Section A', 'birthday' => '2004-01-01',
+            'address' => '123 Rizal St', 'email' => 'a@example.com', 'phone' => '09123456789',
+            'signature_path' => 'signatures/x.png', 'picture_path' => 'pictures/x.png',
+        ]);
+
+        $member->update(['paid_at' => now()]);
+        $member->update(['paid_at' => null]);
+
+        $this->assertSame(0, ActivityLog::whereIn('action', ['paid', 'unpaid'])->count());
+        $this->assertSame(2, $member->paymentTransactions()->count());
     }
 
     public function test_from_and_until_narrow_to_the_inclusive_range(): void

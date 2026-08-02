@@ -49,14 +49,11 @@ class Application extends Model
                 return;
             }
 
-            // Payment is its own event — logging it as a generic "edited details"
-            // would bury the thing an officer most needs to audit.
+            // Payment has its own dedicated ledger (Payment History /
+            // payment_transactions) rather than being logged here too — see
+            // recordPaymentTransaction().
             if ($application->wasChanged('paid_at')) {
                 $application->recordPaymentTransaction();
-
-                $application->paid_at
-                    ? ActivityLog::record('paid', "Marked {$application->full_name} as paid", $application->full_name)
-                    : ActivityLog::record('unpaid', "Marked {$application->full_name} as unpaid", $application->full_name);
 
                 // A pure payment toggle shouldn't also log an edit.
                 if (count($application->getChanges()) <= 2) { // paid_at + updated_at

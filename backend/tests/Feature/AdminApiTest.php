@@ -404,15 +404,17 @@ class AdminApiTest extends TestCase
 
     /* ---------------------------------------------------------- member writes */
 
-    public function test_toggle_paid_flips_state_and_logs(): void
+    public function test_toggle_paid_flips_state_and_records_a_payment_transaction(): void
     {
         $member = $this->makeApplication();
         $admin = $this->treasurer();
 
         $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
         $this->assertNotNull($member->fresh()->paid_at);
-        $this->assertDatabaseHas('activity_logs', ['action' => 'paid']);
         $this->assertDatabaseHas('payment_transactions', ['application_id' => $member->id, 'action' => 'paid']);
+        // Payment History is the ledger for this — it isn't duplicated into
+        // the Activity Log too.
+        $this->assertDatabaseMissing('activity_logs', ['action' => 'paid']);
 
         $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
         $this->assertNull($member->fresh()->paid_at);
