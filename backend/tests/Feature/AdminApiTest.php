@@ -71,6 +71,10 @@ class AdminApiTest extends TestCase
 
     public function test_me_returns_officer_and_meta(): void
     {
+        // Pinned rather than left to whatever MEMBERSHIP_FEE happens to be in
+        // .env — see test_dashboard_numbers_match_the_data for why.
+        config(['icpep.membership_fee' => 50]);
+
         $this->actingAs($this->admin())
             ->getJson('/api/admin/me')
             ->assertOk()
@@ -145,6 +149,11 @@ class AdminApiTest extends TestCase
 
     public function test_dashboard_numbers_match_the_data(): void
     {
+        // Pinned rather than left to whatever MEMBERSHIP_FEE happens to be in
+        // .env — that's real config for the live site's actual fee, not a
+        // fixture this assertion should be coupled to.
+        config(['icpep.membership_fee' => 50]);
+
         $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now()]);
         $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year']);
 
@@ -331,6 +340,10 @@ class AdminApiTest extends TestCase
 
     public function test_payments_ledger_lists_and_filters(): void
     {
+        // Pinned rather than left to whatever MEMBERSHIP_FEE happens to be in
+        // .env — see test_dashboard_numbers_match_the_data for why.
+        config(['icpep.membership_fee' => 50]);
+
         // Marking paid writes a 'paid' ledger row via the model event.
         $this->makeApplication(['section' => 'Section A'])->update(['paid_at' => now()]);
 

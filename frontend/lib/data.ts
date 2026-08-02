@@ -138,6 +138,8 @@ export const OFFICERS: Officer[] = [
 --------------------------------------------------------------------------- */
 /** A team head or member. `photo` is optional — falls back to an initials
     avatar until a real image URL/path is provided. */
+
+
 export interface TeamMember {
   name: string;
   year: string;
@@ -356,7 +358,7 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Is there a membership fee?",
-    a: "Yes. A membership fee of ₱50 is collected upon joining. This one-time contribution helps fund the organization's seminars, activities, and materials throughout the academic year, ensuring that every member benefits from the programs and opportunities ICpEP provides.",
+    a: "Yes. A membership fee of ₱75 is collected upon joining. This one-time contribution helps fund the organization's seminars, activities, and materials throughout the academic year, ensuring that every member benefits from the programs and opportunities ICpEP provides.",
   },
   {
     q: "Can I be part of multiple teams?",
