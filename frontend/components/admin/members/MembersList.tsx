@@ -488,7 +488,10 @@ export default function MembersList() {
             </p>
           ) : null}
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        {/* Stacked full-width on a phone, side by side once there's room —
+            same reasoning as TermBar's action buttons: two labels this long
+            squeezed into half-width each otherwise wrap mid-word. */}
+        <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
           {/* Open to every role — reading the list is all it takes to export it. */}
           <ExportMenu queryString={exportQueryString} />
 
