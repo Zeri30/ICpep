@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -37,9 +38,14 @@ class DashboardController extends Controller
         $canRevenue = Gate::allows('finance.revenue');
         $term = MembershipTerm::resolve($request->query('term'));
 
+        // One row of conditional aggregates covers stats() and (when the role
+        // may see it) paymentSummary() together — 7 separate count() queries
+        // collapse into this single round trip.
+        $headline = $this->headlineAggregates($term);
+
         return response()->json([
-            'stats' => $this->stats($canRevenue, $term),
-            'paymentSummary' => $canRevenue ? $this->paymentSummary($term) : null,
+            'stats' => $this->stats($canRevenue, $headline),
+            'paymentSummary' => $canRevenue ? $this->paymentSummary($headline) : null,
             'membersByClass' => $this->membersByClass($term),
             'registrationsOverTime' => $this->registrationsOverTime($term),
             'canViewRevenue' => $canRevenue,
@@ -104,18 +110,56 @@ class DashboardController extends Controller
         return $term ? $query->forTerm($term->id) : $query;
     }
 
+    /**
+     * Every number stats() and paymentSummary() need, in one round trip: a
+     * single row of conditional SUMs standing in for what used to be 4
+     * separate count() calls for stats() plus 3 more for paymentSummary().
+     *
+     * SUM() over zero matching rows is NULL in both Postgres and SQLite (only
+     * COUNT is guaranteed 0), so every field is cast through (int) rather
+     * than trusting a bare column read — a term with no applications yet
+     * would otherwise turn every figure into `null` instead of `0`.
+     *
+     * @return array{live:int,paid:int,thirdYear:int,fourthYear:int,paidToday:int,paidWeek:int,paidMonth:int}
+     */
+    private function headlineAggregates(?MembershipTerm $term): array
+    {
+        $today = [Carbon::today()->startOfDay(), Carbon::today()->endOfDay()];
+        $week = [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()];
+        $month = [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()];
+
+        $row = $this->members($term)
+            ->selectRaw('COUNT(*) as live')
+            ->selectRaw('SUM(CASE WHEN paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid')
+            ->selectRaw('SUM(CASE WHEN year_level = ? THEN 1 ELSE 0 END) as third_year', ['3rd Year'])
+            ->selectRaw('SUM(CASE WHEN year_level = ? THEN 1 ELSE 0 END) as fourth_year', ['4th Year'])
+            ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_today', $today)
+            ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_week', $week)
+            ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_month', $month)
+            ->first();
+
+        return [
+            'live' => (int) $row->live,
+            'paid' => (int) $row->paid,
+            'thirdYear' => (int) $row->third_year,
+            'fourthYear' => (int) $row->fourth_year,
+            'paidToday' => (int) $row->paid_today,
+            'paidWeek' => (int) $row->paid_week,
+            'paidMonth' => (int) $row->paid_month,
+        ];
+    }
+
     /** Members / 3rd / 4th / revenue — derived from current state, never accumulated. */
-    private function stats(bool $canRevenue, ?MembershipTerm $term): array
+    private function stats(bool $canRevenue, array $headline): array
     {
         $fee = (float) config('icpep.membership_fee');
-
-        $live = $this->members($term)->count();
-        $paid = $this->members($term)->paid()->count();
+        $live = $headline['live'];
+        $paid = $headline['paid'];
 
         return [
             'members' => $live,
-            'thirdYear' => $this->members($term)->where('year_level', '3rd Year')->count(),
-            'fourthYear' => $this->members($term)->where('year_level', '4th Year')->count(),
+            'thirdYear' => $headline['thirdYear'],
+            'fourthYear' => $headline['fourthYear'],
             'paid' => $paid,
             'unpaid' => $live - $paid,
             // Peso figures are the chapter's income — null them out for roles
@@ -126,17 +170,12 @@ class DashboardController extends Controller
     }
 
     /** Fees collected today / this week / this month, from applications.paid_at. */
-    private function paymentSummary(?MembershipTerm $term): array
+    private function paymentSummary(array $headline): array
     {
         $fee = (float) config('icpep.membership_fee');
-
-        $countBetween = fn (Carbon $from, Carbon $until): int => $this->members($term)
-            ->whereBetween('paid_at', [$from, $until])
-            ->count();
-
-        $today = $countBetween(Carbon::today()->startOfDay(), Carbon::today()->endOfDay());
-        $week = $countBetween(Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek());
-        $month = $countBetween(Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth());
+        $today = $headline['paidToday'];
+        $week = $headline['paidWeek'];
+        $month = $headline['paidMonth'];
 
         return [
             'today' => ['members' => $today, 'amount' => $today * $fee, 'label' => Carbon::today()->format('M j, Y')],
@@ -145,33 +184,54 @@ class DashboardController extends Controller
         ];
     }
 
-    /** Headcount per 3A/3B/4A/4B. */
+    /** Headcount per 3A/3B/4A/4B — one GROUP BY instead of one count() per class. */
     private function membersByClass(?MembershipTerm $term): array
     {
-        $counts = collect(Application::CLASS_MAP)->map(
-            fn (array $c): int => $this->members($term)
-                ->where('year_level', $c[0])
-                ->where('section', $c[1])
-                ->count()
-        );
+        $byGroup = $this->members($term)
+            ->select('year_level', 'section')
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('year_level', 'section')
+            ->get()
+            ->mapWithKeys(fn ($row): array => ["{$row->year_level}|{$row->section}" => (int) $row->total]);
 
         return [
             'labels' => array_keys(Application::CLASS_MAP),
-            'data' => $counts->values()->all(),
+            'data' => collect(Application::CLASS_MAP)
+                ->map(fn (array $c): int => $byGroup->get("{$c[0]}|{$c[1]}", 0))
+                ->values()
+                ->all(),
         ];
     }
 
-    /** New members per month over the last six months. */
+    /** New members per month over the last six months — one GROUP BY instead of one count() per month. */
     private function registrationsOverTime(?MembershipTerm $term): array
     {
         $months = collect(range(5, 0))->map(fn (int $i): Carbon => now()->startOfMonth()->subMonths($i));
 
+        $byMonth = $this->members($term)
+            ->where('created_at', '>=', $months->first())
+            ->selectRaw($this->monthKeyExpression().' as ym')
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('ym')
+            ->pluck('total', 'ym');
+
         return [
             'labels' => $months->map(fn (Carbon $m): string => $m->format('M Y'))->all(),
-            'data' => $months->map(fn (Carbon $m): int => $this->members($term)->whereBetween('created_at', [
-                $m->copy()->startOfMonth(),
-                $m->copy()->endOfMonth(),
-            ])->count())->all(),
+            'data' => $months->map(fn (Carbon $m): int => (int) ($byMonth->get($m->format('Y-m')) ?? 0))->all(),
         ];
+    }
+
+    /**
+     * "YYYY-MM" from `created_at`, in whichever SQL dialect the current
+     * connection speaks — Postgres in production, SQLite in tests (see
+     * phpunit.xml), and there is no driver-agnostic way to truncate a date
+     * to the month in raw SQL.
+     */
+    private function monthKeyExpression(): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'sqlite' => "strftime('%Y-%m', created_at)",
+            default => "to_char(created_at, 'YYYY-MM')",
+        };
     }
 }
