@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { markModuleViewed, useAdminResource } from "@/lib/adminApi";
+import { markModuleViewed } from "@/lib/adminApi";
+import { useActivityLogResource } from "@/components/admin/activity/useActivityLogResource";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { ActivityRow, Paginated } from "@/lib/adminTypes";
 
@@ -101,7 +102,7 @@ export default function ActivityLog() {
     return p.toString();
   }, [debounced, action, from, until, page]);
 
-  const { data, loading, fetching, error } = useAdminResource<Paginated<ActivityRow>>(`/activity?${qs}`);
+  const { data, loading, fetching, error } = useActivityLogResource<Paginated<ActivityRow>>(`/activity?${qs}`);
 
   const applyPreset = (range: { from: string; until: string }) => {
     setFrom(range.from);
