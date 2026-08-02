@@ -13,8 +13,8 @@ import UpcomingEvents from "@/components/admin/dashboard/UpcomingEvents";
 import BarChart from "@/components/admin/ui/BarChart";
 import LineChart from "@/components/admin/ui/LineChart";
 import { Bar } from "@/components/admin/ui/Skeleton";
-import { useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
+import { useDashboardResource } from "@/components/admin/dashboard/useDashboardResource";
 import type { DashboardData } from "@/lib/adminTypes";
 
 /** One StatCard, in placeholder form — label, icon, value and description
@@ -68,8 +68,11 @@ export default function Dashboard() {
   // The figures describe one semester's membership list — the same one the
   // Members module is showing.
   const { selected: term, loading: termsLoading } = useTerms();
-  // Poll at the tightest Filament interval (stats were 10s).
-  const { data, loading, error } = useAdminResource<DashboardData>(
+  // Poll at the tightest Filament interval (stats were 10s). Cached for a
+  // few seconds behind the scenes (see useDashboardResource) so clicking
+  // back into this module shortly after leaving it doesn't blank to a full
+  // skeleton for figures that were already on screen a moment ago.
+  const { data, loading, error } = useDashboardResource<DashboardData>(
     termsLoading ? null : `/dashboard${term ? `?term=${term.id}` : ""}`,
     { pollMs: 10000 },
   );
