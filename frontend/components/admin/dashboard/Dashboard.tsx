@@ -67,13 +67,20 @@ export default function Dashboard() {
   const { money, can } = useAdmin();
   // The figures describe one semester's membership list — the same one the
   // Members module is showing.
-  const { selected: term, loading: termsLoading } = useTerms();
+  const { selected: term, initialTermId } = useTerms();
+  // Fire right away rather than waiting on `/terms`: `selected` isn't known
+  // yet on first paint, but `initialTermId` (read synchronously from
+  // localStorage) is, and failing that, omitting `term` entirely gets the
+  // server's own default (the current list) — either way this is never
+  // wrong for longer than it takes `selected` to resolve, at which point its
+  // real id takes over below and the path change refetches automatically.
+  const termId = term?.id ?? initialTermId;
   // Poll at the tightest Filament interval (stats were 10s). Cached for a
   // few seconds behind the scenes (see useDashboardResource) so clicking
   // back into this module shortly after leaving it doesn't blank to a full
   // skeleton for figures that were already on screen a moment ago.
   const { data, loading, error } = useDashboardResource<DashboardData>(
-    termsLoading ? null : `/dashboard${term ? `?term=${term.id}` : ""}`,
+    `/dashboard${termId ? `?term=${termId}` : ""}`,
     { pollMs: 10000 },
   );
 
@@ -179,7 +186,7 @@ export default function Dashboard() {
         </>
       ) : null}
 
-      {/* Calendar widget — same shared component every role sees. Rendered
+      {/* Schedules widget — same shared component every role sees. Rendered
           unconditionally rather than behind the dashboard fetch above: it
           fetches its own, unrelated `/events` resource and manages its own
           loading state, so gating it on the dashboard stats made it wait on

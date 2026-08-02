@@ -25,18 +25,50 @@ const CACHE_TTL_MS = 15_000;
 const cache = new Map<string, { data: unknown; expiresAt: number }>();
 const inFlight = new Map<string, Promise<unknown>>();
 
-function cacheGet<T>(path: string): T | undefined {
-  const hit = cache.get(path);
-  if (!hit) return undefined;
-  if (Date.now() > hit.expiresAt) {
-    cache.delete(path);
+// The Map above is wiped by a hard reload, which would otherwise blank the
+// dashboard back to a full skeleton even seconds after it was last showing
+// real figures. sessionStorage survives the reload (but not a new tab),
+// so it backs up the same entries and is consulted only when the in-memory
+// map has nothing — same TTL, same stale-while-revalidate shape, just a
+// second place to look.
+const SESSION_PREFIX = "icpep.admin.dashboardCache:";
+
+function readSessionCache<T>(path: string): { data: T; expiresAt: number } | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_PREFIX + path);
+    return raw ? (JSON.parse(raw) as { data: T; expiresAt: number }) : undefined;
+  } catch {
     return undefined;
   }
-  return hit.data as T;
+}
+
+function writeSessionCache<T>(path: string, data: T, expiresAt: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SESSION_PREFIX + path, JSON.stringify({ data, expiresAt }));
+  } catch {
+    /* private browsing / storage full — the in-memory cache still works */
+  }
+}
+
+function cacheGet<T>(path: string): T | undefined {
+  const hit = cache.get(path);
+  if (hit) {
+    if (Date.now() <= hit.expiresAt) return hit.data as T;
+    cache.delete(path);
+  }
+
+  const persisted = readSessionCache<T>(path);
+  if (!persisted || Date.now() > persisted.expiresAt) return undefined;
+  cache.set(path, persisted);
+  return persisted.data;
 }
 
 function cacheSet<T>(path: string, data: T): void {
-  cache.set(path, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+  const expiresAt = Date.now() + CACHE_TTL_MS;
+  cache.set(path, { data, expiresAt });
+  writeSessionCache(path, data, expiresAt);
 }
 
 /** The in-flight GET for `path`, reusing one already underway instead of
@@ -100,8 +132,37 @@ export function useDashboardResource<T>(path: string | null, opts: { pollMs?: nu
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     if (!pollMs) return;
-    const id = setInterval(load, pollMs);
-    return () => clearInterval(id);
+
+    // Paused while the tab is in the background — a dashboard nobody is
+    // looking at gains nothing from a 10s poll, it just spends the officer's
+    // battery/data. Caught back up with an immediate load (not just a timer
+    // restart) the moment it's visible again, since the figures may already
+    // be stale by however long it was hidden.
+    let id: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (id === null) id = setInterval(load, pollMs);
+    };
+    const stop = () => {
+      if (id !== null) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        start();
+        load();
+      } else {
+        stop();
+      }
+    };
+
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [load, pollMs]);
 
   return { data, error, loading, refresh: load };

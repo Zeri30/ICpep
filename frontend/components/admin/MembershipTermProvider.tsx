@@ -27,6 +27,16 @@ type TermContextValue = {
   selectTerm: (id: number) => void;
   /** Append the viewed term to an admin API query string. */
   termParam: string;
+  /**
+   * The last-viewed list's id, read straight from localStorage at mount —
+   * available before `terms` has loaded (unlike `selected`, which waits on
+   * the `/terms` fetch). Lets a module fire its first request immediately
+   * with a good guess instead of sitting idle until terms resolve; a stale
+   * or deleted id is harmless; the backend falls back to the current list
+   * (see MembershipTerm::resolve), and the module naturally refetches once
+   * `selected` itself resolves and its id is used instead.
+   */
+  initialTermId: number | null;
   registration: RegistrationStatus | null;
   refreshTerms: () => Promise<void>;
   refreshRegistration: () => Promise<void>;
@@ -47,6 +57,19 @@ export default function MembershipTermProvider({ children }: { children: React.R
     useAdminResource<RegistrationStatus>("/registration");
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // Read once, at mount, straight from storage — before `terms` even starts
+  // loading. Never updated afterward: it's a one-shot guess for the very
+  // first request, superseded the moment `selected` resolves for real.
+  const [initialTermId] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? Number(raw) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const terms = useMemo(() => termData?.data ?? [], [termData]);
   const current = useMemo(() => terms.find((t) => t.isCurrent) ?? null, [terms]);
@@ -93,12 +116,13 @@ export default function MembershipTermProvider({ children }: { children: React.R
       isViewingPast: selected !== null && !selected.isCurrent,
       selectTerm,
       termParam: selected ? `term=${selected.id}` : "",
+      initialTermId,
       registration: registration ?? null,
       refreshTerms,
       refreshRegistration,
       loading,
     }),
-    [terms, selected, current, selectTerm, registration, refreshTerms, refreshRegistration, loading],
+    [terms, selected, current, selectTerm, initialTermId, registration, refreshTerms, refreshRegistration, loading],
   );
 
   return <TermContext.Provider value={value}>{children}</TermContext.Provider>;
