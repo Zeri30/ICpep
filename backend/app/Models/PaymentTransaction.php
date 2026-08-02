@@ -59,6 +59,25 @@ class PaymentTransaction extends Model
     }
 
     /**
+     * Narrow to a combined year+section code (e.g. "3A"), the same codes and
+     * mapping the Members List filters on — see Application::scopeInClass. An
+     * unknown code is a no-op, so a bad filter value never silently empties
+     * the ledger.
+     *
+     * @param  Builder<PaymentTransaction>  $query
+     */
+    public function scopeInClass(Builder $query, string $code): Builder
+    {
+        if (! isset(Application::CLASS_MAP[$code])) {
+            return $query;
+        }
+
+        [$year, $section] = Application::CLASS_MAP[$code];
+
+        return $query->where('year_level', $year)->where('section', $section);
+    }
+
+    /**
      * This ledger is the audit trail, not the source of the collected totals.
      *
      * Those are derived from applications.paid_at (see PaymentSummary), because

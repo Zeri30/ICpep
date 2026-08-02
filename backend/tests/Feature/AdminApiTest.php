@@ -356,6 +356,42 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('data.0.amount', 50);
     }
 
+    public function test_payments_ledger_tags_each_row_with_its_semester(): void
+    {
+        $current = MembershipTerm::current();
+        $past = MembershipTerm::factory()->term(2027, 1)->create(); // not current
+
+        $this->makeApplication(['email' => 'a@example.com', 'membership_term_id' => $current?->id])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'b@example.com', 'membership_term_id' => $past->id])->update(['paid_at' => now()]);
+
+        $rows = $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?term='.$current?->id)
+            ->assertOk()
+            ->json('data');
+        $this->assertTrue(collect($rows)->first()['paymentTerm']['isCurrent']);
+
+        $rows = $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?term='.$past->id)
+            ->assertOk()
+            ->json('data');
+        $this->assertFalse(collect($rows)->first()['paymentTerm']['isCurrent']);
+        $this->assertSame('27-28, Sem 1', collect($rows)->first()['paymentTerm']['shortLabel']);
+    }
+
+    public function test_payments_ledger_filters_by_combined_year_and_section(): void
+    {
+        $this->makeApplication(['email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A'])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'b@example.com', 'year_level' => '3rd Year', 'section' => 'Section B'])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'c@example.com', 'year_level' => '4th Year', 'section' => 'Section A'])->update(['paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?class=3A')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.yearLevel', '3rd Year')
+            ->assertJsonPath('data.0.section', 'Section A');
+    }
+
     public function test_activity_log_lists_and_filters_by_action(): void
     {
         $this->makeApplication(); // logs a 'registered' entry

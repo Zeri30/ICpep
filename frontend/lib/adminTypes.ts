@@ -242,6 +242,9 @@ export type PaymentRow = {
   previousEffectiveAt: string | null;
   recordedAt: string | null;
   actor: string | null;
+  /** Which semester this event belongs to. Null only for rows written before
+      terms existed. */
+  paymentTerm: { isCurrent: boolean; shortLabel: string } | null;
 };
 
 export type AdminUser = {

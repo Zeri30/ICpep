@@ -20,7 +20,9 @@ class PaymentController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = PaymentTransaction::query()->latest();
+        // Eager loaded, not queried per-row: the resource needs `is_current`
+        // off of it to badge each event "(Current)" or a school-year label.
+        $query = PaymentTransaction::query()->with('membershipTerm')->latest();
 
         // Scoped to one semester's membership list, so a term's ledger and its
         // member count describe the same set of people.
@@ -34,8 +36,10 @@ class PaymentController extends Controller
             }
         }
 
-        if ($section = $request->query('section')) {
-            $query->where('section', $section);
+        // Same combined year+section codes ("3A".."4B") the Members List filters
+        // on, so the two modules read the same way.
+        if ($class = $request->query('class')) {
+            $query->inClass($class);
         }
 
         if ($search = trim((string) $request->query('search'))) {
