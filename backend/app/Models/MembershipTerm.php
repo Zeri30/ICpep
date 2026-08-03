@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,6 +27,24 @@ use Illuminate\Support\Facades\DB;
 class MembershipTerm extends Model
 {
     use HasFactory;
+
+    /**
+     * Cache key for {@see self::current()} — read by almost every admin
+     * request (Members, Dashboard, Payments, Activity all resolve "the
+     * current term" when none is named explicitly), but changes only when a
+     * term's `is_current` flag moves. Invalidated in booted() below on any
+     * save/delete, which covers makeCurrent()'s write, a factory-created
+     * term in tests, and anything else that touches a row — cheaper to
+     * over-invalidate (one extra query) than to enumerate every write path
+     * by hand.
+     */
+    private const CURRENT_CACHE_KEY = 'membership_term.current';
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => Cache::forget(self::CURRENT_CACHE_KEY));
+        static::deleted(fn () => Cache::forget(self::CURRENT_CACHE_KEY));
+    }
 
     protected $fillable = [
         'school_year_from',
@@ -54,7 +73,10 @@ class MembershipTerm extends Model
     /** The list new applications are filed under, if one has been set. */
     public static function current(): ?self
     {
-        return static::where('is_current', true)->first();
+        return Cache::rememberForever(
+            self::CURRENT_CACHE_KEY,
+            static fn (): ?self => static::where('is_current', true)->first(),
+        );
     }
 
     /**
