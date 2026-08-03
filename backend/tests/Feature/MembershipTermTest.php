@@ -414,6 +414,26 @@ class MembershipTermTest extends TestCase
         $this->assertSame($current->id, Application::first()->membership_term_id);
     }
 
+    /**
+     * The public submission endpoint has no session to throttle by (see
+     * AdminAuthController's login throttle for the authenticated
+     * equivalent), so it's rate-limited by IP alone — RateLimiter::for
+     * ('applications') in AppServiceProvider. Every attempt counts against
+     * the limiter whether or not it would otherwise succeed, so reusing one
+     * payload six times over is enough to prove the sixth is throttled
+     * without needing six distinct, valid applicants.
+     */
+    public function test_repeated_application_submissions_are_rate_limited(): void
+    {
+        Storage::fake('supabase');
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->assertNotSame(429, $this->postJson('/api/applications', $this->applicationPayload())->getStatusCode());
+        }
+
+        $this->postJson('/api/applications', $this->applicationPayload())->assertStatus(429);
+    }
+
     private function applicationPayload(): array
     {
         return [

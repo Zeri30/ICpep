@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -45,6 +46,30 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \App\Http\Middleware\EnsurePermission::class,
             'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
         ]);
+
+        // Off by default — every request's peer address is trusted as-is,
+        // correct for a deployment PHP answers directly. Deployed behind a
+        // reverse proxy or load balancer (nearly every PaaS) without this,
+        // every request looks like it came from the proxy: the per-IP login
+        // and public-API rate limiters (AdminAuthController, AppServiceProvider)
+        // would then throttle the whole site as one visitor, and
+        // config('session.secure')'s own auto-detection (config/session.php)
+        // would never see the request as HTTPS even when it is. Set
+        // TRUSTED_PROXIES to the proxy's IP(s), or "*" when the platform's
+        // own network is the only way to reach this app, to have Laravel read
+        // the real client from X-Forwarded-*.
+        $trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
+        $middleware->trustProxies(
+            at: match (true) {
+                $trustedProxies === '' => null,
+                $trustedProxies === '*' => '*',
+                default => array_filter(array_map('trim', explode(',', $trustedProxies))),
+            },
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

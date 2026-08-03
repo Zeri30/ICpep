@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ActivityLog;
 use App\Services\RememberMeService;
 use Closure;
 use Illuminate\Http\Request;
@@ -34,6 +35,12 @@ class EnforceIdleTimeout
         $last = $request->session()->get('last_meaningful_activity');
 
         if ($last !== null && now()->timestamp - (int) $last > $timeoutSeconds) {
+            // Ahead of the guard's own logout() — record() reads the
+            // signed-in user off Auth::user(), which that call is about to
+            // clear. Worth its own audit entry distinct from a deliberate
+            // sign-out: this one wasn't the officer's choice.
+            ActivityLog::record('logout', 'Signed out automatically after being inactive for too long.');
+
             // Revoking the remember-me cookie too matters: without it, the
             // very next request would be silently logged back in by
             // AuthenticateViaRememberToken before this middleware ever ran,

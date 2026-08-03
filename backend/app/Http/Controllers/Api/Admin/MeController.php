@@ -174,6 +174,10 @@ class MeController extends Controller
      */
     public function logoutAllSessions(Request $request): JsonResponse
     {
+        // Ahead of the guard's own logout() for the same reason
+        // AdminAuthController::logout() logs first — see that method.
+        ActivityLog::record('logout', 'Signed out of every session.');
+
         DB::table('sessions')->where('user_id', $request->user()->id)->delete();
 
         RememberMeService::forgetAllForUser($request->user()->id);

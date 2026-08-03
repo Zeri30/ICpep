@@ -57,6 +57,9 @@ const ACTION_CLS: Record<string, string> = {
   deleted: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
   updated: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   login: "border-line bg-white/5 text-secondary-foreground",
+  logout: "border-line bg-white/5 text-secondary-foreground",
+  login_failed: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
+  remember_token_reused: "border-red-500/30 bg-red-500/10 text-red-400",
   // User Management.
   user_created: "border-green-500/30 bg-green-500/10 text-green-400",
   user_activated: "border-green-500/30 bg-green-500/10 text-green-400",
@@ -176,7 +179,12 @@ export default function ActivityLog() {
             <option value="password_reset">Password reset</option>
             <option value="users_logged_out_all">Logged out all admins</option>
           </optgroup>
-          <option value="login">Login</option>
+          <optgroup label="Sign-in">
+            <option value="login">Login</option>
+            <option value="logout">Logout</option>
+            <option value="login_failed">Failed login</option>
+            <option value="remember_token_reused">Remember-me cookie reused</option>
+          </optgroup>
         </select>
 
         <div className="mx-1 hidden h-6 w-px bg-line sm:block" />

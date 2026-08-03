@@ -102,14 +102,43 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('redirect', rtrim(config('app.frontend_url'), '/').'/admin');
     }
 
+    /** A wrong password is auditable after the fact, not just rate-limited in the moment. */
+    public function test_a_failed_login_is_recorded_in_the_activity_log(): void
+    {
+        $admin = $this->admin();
+        $admin->forceFill(['password' => bcrypt('secret1234')])->save();
+
+        $this->postJson('/auth/admin/login', ['email' => $admin->email, 'password' => 'wrong-password'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'actor' => $admin->email,
+            'action' => 'login_failed',
+        ]);
+    }
+
     public function test_logout_clears_the_session_and_returns_landing(): void
     {
-        $this->actingAs($this->admin())
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
             ->postJson('/auth/admin/logout')
             ->assertOk()
             ->assertJsonPath('redirect', config('app.frontend_url'));
 
         $this->assertGuest();
+        $this->assertDatabaseHas('activity_logs', [
+            'actor' => $admin->email,
+            'action' => 'logout',
+        ]);
+    }
+
+    /** Safe to call with no live session (see AdminAuthController::logout) — and nothing to audit either. */
+    public function test_logout_with_no_session_logs_nothing(): void
+    {
+        $this->postJson('/auth/admin/logout')->assertOk();
+
+        $this->assertDatabaseMissing('activity_logs', ['action' => 'logout']);
     }
 
     /* -------------------------------------------------- manage sessions */

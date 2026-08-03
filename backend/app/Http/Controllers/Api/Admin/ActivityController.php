@@ -20,7 +20,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 class ActivityController extends Controller
 {
     private const ACTIONS = [
-        'registered', 'updated', 'deleted', 'restored', 'login',
+        'registered', 'updated', 'deleted', 'restored', 'login', 'login_failed', 'logout',
+        'remember_token_reused',
         // User Management.
         'user_created', 'user_updated', 'user_activated', 'user_deactivated', 'user_deleted', 'password_reset',
         'users_logged_out_all',
