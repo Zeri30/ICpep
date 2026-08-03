@@ -199,6 +199,15 @@ class MemberController extends Controller
      * event writes for it (see Application::recordPaymentTransaction) either
      * both land or neither does — the same guarantee bulk() already gives
      * itself, just for a single member instead of a batch.
+     *
+     * $application is re-read with a row lock inside the transaction rather
+     * than trusted from before it — two toggles on the same member arriving
+     * together (a double-click, two officers on the same row) would
+     * otherwise both read the same pre-transaction state, both decide the
+     * same direction, and both flip it, each producing its own ledger row
+     * for what was meant to be one change. Locking the row serializes the
+     * second request behind the first, so it makes its decision from the
+     * state the first one actually left behind.
      */
     public function togglePayment(Request $request, Application $application): MemberResource
     {
@@ -209,18 +218,24 @@ class MemberController extends Controller
         ]);
 
         $column = $data['batch'] === 2 ? 'payment2_paid_at' : 'paid_at';
-        $marking = $application->{$column} === null;
 
-        if ($data['batch'] === 2 && $marking && ! $application->is_paid) {
-            abort(422, 'Payment 1 must be completed before Payment 2 can be marked as paid.');
-        }
+        $application = DB::transaction(function () use ($application, $data, $column): Application {
+            /** @var Application $locked */
+            $locked = Application::whereKey($application->getKey())->lockForUpdate()->firstOrFail();
 
-        if ($data['batch'] === 1 && ! $marking && $application->is_payment2_paid) {
-            abort(422, 'Revoke Payment 2 before revoking Payment 1.');
-        }
+            $marking = $locked->{$column} === null;
 
-        DB::transaction(function () use ($application, $column, $marking): void {
-            $application->update([$column => $marking ? now() : null]);
+            if ($data['batch'] === 2 && $marking && ! $locked->is_paid) {
+                abort(422, 'Payment 1 must be completed before Payment 2 can be marked as paid.');
+            }
+
+            if ($data['batch'] === 1 && ! $marking && $locked->is_payment2_paid) {
+                abort(422, 'Revoke Payment 2 before revoking Payment 1.');
+            }
+
+            $locked->update([$column => $marking ? now() : null]);
+
+            return $locked;
         });
 
         return new MemberResource($application->fresh());
