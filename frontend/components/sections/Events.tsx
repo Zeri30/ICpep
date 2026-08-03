@@ -27,22 +27,16 @@ function FeaturedEvent() {
               <Zap size={12} /> Featured Event
             </Badge>
             <h3 className="font-display font-black text-3xl md:text-4xl uppercase leading-tight">
-              ICPEP <span className="text-primary text-glow-red">CPE Week 2025</span>
+              CPE Exhibition and <span className="text-primary text-glow-red">General Convocation 2026</span>
             </h3>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <span className="flex items-center gap-2 text-foreground">
-                <Calendar size={16} className="text-primary" /> November 3–7, 2025
+                <Calendar size={16} className="text-primary" /> May 2026
               </span>
               <span className="flex items-center gap-2 text-foreground">
                 <MapPin size={16} className="text-primary" /> BulSU Meneses Campus
               </span>
             </div>
-            <p className="mt-5 text-secondary-foreground leading-relaxed max-w-xl">
-              A week-long celebration showcasing the skills, talents, and creativity of Computer
-              Engineering students through a lineup of activities and competitions. It closes with CPE
-              Night — a themed social celebration exclusively for CPE students, with a fresh theme each
-              year — building camaraderie, school spirit, and student engagement.
-            </p>
             <div className="mt-7">
               <CtaButton href="#membership">
                 Register Now <ArrowRight size={16} />

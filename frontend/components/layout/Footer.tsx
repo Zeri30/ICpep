@@ -1,6 +1,6 @@
 import { Mail } from "lucide-react";
 import Logo from "@/components/ui/Logo";
-import { Facebook, Github } from "@/components/ui/BrandIcons";
+import { Facebook } from "@/components/ui/BrandIcons";
 import { NAV_LINKS, CONTACT } from "@/lib/data";
 
 export default function Footer() {
@@ -53,24 +53,21 @@ export default function Footer() {
             <div className="flex items-center gap-3">
               <a
                 href={CONTACT.facebookUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label="Facebook"
                 className="grid place-items-center w-10 h-10 rounded-md border border-line text-secondary-foreground hover:text-primary-glow hover:border-primary/50 transition-colors"
               >
                 <Facebook size={18} />
               </a>
               <a
-                href={`mailto:${CONTACT.email}`}
+                href={CONTACT.emailComposeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label="Email"
                 className="grid place-items-center w-10 h-10 rounded-md border border-line text-secondary-foreground hover:text-primary-glow hover:border-primary/50 transition-colors"
               >
                 <Mail size={18} />
-              </a>
-              <a
-                href="#"
-                aria-label="GitHub"
-                className="grid place-items-center w-10 h-10 rounded-md border border-line text-secondary-foreground hover:text-primary-glow hover:border-primary/50 transition-colors"
-              >
-                <Github size={18} />
               </a>
             </div>
             <p className="mt-4 text-xs text-muted-foreground leading-relaxed">{CONTACT.email}</p>

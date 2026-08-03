@@ -9,7 +9,7 @@ import { CONTACT } from "@/lib/data";
 
 const INFO = [
   { icon: Facebook, label: "Facebook", value: CONTACT.facebook, href: CONTACT.facebookUrl },
-  { icon: Mail, label: "Email", value: CONTACT.email, href: `mailto:${CONTACT.email}` },
+  { icon: Mail, label: "Email", value: CONTACT.email, href: CONTACT.emailComposeUrl },
   { icon: MapPin, label: "Location", value: CONTACT.location, href: undefined },
 ];
 
@@ -42,7 +42,13 @@ export default function Contact() {
                   </div>
                 );
                 return item.href ? (
-                  <a key={item.label} href={item.href} className="block">
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
                     {content}
                   </a>
                 ) : (
