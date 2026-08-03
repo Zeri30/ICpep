@@ -19,6 +19,7 @@ import {
   Eye,
   FileSpreadsheet,
   FileText,
+  Loader2,
   MoreVertical,
   Pencil,
   Printer,
@@ -166,6 +167,12 @@ export default function MembersList() {
   const [viewing, setViewing] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
   const [paymentMenuFor, setPaymentMenuFor] = useState<number | null>(null);
+  // Per-member-per-batch payment toggle currently in flight, keyed
+  // "<memberId>:<batch>" — disables that row's Payment actions trigger and
+  // swaps it for a spinner, so a second click while the first request is
+  // still out can't fire a duplicate toggle (which would double the ledger
+  // entry and the success toast).
+  const [pendingPayments, setPendingPayments] = useState<Set<string>>(new Set());
 
   // Opening the list clears its sidebar badge — see markModuleViewed.
   useEffect(() => {
@@ -286,11 +293,26 @@ export default function MembersList() {
    * action here if the disabled state in the menu is somehow bypassed.
    */
   async function togglePayment(member: Member, batch: 1 | 2) {
+    const key = `${member.id}:${batch}`;
+    // The trigger is disabled while this key is pending, but guard here too:
+    // the disabled state only takes effect on the next render, so a second
+    // invocation landing before then must still be refused.
+    if (pendingPayments.has(key)) return;
+
+    setPendingPayments((s) => new Set(s).add(key));
     const wasPaid = batch === 1 ? member.isPayment1Paid : member.isPayment2Paid;
-    await run(
-      () => apiSend("POST", `/members/${member.id}/toggle-paid`, { batch }),
-      wasPaid ? `Payment ${batch} revoked` : `Payment ${batch} marked as paid`,
-    );
+    try {
+      await run(
+        () => apiSend("POST", `/members/${member.id}/toggle-paid`, { batch }),
+        wasPaid ? `Payment ${batch} revoked` : `Payment ${batch} marked as paid`,
+      );
+    } finally {
+      setPendingPayments((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+    }
   }
 
   /**
@@ -537,6 +559,7 @@ export default function MembersList() {
                 onClose={() => setPaymentMenuFor(null)}
                 member={m}
                 onToggle={(batch) => togglePayment(m, batch)}
+                pending={pendingPayments.has(`${m.id}:1`) || pendingPayments.has(`${m.id}:2`)}
               />
             )}
             <RowMenu
@@ -829,6 +852,11 @@ function BulkPaymentMenu({ onAction }: { onAction: (action: PaymentAction) => vo
  * applies instantly on click, no confirm dialog (see togglePayment). Payment
  * 2 is disabled until Payment 1 is paid; Payment 1's revoke is disabled while
  * Payment 2 is still paid — both mirror the backend's sequencing rule.
+ *
+ * While a toggle for this member is in flight (`pending`), the trigger itself
+ * is disabled and shows a spinner in place of the Wallet icon — the menu
+ * already closes the instant an item is clicked (see `act`), so the trigger
+ * is what a second, duplicate click would actually land on.
  */
 function PaymentActionsMenu({
   open,
@@ -836,12 +864,14 @@ function PaymentActionsMenu({
   onClose,
   member,
   onToggle,
+  pending,
 }: {
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
   member: Member;
   onToggle: (batch: 1 | 2) => void;
+  pending: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -869,10 +899,11 @@ function PaymentActionsMenu({
     <div ref={ref} className="relative">
       <button
         onClick={open ? onClose : onOpen}
-        title="Payment actions"
-        className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+        disabled={pending}
+        title={pending ? "Updating payment…" : "Payment actions"}
+        className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
       >
-        <Wallet size={16} />
+        {pending ? <Loader2 size={16} className="animate-spin" /> : <Wallet size={16} />}
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-20 w-60 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)]">
