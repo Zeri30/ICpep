@@ -277,8 +277,8 @@ class AdminApiTest extends TestCase
     public function test_members_export_csv_respects_filters_and_search(): void
     {
         Storage::fake('supabase');
-        $this->makeApplication(['surname' => 'ThreeA', 'given_name' => 'Juan', 'student_id' => '2024-001', 'year_level' => '3rd Year', 'section' => 'Section A']);
-        $this->makeApplication(['surname' => 'ThreeB', 'given_name' => 'Maria', 'student_id' => '2024-002', 'year_level' => '3rd Year', 'section' => 'Section B']);
+        $this->makeApplication(['surname' => 'ThreeA', 'given_name' => 'Juan', 'student_id' => '2024-001', 'year_level' => '3rd Year', 'section' => 'Section A', 'email' => 'threea@example.com']);
+        $this->makeApplication(['surname' => 'ThreeB', 'given_name' => 'Maria', 'student_id' => '2024-002', 'year_level' => '3rd Year', 'section' => 'Section B', 'email' => 'threeb@example.com']);
 
         $response = $this->actingAs($this->admin())
             ->get('/api/admin/members/export/csv?class=3A')
@@ -431,6 +431,7 @@ class AdminApiTest extends TestCase
                 'surname' => 'Reyes',
                 'givenName' => 'Ana',
                 'middleInitial' => null,
+                'studentId' => '1234567890',
                 'yearLevel' => '4th Year',
                 'section' => 'Section B',
                 'birthday' => '2003-05-05',

@@ -120,12 +120,21 @@ class MemberController extends Controller
         return (new MemberResource($application->fresh()))->withFiles();
     }
 
-    /** Flip paid state. Marking records today; unmarking clears the date. */
+    /**
+     * Flip paid state. Marking records today; unmarking clears the date.
+     *
+     * Transactional so the flip and the ledger row Application's `updated`
+     * event writes for it (see Application::recordPaymentTransaction) either
+     * both land or neither does — the same guarantee bulk() already gives
+     * itself, just for a single member instead of a batch.
+     */
     public function togglePaid(Application $application): MemberResource
     {
         Gate::authorize('members.payment');
 
-        $application->update(['paid_at' => $application->is_paid ? null : now()]);
+        DB::transaction(function () use ($application): void {
+            $application->update(['paid_at' => $application->is_paid ? null : now()]);
+        });
 
         return new MemberResource($application->fresh());
     }

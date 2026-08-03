@@ -146,6 +146,7 @@ class RbacTest extends TestCase
         $this->actingAs($this->acting(UserRole::Secretary))
             ->patchJson("/api/admin/members/{$m->id}", [
                 'surname' => 'Dela Cruz', 'givenName' => 'Juan', 'middleInitial' => 'S',
+                'studentId' => '1234567890',
                 'yearLevel' => '3rd Year', 'section' => 'Section A', 'birthday' => '2004-01-01',
                 'address' => '123 Rizal St', 'email' => 'juan@example.com', 'phone' => '09123456789',
                 'paidAt' => now()->toIso8601String(),

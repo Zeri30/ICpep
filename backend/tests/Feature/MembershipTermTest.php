@@ -418,6 +418,7 @@ class MembershipTermTest extends TestCase
     {
         return [
             'surname' => 'Santos', 'givenName' => 'Maria', 'middleInitial' => 'L',
+            'studentId' => '1234567890',
             'yearLevel' => '3rd Year', 'section' => 'Section A', 'birthday' => '2004-05-05',
             'address' => '45 Mabini St', 'email' => 'maria@example.com', 'phone' => '09171234567',
             'signature' => UploadedFile::fake()->image('sig.png'),
