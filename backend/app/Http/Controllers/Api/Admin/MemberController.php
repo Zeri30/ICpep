@@ -138,7 +138,14 @@ class MemberController extends Controller
             'middleInitial' => ['nullable', 'string', 'max:1'],
             'studentId' => [
                 'required', 'string', 'digits:10',
-                Rule::unique('applications', 'student_id')->ignore($application->id),
+                // Scoped to this member's own term, same as the public form's
+                // per-term uniqueness (applications_term_student_id_active_unique)
+                // — an ID may legitimately repeat across terms, since the same
+                // student re-registers every semester.
+                Rule::unique('applications', 'student_id')
+                    ->where(fn ($query) => $query->where('membership_term_id', $application->membership_term_id))
+                    ->whereNull('deleted_at')
+                    ->ignore($application->id),
             ],
             'yearLevel' => ['required', Rule::in(Application::YEAR_LEVELS)],
             'section' => ['required', Rule::in(Application::SECTIONS)],

@@ -397,6 +397,82 @@ class MembershipTermTest extends TestCase
         $this->assertSame(0, $previous->fresh()->applications()->count());
     }
 
+    /**
+     * A returning student — same ID, a new term — gets their formal photo and
+     * e-signature *replaced* in place rather than a second pair of files
+     * piling up in the bucket. This is what keeps storage flat as the same
+     * roster re-registers term after term.
+     */
+    public function test_a_returning_student_id_reuses_the_stored_photo_and_signature(): void
+    {
+        Storage::fake('supabase');
+
+        $officer = $this->officer();
+        $payload = $this->applicationPayload();
+
+        $this->postJson('/api/applications', $payload)->assertCreated();
+
+        $first = Application::first();
+        $oldSignaturePath = $first->signature_path;
+        $oldPicturePath = $first->picture_path;
+
+        Storage::disk('supabase')->assertExists($oldSignaturePath);
+        Storage::disk('supabase')->assertExists($oldPicturePath);
+
+        // Roll over to a new term and re-register under the same student ID,
+        // with a fresh email (a per-term duplicate check would otherwise
+        // reject the resubmission before reuse logic is even reached).
+        $this->actingAs($officer)->postJson('/api/admin/registration/close', ['reason' => 'End of School Year']);
+        $this->actingAs($officer)->postJson('/api/admin/terms', [
+            'schoolYearFrom' => 2027, 'schoolYearTo' => 2028, 'semester' => 1, 'setCurrent' => true,
+        ])->assertCreated();
+        $this->actingAs($officer)->postJson('/api/admin/registration/open');
+
+        $payload['email'] = 'maria.new@example.com';
+        $payload['signature'] = UploadedFile::fake()->image('sig2.png');
+        $payload['picture'] = UploadedFile::fake()->image('pic2.jpg');
+
+        $this->postJson('/api/applications', $payload)->assertCreated();
+
+        $this->assertSame(2, Application::count());
+
+        $second = Application::orderByDesc('id')->first();
+
+        // The old files are gone rather than orphaned...
+        Storage::disk('supabase')->assertMissing($oldSignaturePath);
+        Storage::disk('supabase')->assertMissing($oldPicturePath);
+
+        // ...replaced by exactly one new signature and one new picture...
+        Storage::disk('supabase')->assertExists($second->signature_path);
+        Storage::disk('supabase')->assertExists($second->picture_path);
+
+        // ...and every record for this student, past and present, points at
+        // that same current pair — there is only ever one on file.
+        $this->assertSame($second->signature_path, $first->fresh()->signature_path);
+        $this->assertSame($second->picture_path, $first->fresh()->picture_path);
+        $this->assertNotSame($oldSignaturePath, $second->signature_path);
+        $this->assertNotSame($oldPicturePath, $second->picture_path);
+    }
+
+    /** A brand-new student ID still gets its own fresh files, same as before. */
+    public function test_a_new_student_id_uploads_fresh_files(): void
+    {
+        Storage::fake('supabase');
+
+        $this->postJson('/api/applications', $this->applicationPayload())->assertCreated();
+
+        $second = $this->applicationPayload();
+        $second['studentId'] = '9876543210';
+        $second['email'] = 'other@example.com';
+        $second['signature'] = UploadedFile::fake()->image('sig2.png');
+        $second['picture'] = UploadedFile::fake()->image('pic2.jpg');
+
+        $this->postJson('/api/applications', $second)->assertCreated();
+
+        $paths = Application::pluck('signature_path')->merge(Application::pluck('picture_path'));
+        $this->assertSame($paths->count(), $paths->unique()->count());
+    }
+
     /** The destination follows the *active* list, not the most recently created. */
     public function test_a_created_but_inactive_list_never_receives_applicants(): void
     {
