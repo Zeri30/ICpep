@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MemberResource;
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\MembershipTerm;
 use App\Models\PaymentTransaction;
@@ -202,6 +203,20 @@ class MemberController extends Controller
     ];
 
     /**
+     * Columns bulk() actually needs across every action it supports: the
+     * payment branches read/write paid_at + payment2_paid_at and denormalise
+     * full_name/section/year_level onto each ledger row; delete/restore read
+     * deleted_at for eligibility and full_name for the activity log. Nothing
+     * here touches address, email, phone, student_id or either file path, so
+     * a bulk run over hundreds of ids isn't hydrating (and transferring) full
+     * rows just to read six columns off each one.
+     */
+    private const BULK_COLUMNS = [
+        'id', 'membership_term_id', 'surname', 'given_name', 'middle_initial',
+        'year_level', 'section', 'paid_at', 'payment2_paid_at', 'deleted_at',
+    ];
+
+    /**
      * Bulk payment / delete / restore over an explicit set of ids.
      *
      * The sequencing rule (Payment 2 needs Payment 1; revoking unwinds in the
@@ -225,7 +240,7 @@ class MemberController extends Controller
         // Atomic: a bulk run that fails partway must leave no member changed,
         // rather than some marked paid with no matching ledger/activity row.
         [$count, $updated] = DB::transaction(function () use ($data) {
-            $members = Application::withTrashed()->whereIn('id', $data['ids'])->get();
+            $members = Application::withTrashed()->whereIn('id', $data['ids'])->select(self::BULK_COLUMNS)->get();
 
             $updated = match ($data['action']) {
                 'payment1_paid' => $this->bulkSetPayment($members->whereNull('paid_at'), 'paid_at', true),
@@ -417,20 +432,79 @@ class MemberController extends Controller
         return $members->map(fn (Application $member): array => $this->paymentSnapshot($member))->values()->all();
     }
 
-    /** @param  Collection<int, Application>  $members */
+    /**
+     * Soft-deletes every given (already-filtered-to-not-yet-deleted) member in
+     * one batched UPDATE instead of N individual delete() calls, then writes
+     * the activity-log row each one's `deleted` model event would otherwise
+     * have written one at a time — same trade as bulkSetPayment() makes for
+     * the ledger, and for the same reason: model events don't fire on a mass
+     * update, so a loop of single deletes was previously N delete queries
+     * plus N log inserts for what is, in substance, one write.
+     *
+     * @param  Collection<int, Application>  $members
+     */
     private function bulkDelete(Collection $members): array
     {
-        $members->each->delete();
+        if ($members->isEmpty()) {
+            return [];
+        }
+
+        $now = Carbon::now();
+        Application::withTrashed()->whereIn('id', $members->modelKeys())
+            ->update(['deleted_at' => $now, 'updated_at' => $now]);
+
+        $this->bulkLogActivity($members, 'deleted', fn (Application $m): string => "Moved {$m->full_name} to Deleted");
 
         return [];
     }
 
-    /** @param  Collection<int, Application>  $members */
+    /**
+     * Mirror of bulkDelete() for restoring — one batched UPDATE clearing
+     * deleted_at, plus one bulk activity-log insert standing in for the
+     * `restored` event.
+     *
+     * @param  Collection<int, Application>  $members
+     */
     private function bulkRestore(Collection $members): array
     {
-        $members->each->restore();
+        if ($members->isEmpty()) {
+            return [];
+        }
+
+        $now = Carbon::now();
+        Application::withTrashed()->whereIn('id', $members->modelKeys())
+            ->update(['deleted_at' => null, 'updated_at' => $now]);
+
+        $this->bulkLogActivity($members, 'restored', fn (Application $m): string => "Restored {$m->full_name}");
 
         return [];
+    }
+
+    /**
+     * One bulk insert of activity-log rows in place of the N individual
+     * ActivityLog::record() calls Application's `deleted`/`restored` model
+     * events would otherwise have made for a batch this size.
+     *
+     * @param  Collection<int, Application>  $members
+     * @param  \Closure(Application): string  $describe
+     */
+    private function bulkLogActivity(Collection $members, string $action, \Closure $describe): void
+    {
+        $now = Carbon::now();
+        $user = Auth::user();
+        $ip = request()?->ip();
+
+        ActivityLog::insert($members->map(fn (Application $member): array => [
+            'actor' => $user?->email ?? 'Website',
+            'actor_name' => $user?->name,
+            'actor_role' => $user?->role?->value,
+            'ip_address' => $ip,
+            'action' => $action,
+            'description' => $describe($member),
+            'applicant' => $member->full_name,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all());
     }
 
     /** Stream a private file (picture|signature) to the officer as a download. */
@@ -465,6 +539,20 @@ class MemberController extends Controller
     private const EXPORT_COLUMNS = [
         'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email',
         'Payment 1 Status', 'Payment 1 Paid At', 'Payment 2 Status', 'Payment 2 Paid At', 'Registered At',
+    ];
+
+    /**
+     * Columns exportRow() (and the PDF view) actually read. An export is
+     * every filtered row, unpaginated, so trimming this — skipping address,
+     * birthday and both file paths, none of which any export format prints —
+     * matters far more here than on the paginated list: a large roster's
+     * export is otherwise hydrating (and transferring from the DB) full rows
+     * for columns nothing downstream ever looks at.
+     */
+    private const EXPORT_SELECT_COLUMNS = [
+        'id', 'membership_term_id', 'surname', 'given_name', 'middle_initial',
+        'student_id', 'year_level', 'section', 'phone', 'email',
+        'paid_at', 'payment2_paid_at', 'created_at',
     ];
 
     /** Human-readable labels for the Members List's payment filter, e.g. for the PDF header. */
@@ -529,7 +617,7 @@ class MemberController extends Controller
     /** Every member the current filters + search match, in list order — unpaginated. */
     private function exportRows(Request $request): Collection
     {
-        return $this->applySort($this->filtered($request), $request)->get();
+        return $this->applySort($this->filtered($request), $request)->select(self::EXPORT_SELECT_COLUMNS)->get();
     }
 
     /** @return list<string> */

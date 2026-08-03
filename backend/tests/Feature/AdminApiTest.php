@@ -649,6 +649,45 @@ class AdminApiTest extends TestCase
     }
 
     /**
+     * bulkDelete()/bulkRestore() write the deleted_at flip as one batched
+     * UPDATE and the activity log as one bulk insert, standing in for the N
+     * individual delete()/restore() calls (and the N activity-log rows their
+     * model events would have written one at a time) that a loop would cost
+     * over a multi-member selection — same trade already made for the ledger
+     * in bulkSetPayment(). This locks in that each member still gets its own
+     * log row with the right description, even though nothing writes them
+     * one at a time anymore.
+     */
+    public function test_bulk_delete_and_restore_log_one_activity_row_per_member(): void
+    {
+        $a = $this->makeApplication(['email' => 'a@example.com', 'surname' => 'Alpha']);
+        $b = $this->makeApplication(['email' => 'b@example.com', 'surname' => 'Bravo']);
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'delete'])
+            ->assertOk()
+            ->assertJsonPath('count', 2);
+
+        $this->assertSoftDeleted('applications', ['id' => $a->id]);
+        $this->assertSoftDeleted('applications', ['id' => $b->id]);
+        $this->assertSame(2, ActivityLog::where('action', 'deleted')->count());
+        $this->assertSame(
+            'Moved Alpha, Juan, S. to Deleted',
+            ActivityLog::where('action', 'deleted')->where('applicant', 'Alpha, Juan, S.')->sole()->description,
+        );
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'restore'])
+            ->assertOk()
+            ->assertJsonPath('count', 2);
+
+        $this->assertNotSoftDeleted('applications', ['id' => $a->id]);
+        $this->assertNotSoftDeleted('applications', ['id' => $b->id]);
+        $this->assertSame(2, ActivityLog::where('action', 'restored')->count());
+    }
+
+    /**
      * Payments are only ever applied to an explicit set of ids. The endpoint
      * that swept every member matching the current filters is gone — a single
      * click should not be able to rewrite a semester's payment records.
