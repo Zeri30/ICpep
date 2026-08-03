@@ -97,6 +97,17 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Off by default — preserves current behaviour. The DB here (a
+            // hosted Supabase instance) pays a real TCP+TLS handshake per
+            // fresh connection; under a persistent-worker SAPI (PHP-FPM),
+            // PDO::ATTR_PERSISTENT reuses one connection across requests
+            // instead of opening a new one every time. Worth turning on
+            // (DB_PERSISTENT=true) once running under a worker model where
+            // that assumption holds — not the default because a crashed
+            // request could in principle leave a shared connection in a bad
+            // state, and that trade-off deserves a deliberate opt-in rather
+            // than a silent change to how every request talks to the database.
+            'options' => env('DB_PERSISTENT', false) ? [PDO::ATTR_PERSISTENT => true] : [],
         ],
 
         'sqlsrv' => [
