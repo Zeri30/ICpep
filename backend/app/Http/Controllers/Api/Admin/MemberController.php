@@ -66,6 +66,57 @@ class MemberController extends Controller
         return MemberResource::collection($query->paginate($this->perPage($request))->withQueryString());
     }
 
+    /** Columns changes() needs to rebuild paymentSnapshot() for an affected member. */
+    private const CHANGES_COLUMNS = ['id', 'paid_at', 'payment2_paid_at'];
+
+    /**
+     * Payment-state changes since a point in time, scoped to one term — polled
+     * by the client every few seconds so an officer's Members List picks up a
+     * payment another officer just recorded, without a manual refresh and
+     * without refetching the whole page. Only the affected rows are returned,
+     * shaped exactly like bulk()'s `updated` — the client patches both through
+     * the same function.
+     *
+     * Sourced from payment_transactions rather than applications.updated_at,
+     * so an unrelated field edit (address, phone, ...) never gets misread as
+     * a payment change and pushed to every open tab.
+     */
+    public function changes(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'since' => ['required', 'date'],
+        ]);
+
+        // Captured before the query runs and handed back as the client's next
+        // `since`, so a transaction landing between the query and this line is
+        // caught by the *next* poll's `> since` — never dropped, and never
+        // re-delivered the way reading `now()` after the query would risk.
+        $now = Carbon::now();
+        $term = MembershipTerm::resolve($request->query('term'));
+
+        // Parsed into a real Carbon instance rather than passed through as the
+        // raw validated string: Laravel formats a DateTimeInterface binding to
+        // match the connection's own datetime format, where a hand-formatted
+        // ISO 8601 string (with its literal "T" and UTC offset) would compare
+        // incorrectly against how SQLite/Postgres actually store the column.
+        $applicationIds = PaymentTransaction::query()
+            ->when($term, fn (Builder $q): Builder => $q->forTerm($term->id))
+            ->where('created_at', '>', Carbon::parse($data['since']))
+            ->distinct()
+            ->pluck('application_id');
+
+        $updated = $applicationIds->isEmpty()
+            ? []
+            : Application::withTrashed()->whereIn('id', $applicationIds)
+                ->select(self::CHANGES_COLUMNS)
+                ->get()
+                ->map(fn (Application $member): array => $this->paymentSnapshot($member))
+                ->values()
+                ->all();
+
+        return response()->json(['updated' => $updated, 'since' => $now->toIso8601String()]);
+    }
+
     public function show(Application $application): MemberResource
     {
         return (new MemberResource($application))->withFiles();

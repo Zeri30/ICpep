@@ -62,6 +62,8 @@ Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class
     // Acting on payments is a separate ability and still needs members.payment.
     Route::middleware('permission:finance.view')->group(function () {
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+        // Polled by PaymentHistory.tsx for real-time sync — see PaymentController::changes.
+        Route::get('/payments/changes', [PaymentController::class, 'changes'])->name('payments.changes');
         Route::post('/me/views/payments', [MeController::class, 'viewedPayments'])->name('me.views.payments');
     });
 
@@ -109,6 +111,10 @@ Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class
     Route::middleware('permission:members.view')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->name('members.index');
         Route::post('/me/views/members', [MeController::class, 'viewedMembers'])->name('me.views.members');
+        // Polled by MembersList.tsx for real-time payment sync — see
+        // MemberController::changes. Declared before /members/{application} for
+        // the same reason /members/export/* is.
+        Route::get('/members/changes', [MemberController::class, 'changes'])->name('members.changes');
         Route::get('/members/export/csv', [MemberController::class, 'exportCsv'])->name('members.export.csv');
         Route::get('/members/export/excel', [MemberController::class, 'exportExcel'])->name('members.export.excel');
         Route::get('/members/export/pdf', [MemberController::class, 'exportPdf'])->name('members.export.pdf');

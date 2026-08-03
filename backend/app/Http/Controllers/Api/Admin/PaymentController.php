@@ -9,6 +9,7 @@ use App\Models\PaymentTransaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -61,7 +62,51 @@ class PaymentController extends Controller
     {
         // Eager loaded, not queried per-row: the resource needs `is_current`
         // off of it to badge each event "(Current)" or a school-year label.
-        $query = PaymentTransaction::query()->with('membershipTerm')->latest();
+        $query = $this->filtered($request, $term)->with('membershipTerm')->latest();
+
+        return PaymentTransactionResource::collection($query->paginate($perPage)->withQueryString())
+            ->response()
+            ->getData(true);
+    }
+
+    /**
+     * New ledger rows since a point in time, matching the same filters the
+     * caller's own list view is showing — polled every few seconds so an
+     * officer's Payment History picks up a payment another officer just
+     * recorded, without a manual refresh. Unpaginated: the window between
+     * polls is seconds wide, so this is expected to return a handful of rows
+     * at most, never a full page's worth.
+     */
+    public function changes(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'since' => ['required', 'date'],
+        ]);
+
+        // Captured before the query runs — see MemberController::changes for
+        // why this has to happen first rather than after.
+        $now = Carbon::now();
+        $term = MembershipTerm::resolve($request->query('term'));
+
+        // Parsed into a real Carbon instance — see MemberController::changes
+        // for why the raw validated string can't be used as-is here.
+        $rows = $this->filtered($request, $term)
+            ->where('created_at', '>', Carbon::parse($data['since']))
+            ->with('membershipTerm')
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'added' => PaymentTransactionResource::collection($rows)->resolve(),
+            'since' => $now->toIso8601String(),
+        ]);
+    }
+
+    /** The Event/batch/class/search filters shared by index() and changes(),
+        so a poll only ever reports rows the caller's own view would show. */
+    private function filtered(Request $request, ?MembershipTerm $term): Builder
+    {
+        $query = PaymentTransaction::query();
 
         // Scoped to one semester's membership list, so a term's ledger and its
         // member count describe the same set of people.
@@ -100,9 +145,7 @@ class PaymentController extends Controller
             });
         }
 
-        return PaymentTransactionResource::collection($query->paginate($perPage)->withQueryString())
-            ->response()
-            ->getData(true);
+        return $query;
     }
 
     /** Every input that changes the result, plus the cache generation, folded

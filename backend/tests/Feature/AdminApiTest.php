@@ -458,6 +458,65 @@ class AdminApiTest extends TestCase
         $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(2, 'data');
     }
 
+    /**
+     * Backs Payment History's real-time poll: an officer's tab asks "anything
+     * new since my last check?" and patches just those rows in rather than
+     * refetching the page. Proves the delta only ever contains what actually
+     * landed after `since`, and that the `since` it hands back is safe to
+     * poll again with (nothing new means an empty `added`, not a repeat).
+     */
+    public function test_payments_changes_reports_new_ledger_rows_since_a_point_in_time(): void
+    {
+        $treasurer = $this->treasurer();
+        $this->makeApplication(['email' => 'old@example.com'])->update(['paid_at' => now()->subMinute()]);
+
+        $since = now()->toIso8601String();
+
+        $this->travel(1)->second();
+        $this->makeApplication(['email' => 'new@example.com', 'surname' => 'Reyes'])->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($treasurer)
+            ->getJson('/api/admin/payments/changes?since='.urlencode($since))
+            ->assertOk()
+            ->assertJsonCount(1, 'added');
+
+        $this->assertSame('Reyes, Juan, S.', $response->json('added.0.memberName'));
+        $nextSince = $response->json('since');
+        $this->assertNotEmpty($nextSince);
+
+        // Polling again with the checkpoint the server just handed back must
+        // not re-report the same row.
+        $this->actingAs($treasurer)
+            ->getJson('/api/admin/payments/changes?since='.urlencode($nextSince))
+            ->assertOk()
+            ->assertJsonCount(0, 'added');
+    }
+
+    /**
+     * Same guarantee as above, for Members List: only the member a payment
+     * write actually touched comes back, shaped exactly like bulk()'s
+     * `updated` so the client patches both through the same function.
+     */
+    public function test_members_changes_reports_only_the_affected_members_payment_state(): void
+    {
+        $treasurer = $this->treasurer();
+        $untouched = $this->makeApplication(['email' => 'untouched@example.com']);
+        $paid = $this->makeApplication(['email' => 'paid@example.com']);
+
+        $since = now()->toIso8601String();
+        $this->travel(1)->second();
+        $paid->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($treasurer)
+            ->getJson('/api/admin/members/changes?since='.urlencode($since))
+            ->assertOk()
+            ->assertJsonCount(1, 'updated');
+
+        $response->assertJsonPath('updated.0.id', $paid->id);
+        $response->assertJsonPath('updated.0.isPayment1Paid', true);
+        $this->assertNotContains($untouched->id, collect($response->json('updated'))->pluck('id'));
+    }
+
     public function test_activity_log_lists_and_filters_by_action(): void
     {
         $this->makeApplication(); // logs a 'registered' entry

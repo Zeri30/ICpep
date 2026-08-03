@@ -40,7 +40,7 @@ import EditMemberModal from "@/components/admin/members/EditMemberModal";
 import ViewMemberModal from "@/components/admin/members/ViewMemberModal";
 import { useMembersListResource } from "@/components/admin/members/useMembersListResource";
 import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { apiSend, markModuleViewed } from "@/lib/adminApi";
+import { apiGet, apiSend, markModuleViewed } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
 
@@ -389,6 +389,49 @@ export default function MembersList() {
       };
     });
   }
+
+  /**
+   * Real-time sync: every few seconds, ask the server which members' payment
+   * state has changed since the last check (see MemberController::changes)
+   * and patch just those rows in — through the exact same applyPaymentUpdate
+   * a bulk action's own response already goes through — so a payment another
+   * officer records elsewhere shows up here without a manual refresh, without
+   * ever refetching the whole page.
+   *
+   * `sinceRef` is a cursor, not state: it moves forward on every poll (using
+   * the checkpoint the server hands back, not the client's own clock) and
+   * doesn't need to trigger a re-render. `applyRef` holds the latest
+   * `applyPaymentUpdate` (which closes over `filters` and `mutate`) so the
+   * interval below can be set up once per term and still always call the
+   * current version, rather than needing to restart on every filter change.
+   */
+  const applyRef = useRef(applyPaymentUpdate);
+  useEffect(() => {
+    applyRef.current = applyPaymentUpdate;
+  });
+
+  useEffect(() => {
+    if (!termId) return;
+
+    const sinceRef = { current: new Date().toISOString() };
+    const poll = async () => {
+      try {
+        const qs = new URLSearchParams({ term: String(termId), since: sinceRef.current });
+        const { updated, since } = await apiGet<{ updated: BulkPaymentUpdate[]; since: string }>(
+          `/members/changes?${qs}`,
+        );
+        sinceRef.current = since;
+        applyRef.current(updated);
+      } catch {
+        // Best-effort — a missed poll just means the next one catches up;
+        // `since` only advances on a successful response, so nothing is
+        // skipped over.
+      }
+    };
+
+    const id = setInterval(poll, 10_000);
+    return () => clearInterval(id);
+  }, [termId]);
 
   async function confirmAction() {
     if (!confirm) return;

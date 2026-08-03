@@ -331,5 +331,16 @@ export function useAdminResource<T>(
     return () => clearInterval(id);
   }, [load, pollMs]);
 
-  return { data, error, loading, fetching, refresh: load };
+  /**
+   * Patches `data` in place from an updater, rather than re-fetching — for a
+   * caller that already knows exactly what changed (e.g. a real-time delta
+   * poll reporting one new row) and would otherwise pay for a full refetch
+   * just to repaint fields it was just handed. Mirrors
+   * useMembersListResource's `mutate`.
+   */
+  const mutate = useCallback((updater: (prev: T | null) => T | null) => {
+    setData(updater);
+  }, []);
+
+  return { data, error, loading, fetching, refresh: load, mutate };
 }

@@ -5,12 +5,12 @@
    (descriptive), never summed. */
 
 import { CheckCircle2, History, PencilLine, Search, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { markModuleViewed, useAdminResource } from "@/lib/adminApi";
+import { apiGet, markModuleViewed, useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -100,8 +100,17 @@ export default function PaymentHistory() {
     return p.toString();
   }, [termId, debounced, action, kind, klass, page]);
 
-  const { data, error, fetching } = useAdminResource<Paginated<PaymentRow>>(`/payments?${qs}`);
+  const { data, error, fetching, mutate } = useAdminResource<Paginated<PaymentRow>>(`/payments?${qs}`);
   const reset = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
+
+  // Same filters as `qs`, minus pagination — a poll always asks about every
+  // row those filters match, not just whichever page is on screen, since a
+  // new event always lands on page 1 regardless of what page is displayed.
+  const changesQs = useMemo(() => {
+    const p = new URLSearchParams(qs);
+    p.delete("page");
+    return p.toString();
+  }, [qs]);
 
   // Which semester the rows in `data` were fetched for — same reset-on-change
   // pattern as MembersList, so a term switch never shows the previous term's
@@ -116,6 +125,68 @@ export default function PaymentHistory() {
   const otherTerm = data !== null && termId !== dataTermId;
   const rows = otherTerm ? [] : (data?.data ?? []);
   const awaitingRows = !error && (data === null || otherTerm);
+
+  /**
+   * Real-time sync: every few seconds, ask the server for ledger rows added
+   * since the last check (see PaymentController::changes, already filtered
+   * to match `changesQs`) and prepend them if the officer is on page 1 —
+   * where a new event always lands — so a payment another officer records
+   * elsewhere shows up here without a manual refresh, without ever
+   * refetching the page. Skipped on any other page: a row landing there
+   * isn't missing, it just isn't on the page in front of them yet.
+   *
+   * `pollRef` always calls through to the latest closure (current
+   * `changesQs`, `page` and `mutate`) kept fresh below, so the interval
+   * itself is set up once per term rather than needing to restart on every
+   * filter/page change — restarting would reset the `since` checkpoint to
+   * "now" and risk a change landing in the gap being missed.
+   */
+  const pollRef = useRef<(since: string) => Promise<string>>(async (since) => since);
+  useEffect(() => {
+    pollRef.current = async (since: string): Promise<string> => {
+      try {
+        const p = new URLSearchParams(changesQs);
+        p.set("since", since);
+        const { added, since: next } = await apiGet<{ added: PaymentRow[]; since: string }>(`/payments/changes?${p}`);
+
+        if (added.length > 0 && page === 1) {
+          mutate((prev) => {
+            if (!prev) return prev;
+            const data = [...added, ...prev.data].slice(0, prev.meta.per_page);
+            return {
+              data,
+              meta: {
+                ...prev.meta,
+                total: prev.meta.total + added.length,
+                // Page 1 always starts at row 1 once it holds anything — this
+                // branch only ever runs on page 1 (see the guard above), so
+                // recomputing both from `data.length` is safe even coming
+                // from an empty filtered page (from/to were null).
+                from: data.length === 0 ? null : 1,
+                to: data.length === 0 ? null : data.length,
+              },
+            };
+          });
+        }
+
+        return next;
+      } catch {
+        // Best-effort — retry from the same checkpoint next tick rather than
+        // silently skipping ahead over whatever landed during the failure.
+        return since;
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (!termId) return;
+
+    let since = new Date().toISOString();
+    const id = setInterval(async () => {
+      since = await pollRef.current(since);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [termId]);
 
   const amountCell = (v: number) => {
     if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;
