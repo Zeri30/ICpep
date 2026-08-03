@@ -251,14 +251,19 @@ class UserController extends Controller
      * in. Ends every session and revokes every remember-me token on every
      * administrator account except the one making this request, so whoever
      * clicked it stays signed in to see the result.
+     *
+     * Scoped by user_id, not by session id/cookie: the caller may well be
+     * signed in on more than one device, and all of those are "the one
+     * making this request" too, not just the tab that happened to click the
+     * button.
      */
     public function logoutAllAdminSessions(Request $request): JsonResponse
     {
         DB::table('sessions')
-            ->where('id', '!=', $request->session()->getId())
+            ->where('user_id', '!=', $request->user()->id)
             ->delete();
 
-        RememberMeService::forgetAllExceptCurrent($request);
+        RememberMeService::forgetAllExcept($request->user()->id);
 
         ActivityLog::record(
             'users_logged_out_all',

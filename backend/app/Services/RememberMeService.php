@@ -125,19 +125,17 @@ class RememberMeService
     }
 
     /**
-     * Every remember-me token on every account, except the one this request's
-     * own cookie carries (if any) — the "log out all admins" kill switch's
-     * counterpart to evicting every `sessions` row but this device's.
+     * Every remember-me token on every account except $userId's own — the
+     * "log out all admins" kill switch's counterpart to evicting every
+     * `sessions` row but this account's. Scoped by account rather than by
+     * "not this request's cookie": an admin with no remember-me cookie at
+     * all (the common case) has no selector to exclude, which used to make
+     * this wipe every token unconditionally, including that admin's own
+     * other devices.
      */
-    public static function forgetAllExceptCurrent(Request $request): void
+    public static function forgetAllExcept(int $userId): void
     {
-        $selector = null;
-        $validator = null;
-        self::parseCookie($request, $selector, $validator);
-
-        RememberToken::query()
-            ->when($selector !== null, fn ($query) => $query->where('selector', '!=', $selector))
-            ->delete();
+        RememberToken::where('user_id', '!=', $userId)->delete();
     }
 
     /** Every device except the one whose cookie is on this request. */
