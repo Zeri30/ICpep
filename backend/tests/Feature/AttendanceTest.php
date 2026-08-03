@@ -567,9 +567,15 @@ class AttendanceTest extends TestCase
      * event's own end time has already passed. The panel offers no way back
      * in even though a QR printed for it would still scan — see
      * Event::attendanceLocked() and EventResource::myAttendance().
+     *
+     * Pinned to a fixed midday moment — see liveEvent()'s docblock. A run
+     * starting within 3 hours of midnight in Manila would otherwise roll
+     * `starts_at` into the previous day and fail the same-day sanity check
+     * below, which is exactly the flake this test used to have.
      */
     public function test_myattendance_locks_out_even_on_the_same_day_once_the_event_has_ended(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-11-03 12:00', Event::timezone()));
         $now = CarbonImmutable::now(Event::timezone());
 
         $event = Event::create([
