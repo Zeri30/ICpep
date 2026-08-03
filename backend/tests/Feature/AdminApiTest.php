@@ -428,6 +428,36 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('data.0.section', 'Section A');
     }
 
+    /**
+     * The list PaymentController::index() builds is cached against
+     * PaymentTransaction::cacheVersion() — this proves both halves of that:
+     * a repeat request for the same filters hits the cache (no query touches
+     * payment_transactions the second time), and a real write still bumps the
+     * version and reaches every officer's next request, never leaving a
+     * cached page stuck showing what the ledger looked like before it.
+     */
+    public function test_payments_ledger_is_cached_until_the_next_write(): void
+    {
+        $treasurer = $this->treasurer();
+        $this->makeApplication(['email' => 'a@example.com'])->update(['paid_at' => now()]);
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(1, 'data');
+
+        DB::enableQueryLog();
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(1, 'data');
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+
+        $this->assertTrue(
+            $queries->every(fn (string $sql): bool => ! str_contains($sql, 'payment_transactions')),
+            'A repeat request with the same filters should be served from cache, not re-query the ledger.',
+        );
+
+        $this->makeApplication(['email' => 'b@example.com'])->update(['paid_at' => now()]);
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(2, 'data');
+    }
+
     public function test_activity_log_lists_and_filters_by_action(): void
     {
         $this->makeApplication(); // logs a 'registered' entry
@@ -536,6 +566,28 @@ class AdminApiTest extends TestCase
         $this->assertSame(50.0, (float) $a->paymentTransactions()->sole()->amount);
         $this->assertSame(PaymentTransaction::PAYMENT_1, $a->paymentTransactions()->sole()->kind);
         $this->assertSame(0, ActivityLog::where('action', 'paid')->count());
+    }
+
+    /**
+     * bulkSetPayment()'s ledger insert goes through PaymentTransaction::insert(),
+     * which — unlike a single ->create() — doesn't fire model events, so it
+     * can't rely on the `created` hook to bump Payment History's cache
+     * version; MemberController calls bumpCacheVersion() itself right after.
+     * This confirms that call is actually there: a page cached before a bulk
+     * payment run must not still be what a request sees right after it.
+     */
+    public function test_bulk_mark_paid_invalidates_the_cached_ledger(): void
+    {
+        $treasurer = $this->treasurer();
+        $member = $this->makeApplication(['email' => 'a@example.com']);
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(0, 'data');
+
+        $this->actingAs($treasurer)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'payment1_paid'])
+            ->assertOk();
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(1, 'data');
     }
 
     public function test_bulk_mark_unpaid_reverses_against_the_original_date(): void

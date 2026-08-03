@@ -358,6 +358,7 @@ class MemberController extends Controller
         }
 
         PaymentTransaction::insert($transactions);
+        PaymentTransaction::bumpCacheVersion();
 
         return $updated;
     }
@@ -427,6 +428,7 @@ class MemberController extends Controller
 
         if ($transactions !== []) {
             PaymentTransaction::insert($transactions);
+            PaymentTransaction::bumpCacheVersion();
         }
 
         return $members->map(fn (Application $member): array => $this->paymentSnapshot($member))->values()->all();

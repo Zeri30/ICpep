@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * One membership-fee event. Written by Application's model events, never by
@@ -42,6 +43,33 @@ class PaymentTransaction extends Model
         'effective_at' => 'datetime',
         'previous_effective_at' => 'datetime',
     ];
+
+    /**
+     * Generation counter for Payment History's list cache (see
+     * PaymentController::index) — every cached page/filter combination is
+     * keyed against this, so bumping it once invalidates all of them at
+     * once instead of enumerating which cached keys a given write affects.
+     */
+    private const CACHE_VERSION_KEY = 'payment_transactions.cache_version';
+
+    protected static function booted(): void
+    {
+        // Covers a single write (Application::recordPaymentTransaction's
+        // ->create()). Bulk writes go around Eloquent events entirely — see
+        // MemberController::bulkSetPayment/bulkSetBothPayments, which call
+        // bumpCacheVersion() themselves right after their bulk insert.
+        static::created(fn () => self::bumpCacheVersion());
+    }
+
+    public static function cacheVersion(): int
+    {
+        return (int) Cache::get(self::CACHE_VERSION_KEY, 0);
+    }
+
+    public static function bumpCacheVersion(): void
+    {
+        Cache::forever(self::CACHE_VERSION_KEY, self::cacheVersion() + 1);
+    }
 
     public function application(): BelongsTo
     {
