@@ -56,7 +56,9 @@ export type Officer = {
 };
 
 export type AdminMeta = {
-  fee: number;
+  /** Two sequential payment batches per member, ₱50 then ₱25 — see MeController::show. */
+  feePayment1: number;
+  feePayment2: number;
   currency: string;
   classOptions: string[];
   sections: string[];

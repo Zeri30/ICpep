@@ -271,7 +271,7 @@ class MembershipTermTest extends TestCase
         $member = $this->member($past);
 
         $this->actingAs($this->acting(UserRole::Treasurer))
-            ->postJson("/api/admin/members/{$member->id}/toggle-paid")
+            ->postJson("/api/admin/members/{$member->id}/toggle-paid", ['batch' => 1])
             ->assertOk();
 
         $treasurer = $this->acting(UserRole::Treasurer);
@@ -293,8 +293,8 @@ class MembershipTermTest extends TestCase
         $there = $this->member($past, 'Reyes');
 
         $treasurer = $this->acting(UserRole::Treasurer);
-        $this->actingAs($treasurer)->postJson("/api/admin/members/{$here->id}/toggle-paid")->assertOk();
-        $this->actingAs($treasurer)->postJson("/api/admin/members/{$there->id}/toggle-paid")->assertOk();
+        $this->actingAs($treasurer)->postJson("/api/admin/members/{$here->id}/toggle-paid", ['batch' => 1])->assertOk();
+        $this->actingAs($treasurer)->postJson("/api/admin/members/{$there->id}/toggle-paid", ['batch' => 1])->assertOk();
 
         // A search matching both members still answers only for the chosen list.
         $this->actingAs($treasurer)->getJson('/api/admin/payments?search=Reyes')

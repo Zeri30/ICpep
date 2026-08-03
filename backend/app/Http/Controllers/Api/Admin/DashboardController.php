@@ -120,7 +120,7 @@ class DashboardController extends Controller
      * than trusting a bare column read — a term with no applications yet
      * would otherwise turn every figure into `null` instead of `0`.
      *
-     * @return array{live:int,paid:int,thirdYear:int,fourthYear:int,paidToday:int,paidWeek:int,paidMonth:int}
+     * @return array{live:int,paid:int,paid2:int,thirdYear:int,fourthYear:int,paidToday:int,paidWeek:int,paidMonth:int,paid2Today:int,paid2Week:int,paid2Month:int}
      */
     private function headlineAggregates(?MembershipTerm $term): array
     {
@@ -131,30 +131,46 @@ class DashboardController extends Controller
         $row = $this->members($term)
             ->selectRaw('COUNT(*) as live')
             ->selectRaw('SUM(CASE WHEN paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid')
+            ->selectRaw('SUM(CASE WHEN payment2_paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid2')
             ->selectRaw('SUM(CASE WHEN year_level = ? THEN 1 ELSE 0 END) as third_year', ['3rd Year'])
             ->selectRaw('SUM(CASE WHEN year_level = ? THEN 1 ELSE 0 END) as fourth_year', ['4th Year'])
             ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_today', $today)
             ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_week', $week)
             ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_month', $month)
+            ->selectRaw('SUM(CASE WHEN payment2_paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid2_today', $today)
+            ->selectRaw('SUM(CASE WHEN payment2_paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid2_week', $week)
+            ->selectRaw('SUM(CASE WHEN payment2_paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid2_month', $month)
             ->first();
 
         return [
             'live' => (int) $row->live,
             'paid' => (int) $row->paid,
+            'paid2' => (int) $row->paid2,
             'thirdYear' => (int) $row->third_year,
             'fourthYear' => (int) $row->fourth_year,
             'paidToday' => (int) $row->paid_today,
             'paidWeek' => (int) $row->paid_week,
             'paidMonth' => (int) $row->paid_month,
+            'paid2Today' => (int) $row->paid2_today,
+            'paid2Week' => (int) $row->paid2_week,
+            'paid2Month' => (int) $row->paid2_month,
         ];
     }
 
-    /** Members / 3rd / 4th / revenue — derived from current state, never accumulated. */
+    /**
+     * Members / 3rd / 4th / revenue — derived from current state, never
+     * accumulated. `paid`/`unpaid` count Payment 1 (the base membership
+     * threshold), not "fully paid" — the smallest change that keeps the
+     * existing headline cards meaningful now that the fee is two batches.
+     * `revenue` sums what both batches have actually collected.
+     */
     private function stats(bool $canRevenue, array $headline): array
     {
-        $fee = (float) config('icpep.membership_fee');
+        $fee1 = (float) config('icpep.membership_fee_1');
+        $fee2 = (float) config('icpep.membership_fee_2');
         $live = $headline['live'];
         $paid = $headline['paid'];
+        $paid2 = $headline['paid2'];
 
         return [
             'members' => $live,
@@ -164,23 +180,28 @@ class DashboardController extends Controller
             'unpaid' => $live - $paid,
             // Peso figures are the chapter's income — null them out for roles
             // that may read the ledger but not the takings.
-            'revenue' => $canRevenue ? $paid * $fee : null,
-            'pendingRevenue' => $canRevenue ? ($live - $paid) * $fee : null,
+            'revenue' => $canRevenue ? $paid * $fee1 + $paid2 * $fee2 : null,
+            // Total possible (every live member paying both batches in full)
+            // minus what's actually been collected — not "unpaid1 * fee1",
+            // which would undercount a member who owes both batches in full.
+            'pendingRevenue' => $canRevenue
+                ? $live * ($fee1 + $fee2) - ($paid * $fee1 + $paid2 * $fee2)
+                : null,
         ];
     }
 
-    /** Fees collected today / this week / this month, from applications.paid_at. */
+    /** Fees collected today / this week / this month, from both payment columns. */
     private function paymentSummary(array $headline): array
     {
-        $fee = (float) config('icpep.membership_fee');
-        $today = $headline['paidToday'];
-        $week = $headline['paidWeek'];
-        $month = $headline['paidMonth'];
+        $fee1 = (float) config('icpep.membership_fee_1');
+        $fee2 = (float) config('icpep.membership_fee_2');
+
+        $amount = fn (string $p1Key, string $p2Key): float => $headline[$p1Key] * $fee1 + $headline[$p2Key] * $fee2;
 
         return [
-            'today' => ['members' => $today, 'amount' => $today * $fee, 'label' => Carbon::today()->format('M j, Y')],
-            'week' => ['members' => $week, 'amount' => $week * $fee, 'label' => Carbon::now()->startOfWeek()->format('M j').' – '.Carbon::now()->endOfWeek()->format('M j')],
-            'month' => ['members' => $month, 'amount' => $month * $fee, 'label' => Carbon::now()->format('F Y')],
+            'today' => ['members' => $headline['paidToday'], 'amount' => $amount('paidToday', 'paid2Today'), 'label' => Carbon::today()->format('M j, Y')],
+            'week' => ['members' => $headline['paidWeek'], 'amount' => $amount('paidWeek', 'paid2Week'), 'label' => Carbon::now()->startOfWeek()->format('M j').' – '.Carbon::now()->endOfWeek()->format('M j')],
+            'month' => ['members' => $headline['paidMonth'], 'amount' => $amount('paidMonth', 'paid2Month'), 'label' => Carbon::now()->format('F Y')],
         ];
     }
 

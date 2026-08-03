@@ -140,7 +140,12 @@ export default function ConfirmDialog({
                   <button
                     onClick={handleConfirm}
                     disabled={busy || !canConfirm}
-                    className={`inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto ${toneBtn[tone]}`}
+                    // No whitespace-nowrap here: a short label ("Delete",
+                    // "Confirm") never needed to wrap, but a longer one (a
+                    // bulk payment action's "Mark Both Payments as Unpaid")
+                    // forced onto one line by nowrap overflowed past the
+                    // button and the dialog's edge instead of wrapping.
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto ${toneBtn[tone]}`}
                   >
                     {/* Fixed-width slot reserved regardless of `busy`, so the
                         label doesn't shift sideways the moment the spinner
@@ -148,7 +153,7 @@ export default function ConfirmDialog({
                     <span className="grid w-3.75 shrink-0 place-items-center">
                       {busy && <Loader2 size={15} className="animate-spin" />}
                     </span>
-                    {confirmLabel}
+                    <span>{confirmLabel}</span>
                   </button>
                   <button
                     onClick={onClose}

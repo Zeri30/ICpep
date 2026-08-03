@@ -65,7 +65,8 @@ class MeController extends Controller
                 ),
             ],
             'meta' => [
-                'fee' => (float) config('icpep.membership_fee'),
+                'feePayment1' => (float) config('icpep.membership_fee_1'),
+                'feePayment2' => (float) config('icpep.membership_fee_2'),
                 'currency' => config('icpep.currency_symbol'),
                 'classOptions' => array_keys(Application::CLASS_MAP),
                 'sections' => Application::SECTIONS,

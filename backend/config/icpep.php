@@ -5,10 +5,14 @@ return [
     |--------------------------------------------------------------------------
     | Membership fee
     |--------------------------------------------------------------------------
-    | Amount (in PHP) each member pays. Drives the "expected revenue" figure on
-    | the admin dashboard. Change MEMBERSHIP_FEE in .env to update it.
+    | Collected in two sequential batches rather than one flat amount — ₱50
+    | (Payment 1) then ₱25 (Payment 2), ₱75 combined. Drives the "expected
+    | revenue" figure on the admin dashboard and the ledger amount recorded
+    | for each batch. Change MEMBERSHIP_FEE_1 / MEMBERSHIP_FEE_2 in .env to
+    | update them.
     */
-    'membership_fee' => (float) env('MEMBERSHIP_FEE', 50),
+    'membership_fee_1' => (float) env('MEMBERSHIP_FEE_1', 50),
+    'membership_fee_2' => (float) env('MEMBERSHIP_FEE_2', 25),
 
     'currency_symbol' => env('MEMBERSHIP_CURRENCY', '₱'),
 

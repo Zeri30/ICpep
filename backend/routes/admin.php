@@ -123,7 +123,7 @@ Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class
         Route::post('/members/bulk', [MemberController::class, 'bulk'])->name('members.bulk');
         Route::patch('/members/{application}', [MemberController::class, 'update'])->name('members.update');
         Route::delete('/members/{application}', [MemberController::class, 'destroy'])->name('members.destroy');
-        Route::post('/members/{application}/toggle-paid', [MemberController::class, 'togglePaid'])->name('members.togglePaid');
+        Route::post('/members/{application}/toggle-paid', [MemberController::class, 'togglePayment'])->name('members.togglePaid');
         Route::post('/members/{application}/restore', [MemberController::class, 'restore'])->withTrashed()->name('members.restore');
     });
 

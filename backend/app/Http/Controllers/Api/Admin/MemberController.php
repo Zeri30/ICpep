@@ -10,10 +10,11 @@ use App\Models\PaymentTransaction;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,7 @@ class MemberController extends Controller
         'name' => 'surname',
         'section' => 'section',
         'paidAt' => 'paid_at',
+        'payment2PaidAt' => 'payment2_paid_at',
         'createdAt' => 'created_at',
     ];
 
@@ -53,7 +55,7 @@ class MemberController extends Controller
     private const LIST_COLUMNS = [
         'id', 'membership_term_id', 'surname', 'given_name', 'middle_initial',
         'student_id', 'year_level', 'section', 'birthday', 'address', 'email',
-        'phone', 'picture_path', 'paid_at', 'created_at', 'deleted_at',
+        'phone', 'picture_path', 'paid_at', 'payment2_paid_at', 'created_at', 'deleted_at',
     ];
 
     public function index(Request $request): AnonymousResourceCollection
@@ -93,6 +95,7 @@ class MemberController extends Controller
             'email' => ['required', 'email', 'max:150'],
             'phone' => ['required', 'string', 'max:30'],
             'paidAt' => ['nullable', 'date'],
+            'payment2PaidAt' => ['nullable', 'date'],
         ]);
 
         $attributes = [
@@ -109,10 +112,23 @@ class MemberController extends Controller
         ];
 
         // Payment status is a separate, financial permission. An editor without
-        // it can't change paid state through the edit form — the existing date
-        // is preserved regardless of what the payload carries.
+        // it can't change paid state through the edit form — the existing dates
+        // are preserved regardless of what the payload carries.
         if (Gate::allows('members.payment')) {
-            $attributes['paid_at'] = $data['paidAt'] ?? null;
+            $payment1 = $data['paidAt'] ?? null;
+            $payment2 = $data['payment2PaidAt'] ?? null;
+
+            // Whatever route got here, the two columns can't end up with
+            // Payment 2 paid and Payment 1 not — same rule togglePayment()
+            // enforces, checked here as a single before/after comparison
+            // since this endpoint submits the full desired state at once
+            // rather than one toggle at a time.
+            if ($payment2 !== null && $payment1 === null) {
+                abort(422, 'Payment 1 must be completed before Payment 2 can be marked as paid.');
+            }
+
+            $attributes['paid_at'] = $payment1;
+            $attributes['payment2_paid_at'] = $payment2;
         }
 
         $application->update($attributes);
@@ -121,19 +137,38 @@ class MemberController extends Controller
     }
 
     /**
-     * Flip paid state. Marking records today; unmarking clears the date.
+     * Flip one payment batch's state. Marking records today; unmarking clears
+     * the date. Payment 2 can't be marked paid before Payment 1 is; the same
+     * rule holds in reverse for revoking — Payment 1 can't be revoked while
+     * Payment 2 is still paid, since money is unwound in the order it was
+     * collected in.
      *
      * Transactional so the flip and the ledger row Application's `updated`
      * event writes for it (see Application::recordPaymentTransaction) either
      * both land or neither does — the same guarantee bulk() already gives
      * itself, just for a single member instead of a batch.
      */
-    public function togglePaid(Application $application): MemberResource
+    public function togglePayment(Request $request, Application $application): MemberResource
     {
         Gate::authorize('members.payment');
 
-        DB::transaction(function () use ($application): void {
-            $application->update(['paid_at' => $application->is_paid ? null : now()]);
+        $data = $request->validate([
+            'batch' => ['required', Rule::in([1, 2])],
+        ]);
+
+        $column = $data['batch'] === 2 ? 'payment2_paid_at' : 'paid_at';
+        $marking = $application->{$column} === null;
+
+        if ($data['batch'] === 2 && $marking && ! $application->is_paid) {
+            abort(422, 'Payment 1 must be completed before Payment 2 can be marked as paid.');
+        }
+
+        if ($data['batch'] === 1 && ! $marking && $application->is_payment2_paid) {
+            abort(422, 'Revoke Payment 2 before revoking Payment 1.');
+        }
+
+        DB::transaction(function () use ($application, $column, $marking): void {
+            $application->update([$column => $marking ? now() : null]);
         });
 
         return new MemberResource($application->fresh());
@@ -159,17 +194,33 @@ class MemberController extends Controller
         return new MemberResource($application->fresh());
     }
 
-    /** Bulk paid / unpaid / delete / restore over an explicit set of ids. */
+    /** The bulk `action` values that are payment writes rather than edit/delete ones. */
+    private const PAYMENT_ACTIONS = [
+        'payment1_paid', 'payment1_unpaid',
+        'payment2_paid', 'payment2_unpaid',
+        'both_paid', 'both_unpaid',
+    ];
+
+    /**
+     * Bulk payment / delete / restore over an explicit set of ids.
+     *
+     * The sequencing rule (Payment 2 needs Payment 1; revoking unwinds in the
+     * reverse order) is enforced the same way a single skip already is:
+     * members not eligible for the requested action are quietly excluded from
+     * the ones actually written, and the client is told how many were
+     * skipped — never a hard error over a whole batch just because part of
+     * it wasn't eligible.
+     */
     public function bulk(Request $request): JsonResponse
     {
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
-            'action' => ['required', Rule::in(['paid', 'unpaid', 'delete', 'restore'])],
+            'action' => ['required', Rule::in([...self::PAYMENT_ACTIONS, 'delete', 'restore'])],
         ]);
 
         // Payment actions and edit actions are separate permissions.
-        Gate::authorize(in_array($data['action'], ['paid', 'unpaid'], true) ? 'members.payment' : 'members.edit');
+        Gate::authorize(in_array($data['action'], self::PAYMENT_ACTIONS, true) ? 'members.payment' : 'members.edit');
 
         // Atomic: a bulk run that fails partway must leave no member changed,
         // rather than some marked paid with no matching ledger/activity row.
@@ -177,10 +228,24 @@ class MemberController extends Controller
             $members = Application::withTrashed()->whereIn('id', $data['ids'])->get();
 
             $updated = match ($data['action']) {
-                // Skip members already in the target state so a bulk run never
-                // rewrites a payment date that is already on record.
-                'paid' => $this->bulkTogglePaid($members->whereNull('paid_at'), true),
-                'unpaid' => $this->bulkTogglePaid($members->whereNotNull('paid_at'), false),
+                'payment1_paid' => $this->bulkSetPayment($members->whereNull('paid_at'), 'paid_at', true),
+                // Reverse-order rule: Payment 1 can't be revoked while
+                // Payment 2 is still paid.
+                'payment1_unpaid' => $this->bulkSetPayment(
+                    $members->whereNotNull('paid_at')->whereNull('payment2_paid_at'), 'paid_at', false,
+                ),
+                // Payment 2 needs Payment 1 first — members still on Payment 1
+                // are simply not eligible, same as "already paid" is skipped.
+                'payment2_paid' => $this->bulkSetPayment(
+                    $members->whereNotNull('paid_at')->whereNull('payment2_paid_at'), 'payment2_paid_at', true,
+                ),
+                'payment2_unpaid' => $this->bulkSetPayment($members->whereNotNull('payment2_paid_at'), 'payment2_paid_at', false),
+                'both_paid' => $this->bulkSetBothPayments(
+                    $members->reject(fn (Application $m): bool => $m->is_paid && $m->is_payment2_paid), true,
+                ),
+                'both_unpaid' => $this->bulkSetBothPayments(
+                    $members->filter(fn (Application $m): bool => $m->is_paid || $m->is_payment2_paid), false,
+                ),
                 'delete' => $this->bulkDelete($members->whereNull('deleted_at')),
                 'restore' => $this->bulkRestore($members->whereNotNull('deleted_at')),
             };
@@ -189,43 +254,64 @@ class MemberController extends Controller
         });
 
         // `updated` lets the client patch the rows it already has in place
-        // instead of re-fetching the whole page — populated for paid/unpaid
-        // only, since delete/restore change which page a row belongs on.
+        // instead of re-fetching the whole page — populated for payment
+        // actions only, since delete/restore change which page a row belongs on.
         return response()->json(['count' => $count, 'updated' => $updated]);
+    }
+
+    /** The combined payment state the client patches a row with after a bulk write. */
+    private function paymentSnapshot(Application $member): array
+    {
+        return [
+            'id' => $member->id,
+            'isPayment1Paid' => $member->paid_at !== null,
+            'payment1PaidAt' => optional($member->paid_at)->toIso8601String(),
+            'isPayment2Paid' => $member->payment2_paid_at !== null,
+            'payment2PaidAt' => optional($member->payment2_paid_at)->toIso8601String(),
+        ];
+    }
+
+    /** @return array{string, float} [ledger kind, fee] for a payment column. */
+    private function paymentKindAndFee(string $column): array
+    {
+        return $column === 'payment2_paid_at'
+            ? [PaymentTransaction::PAYMENT_2, (float) config('icpep.membership_fee_2')]
+            : [PaymentTransaction::PAYMENT_1, (float) config('icpep.membership_fee_1')];
     }
 
     /**
      * Marks every given (already-filtered-to-eligible) member paid or unpaid
-     * in one batched UPDATE, then writes the payment-ledger row each member's
-     * model event would otherwise have written one at a time — as one bulk
-     * insert instead of N. Model events don't fire on a mass update, so those
-     * rows are built here from the still-in-memory pre-update snapshot,
-     * mirroring Application::recordPaymentTransaction(). Payment History is
-     * the ledger for this; it isn't also logged to the Activity Log.
+     * on one payment column, in one batched UPDATE, then writes the
+     * payment-ledger row each member's model event would otherwise have
+     * written one at a time — as one bulk insert instead of N. Model events
+     * don't fire on a mass update, so those rows are built here from the
+     * still-in-memory pre-update snapshot, mirroring
+     * Application::recordPaymentTransaction(). Payment History is the ledger
+     * for this; it isn't also logged to the Activity Log.
      *
      * @param  Collection<int, Application>  $members
-     * @return list<array{id: int, isPaid: bool, paidAt: ?string}>
+     * @return list<array{id: int, isPayment1Paid: bool, payment1PaidAt: ?string, isPayment2Paid: bool, payment2PaidAt: ?string}>
      */
-    private function bulkTogglePaid(Collection $members, bool $paid): array
+    private function bulkSetPayment(Collection $members, string $column, bool $paid): array
     {
         if ($members->isEmpty()) {
             return [];
         }
 
         $now = Carbon::now();
-        $fee = (float) config('icpep.membership_fee');
+        [$kind, $fee] = $this->paymentKindAndFee($column);
         $user = Auth::user();
 
         Application::withTrashed()->whereIn('id', $members->modelKeys())
-            ->update(['paid_at' => $paid ? $now : null, 'updated_at' => $now]);
+            ->update([$column => $paid ? $now : null, 'updated_at' => $now]);
 
         $transactions = [];
         $updated = [];
 
         foreach ($members as $member) {
             // Pre-update snapshot: $member was loaded before the batched
-            // UPDATE above, so paid_at here is still the member's old value.
-            $previous = $member->paid_at;
+            // UPDATE above, so this column here is still the member's old value.
+            $previous = $member->{$column};
             [$action, $amount, $effectiveAt] = $paid
                 // Unpaid -> paid.
                 ? [PaymentTransaction::PAID, $fee, $now]
@@ -237,6 +323,7 @@ class MemberController extends Controller
                 'application_id' => $member->id,
                 'membership_term_id' => $member->membership_term_id,
                 'action' => $action,
+                'kind' => $kind,
                 'amount' => $amount,
                 'effective_at' => $effectiveAt,
                 'previous_effective_at' => $previous,
@@ -248,12 +335,86 @@ class MemberController extends Controller
                 'updated_at' => $now,
             ];
 
-            $updated[] = ['id' => $member->id, 'isPaid' => $paid, 'paidAt' => $paid ? $now->toIso8601String() : null];
+            // Reflected onto the in-memory model so the response reports the
+            // member's combined payment state, not just the column this call
+            // touched.
+            $member->{$column} = $paid ? $now : null;
+            $updated[] = $this->paymentSnapshot($member);
         }
 
         PaymentTransaction::insert($transactions);
 
         return $updated;
+    }
+
+    /**
+     * "Mark both payments paid/unpaid" in one operation. For "paid", brings
+     * every given (already-filtered-to-not-fully-paid) member fully paid —
+     * Payment 1 first, then Payment 2 — skipping whichever column a member
+     * had already completed, so it isn't re-stamped with a fresh date. For
+     * "unpaid", reverses whichever of the two is currently paid.
+     *
+     * @param  Collection<int, Application>  $members
+     * @return list<array{id: int, isPayment1Paid: bool, payment1PaidAt: ?string, isPayment2Paid: bool, payment2PaidAt: ?string}>
+     */
+    private function bulkSetBothPayments(Collection $members, bool $paid): array
+    {
+        if ($members->isEmpty()) {
+            return [];
+        }
+
+        $now = Carbon::now();
+        $user = Auth::user();
+        $transactions = [];
+        $touchedIds = ['paid_at' => [], 'payment2_paid_at' => []];
+
+        foreach ($members as $member) {
+            foreach (['paid_at', 'payment2_paid_at'] as $column) {
+                $currentlyPaid = $member->{$column} !== null;
+                if ($currentlyPaid === $paid) {
+                    continue; // already in the target state on this column
+                }
+
+                [$kind, $fee] = $this->paymentKindAndFee($column);
+                $previous = $member->{$column};
+                [$action, $amount, $effectiveAt] = $paid
+                    ? [PaymentTransaction::PAID, $fee, $now]
+                    : [PaymentTransaction::REVOKED, -$fee, $previous];
+
+                $transactions[] = [
+                    'application_id' => $member->id,
+                    'membership_term_id' => $member->membership_term_id,
+                    'action' => $action,
+                    'kind' => $kind,
+                    'amount' => $amount,
+                    'effective_at' => $effectiveAt,
+                    'previous_effective_at' => $previous,
+                    'actor' => $user?->email,
+                    'member_name' => $member->full_name,
+                    'section' => $member->section,
+                    'year_level' => $member->year_level,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                $touchedIds[$column][] = $member->id;
+                $member->{$column} = $paid ? $now : null;
+            }
+        }
+
+        foreach ($touchedIds as $column => $ids) {
+            if ($ids === []) {
+                continue;
+            }
+            Application::withTrashed()->whereIn('id', $ids)
+                ->update([$column => $paid ? $now : null, 'updated_at' => $now]);
+        }
+
+        if ($transactions !== []) {
+            PaymentTransaction::insert($transactions);
+        }
+
+        return $members->map(fn (Application $member): array => $this->paymentSnapshot($member))->values()->all();
     }
 
     /** @param  Collection<int, Application>  $members */
@@ -288,7 +449,7 @@ class MemberController extends Controller
         // FilesystemAdapter it actually returns declares both. Naming the real
         // type keeps static analysis from flagging a call that is fine at
         // runtime.
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        /** @var FilesystemAdapter $disk */
         $disk = Storage::disk('supabase');
 
         try {
@@ -302,7 +463,20 @@ class MemberController extends Controller
 
     /** Column order shared by every export format. */
     private const EXPORT_COLUMNS = [
-        'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email', 'Payment Status', 'Paid At', 'Registered At',
+        'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email',
+        'Payment 1 Status', 'Payment 1 Paid At', 'Payment 2 Status', 'Payment 2 Paid At', 'Registered At',
+    ];
+
+    /** Human-readable labels for the Members List's payment filter, e.g. for the PDF header. */
+    private const PAYMENT_FILTER_LABELS = [
+        'p1_paid' => 'Payment 1 – Paid',
+        'p1_unpaid' => 'Payment 1 – Unpaid',
+        'p2_paid' => 'Payment 2 – Paid',
+        'p2_unpaid' => 'Payment 2 – Unpaid',
+        'both_paid' => 'Both Paid',
+        'both_unpaid' => 'Both Unpaid',
+        'p1_paid_p2_unpaid' => 'Payment 1 Paid, Payment 2 Unpaid',
+        'p1_unpaid_p2_paid' => 'Payment 1 Unpaid, Payment 2 Paid',
     ];
 
     public function exportCsv(Request $request): StreamedResponse
@@ -324,7 +498,7 @@ class MemberController extends Controller
         $members = $this->exportRows($request);
 
         return response()->streamDownload(function () use ($members): void {
-            $writer = new XlsxWriter();
+            $writer = new XlsxWriter;
             $writer->openToFile('php://output');
             $writer->addRow(Row::fromValues(self::EXPORT_COLUMNS));
             foreach ($members as $member) {
@@ -370,6 +544,8 @@ class MemberController extends Controller
             $member->email,
             $member->is_paid ? 'Paid' : 'Unpaid',
             optional($member->paid_at)->toDateString() ?? '',
+            $member->is_payment2_paid ? 'Paid' : 'Unpaid',
+            optional($member->payment2_paid_at)->toDateString() ?? '',
             optional($member->created_at)->toDateString() ?? '',
         ];
     }
@@ -397,7 +573,7 @@ class MemberController extends Controller
             $summary['Year Level'] = $year;
         }
         if ($payment = $request->input('payment')) {
-            $summary['Payment'] = ucfirst($payment);
+            $summary['Payment'] = self::PAYMENT_FILTER_LABELS[$payment] ?? ucfirst($payment);
         }
         if ($trashed = $request->input('trashed')) {
             $summary['Records'] = $trashed === 'only' ? 'Deleted members only' : 'Including deleted members';
@@ -444,8 +620,17 @@ class MemberController extends Controller
         }
 
         match ($request->input('payment')) {
-            'paid' => $query->paid(),
-            'unpaid' => $query->unpaid(),
+            'p1_paid' => $query->whereNotNull('paid_at'),
+            'p1_unpaid' => $query->whereNull('paid_at'),
+            'p2_paid' => $query->whereNotNull('payment2_paid_at'),
+            'p2_unpaid' => $query->whereNull('payment2_paid_at'),
+            'both_paid' => $query->whereNotNull('paid_at')->whereNotNull('payment2_paid_at'),
+            'both_unpaid' => $query->whereNull('paid_at')->whereNull('payment2_paid_at'),
+            'p1_paid_p2_unpaid' => $query->whereNotNull('paid_at')->whereNull('payment2_paid_at'),
+            // Should be empty once the sequencing rule holds everywhere — kept
+            // as a filter option for parity/auditing rather than assumed
+            // impossible, in case older data or a direct DB edit produced it.
+            'p1_unpaid_p2_paid' => $query->whereNull('paid_at')->whereNotNull('payment2_paid_at'),
             default => $query,
         };
 

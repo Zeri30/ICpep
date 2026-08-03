@@ -36,6 +36,14 @@ class PaymentController extends Controller
             }
         }
 
+        // Which of the two sequential payment batches — same indexed-column
+        // filter treatment as `action` above.
+        if ($kind = $request->query('kind')) {
+            if (in_array($kind, [PaymentTransaction::PAYMENT_1, PaymentTransaction::PAYMENT_2], true)) {
+                $query->where('kind', $kind);
+            }
+        }
+
         // Same combined year+section codes ("3A".."4B") the Members List filters
         // on, so the two modules read the same way.
         if ($class = $request->query('class')) {

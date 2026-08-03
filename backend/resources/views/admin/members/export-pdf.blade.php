@@ -104,7 +104,8 @@
                 <th>Section</th>
                 <th>Phone</th>
                 <th>Email</th>
-                <th>Payment</th>
+                <th>Payment 1</th>
+                <th>Payment 2</th>
                 <th>Registered</th>
             </tr>
         </thead>
@@ -119,6 +120,7 @@
                     <td>{{ $member->phone }}</td>
                     <td>{{ $member->email }}</td>
                     <td>{{ $member->is_paid ? 'Paid' : 'Unpaid' }}</td>
+                    <td>{{ $member->is_payment2_paid ? 'Paid' : 'Unpaid' }}</td>
                     <td>{{ optional($member->created_at)->format('M j, Y') }}</td>
                 </tr>
             @endforeach

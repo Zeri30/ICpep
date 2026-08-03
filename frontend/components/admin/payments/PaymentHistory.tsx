@@ -34,6 +34,11 @@ const EVENT = {
   adjusted: { label: "Date adjusted", cls: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent", Icon: PencilLine },
 } as const;
 
+const KIND_LABEL: Record<PaymentRow["kind"], string> = {
+  payment1: "Payment 1",
+  payment2: "Payment 2",
+};
+
 function EventBadge({ action, paymentTerm }: { action: PaymentRow["action"]; paymentTerm: PaymentRow["paymentTerm"] }) {
   const e = EVENT[action] ?? EVENT.adjusted;
   const Icon = e.Icon;
@@ -49,10 +54,14 @@ function EventBadge({ action, paymentTerm }: { action: PaymentRow["action"]; pay
 
 export default function PaymentHistory() {
   const { meta, money } = useAdmin();
-  const { selected: term, loading: termsLoading, isViewingPast } = useTerms();
+  const { selected: term, initialTermId, isViewingPast } = useTerms();
+  // Fire right away rather than waiting on `/terms` to resolve — see
+  // Dashboard.tsx/MembersList.tsx for the same pattern and its reasoning.
+  const termId = term?.id ?? initialTermId;
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [action, setAction] = useState("");
+  const [kind, setKind] = useState("");
   const [klass, setKlass] = useState("");
   const [page, setPage] = useState(1);
 
@@ -67,10 +76,12 @@ export default function PaymentHistory() {
   }, [search]);
 
   // A different list is a different dataset — go back to page 1 rather than
-  // landing on a page number that may not exist in it.
-  const [renderedTermId, setRenderedTermId] = useState(term?.id);
-  if (term?.id !== renderedTermId) {
-    setRenderedTermId(term?.id);
+  // landing on a page number that may not exist in it. Tracks `termId` (the
+  // guess-or-resolved id the query string actually uses), not `term?.id`
+  // directly — see MembersList.tsx for why that distinction matters.
+  const [renderedTermId, setRenderedTermId] = useState(termId);
+  if (termId !== renderedTermId) {
+    setRenderedTermId(termId);
     setPage(1);
   }
 
@@ -78,31 +89,31 @@ export default function PaymentHistory() {
     const p = new URLSearchParams();
     // The ledger is scoped to the same semester as the Members module, so a
     // term's collected fees and its headcount describe the same people.
-    if (term) p.set("term", String(term.id));
+    if (termId) p.set("term", String(termId));
     if (debounced) p.set("search", debounced);
     if (action) p.set("action", action);
+    if (kind) p.set("kind", kind);
     // Same combined year+section code the Members List filters on ("3A"..
     // "4B"), resolved server-side against the two denormalised columns.
     if (klass) p.set("class", klass);
     p.set("page", String(page));
     return p.toString();
-  }, [term, debounced, action, klass, page]);
+  }, [termId, debounced, action, kind, klass, page]);
 
-  const { data, error, fetching } = useAdminResource<Paginated<PaymentRow>>(
-    termsLoading ? null : `/payments?${qs}`,
-  );
+  const { data, error, fetching } = useAdminResource<Paginated<PaymentRow>>(`/payments?${qs}`);
   const reset = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
 
   // Which semester the rows in `data` were fetched for — same reset-on-change
   // pattern as MembersList, so a term switch never shows the previous term's
   // ledger under the new term's heading while the new page is in flight.
-  const [dataTermId, setDataTermId] = useState(term?.id);
+  // Tracks `termId`, not `term?.id` — see MembersList.tsx.
+  const [dataTermId, setDataTermId] = useState(termId);
   const [lastData, setLastData] = useState(data);
   if (data !== lastData) {
     setLastData(data);
-    setDataTermId(term?.id);
+    setDataTermId(termId);
   }
-  const otherTerm = data !== null && term?.id !== dataTermId;
+  const otherTerm = data !== null && termId !== dataTermId;
   const rows = otherTerm ? [] : (data?.data ?? []);
   const awaitingRows = !error && (data === null || otherTerm);
 
@@ -131,7 +142,25 @@ export default function PaymentHistory() {
         </div>
       ),
     },
-    { key: "event", header: "Event", width: "14%", render: (r) => <EventBadge action={r.action} paymentTerm={r.paymentTerm} />, skeleton: <Pill w="w-20" /> },
+    {
+      key: "event",
+      header: "Event",
+      width: "14%",
+      render: (r) => (
+        <div className="flex flex-col items-start gap-1">
+          <EventBadge action={r.action} paymentTerm={r.paymentTerm} />
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{KIND_LABEL[r.kind]}</span>
+        </div>
+      ),
+      // Two lines, same reasoning as Member's — the cell now stacks the
+      // event badge over which payment batch it was.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Pill w="w-20" />
+          <Bar w="w-14" h="h-3" />
+        </div>
+      ),
+    },
     {
       key: "amount",
       header: "Amount",
@@ -178,6 +207,11 @@ export default function PaymentHistory() {
           <option value="">All</option>
           <option value="paid">Paid</option>
           <option value="revoked">Revoked</option>
+        </select>
+        <select value={kind} onChange={(e) => reset(setKind)(e.target.value)} className={selectCls} aria-label="Payment batch">
+          <option value="">All batches</option>
+          <option value="payment1">Payment 1</option>
+          <option value="payment2">Payment 2</option>
         </select>
         <select value={klass} onChange={(e) => reset(setKlass)(e.target.value)} className={selectCls} aria-label="Year & Section">
           <option value="">All </option>

@@ -42,8 +42,10 @@ class MemberResource extends JsonResource
             'classCode' => $this->class_code,
             'birthday' => optional($this->birthday)->toDateString(),
             'address' => $this->address,
-            'isPaid' => $this->is_paid,
-            'paidAt' => optional($this->paid_at)->toIso8601String(),
+            'isPayment1Paid' => $this->is_paid,
+            'payment1PaidAt' => optional($this->paid_at)->toIso8601String(),
+            'isPayment2Paid' => $this->is_payment2_paid,
+            'payment2PaidAt' => optional($this->payment2_paid_at)->toIso8601String(),
             'createdAt' => optional($this->created_at)->toIso8601String(),
             'deletedAt' => optional($this->deleted_at)->toIso8601String(),
             // Cheap on a list (a local S3 signature, no network call), so the

@@ -149,7 +149,8 @@ class MemberDemoSeeder extends Seeder
 
         $application->paymentTransactions()->create([
             'action' => PaymentTransaction::PAID,
-            'amount' => (float) config('icpep.membership_fee'),
+            'kind' => PaymentTransaction::PAYMENT_1,
+            'amount' => (float) config('icpep.membership_fee_1'),
             'effective_at' => $application->paid_at,
             'actor' => null, // seeded, not recorded by an officer
             'member_name' => $application->full_name,

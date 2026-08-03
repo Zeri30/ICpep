@@ -127,13 +127,13 @@ class RbacTest extends TestCase
 
         $paid = $this->member();
         $this->actingAs($this->acting(UserRole::Treasurer))
-            ->postJson("/api/admin/members/{$paid->id}/toggle-paid")->assertOk();
+            ->postJson("/api/admin/members/{$paid->id}/toggle-paid", ['batch' => 1])->assertOk();
         $this->assertNotNull($paid->fresh()->paid_at);
 
         // A Secretary can edit member data but not change payment.
         $other = $this->member();
         $this->actingAs($this->acting(UserRole::Secretary))
-            ->postJson("/api/admin/members/{$other->id}/toggle-paid")->assertForbidden();
+            ->postJson("/api/admin/members/{$other->id}/toggle-paid", ['batch' => 1])->assertForbidden();
         $this->assertNull($other->fresh()->paid_at);
     }
 

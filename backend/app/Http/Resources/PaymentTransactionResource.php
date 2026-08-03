@@ -23,6 +23,9 @@ class PaymentTransactionResource extends JsonResource
             'section' => $this->section,
             'yearLevel' => $this->year_level,
             'action' => $this->action,
+            // Which of the two sequential payment batches this row is for —
+            // see PaymentTransaction::PAYMENT_1 / PAYMENT_2.
+            'kind' => $this->kind,
             'amount' => (float) $this->amount,
             'effectiveAt' => optional($this->effective_at)->toIso8601String(),
             'previousEffectiveAt' => optional($this->previous_effective_at)->toIso8601String(),

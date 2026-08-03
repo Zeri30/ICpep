@@ -18,10 +18,16 @@ class PaymentTransaction extends Model
 
     public const ADJUSTED = 'adjusted';
 
+    /** Which of the two sequential payment batches this row describes. */
+    public const PAYMENT_1 = 'payment1';
+
+    public const PAYMENT_2 = 'payment2';
+
     protected $fillable = [
         'application_id',
         'membership_term_id',
         'action',
+        'kind',
         'amount',
         'effective_at',
         'previous_effective_at',

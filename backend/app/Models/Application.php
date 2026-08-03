@@ -51,12 +51,20 @@ class Application extends Model
 
             // Payment has its own dedicated ledger (Payment History /
             // payment_transactions) rather than being logged here too — see
-            // recordPaymentTransaction().
-            if ($application->wasChanged('paid_at')) {
-                $application->recordPaymentTransaction();
+            // recordPaymentTransaction(). Both payment columns can change in
+            // the same save (e.g. the edit form marking both batches paid at
+            // once), so each gets its own ledger row.
+            $paymentColumns = array_intersect(['paid_at', 'payment2_paid_at'], array_keys($application->getChanges()));
 
-                // A pure payment toggle shouldn't also log an edit.
-                if (count($application->getChanges()) <= 2) { // paid_at + updated_at
+            foreach ($paymentColumns as $column) {
+                $application->recordPaymentTransaction($column);
+            }
+
+            if ($paymentColumns) {
+                // A pure payment toggle shouldn't also log an edit — "pure"
+                // meaning nothing changed but the payment column(s) themselves
+                // plus the timestamp Eloquent always bumps.
+                if (count($application->getChanges()) <= count($paymentColumns) + 1) {
                     return;
                 }
             }
@@ -91,17 +99,31 @@ class Application extends Model
         'signature_path',
         'picture_path',
         'paid_at',
+        'payment2_paid_at',
     ];
 
     protected $casts = [
         'birthday' => 'date',
         'paid_at' => 'datetime',
+        'payment2_paid_at' => 'datetime',
     ];
 
-    /** Membership fee paid. `paid_at` is both the flag and the date it happened. */
+    /**
+     * Payment 1 (₱50) paid. `paid_at` is both the flag and the date it
+     * happened — kept under its original column name even though the fee is
+     * now split into two batches, to avoid renaming it everywhere; it
+     * specifically means "Payment 1" from here on. See getIsPayment2PaidAttribute
+     * for the second batch (₱25), which can only be paid once this one is.
+     */
     public function getIsPaidAttribute(): bool
     {
         return $this->paid_at !== null;
+    }
+
+    /** Payment 2 (₱25) paid. Same is-null-or-not design as Payment 1. */
+    public function getIsPayment2PaidAttribute(): bool
+    {
+        return $this->payment2_paid_at !== null;
     }
 
     public function paymentTransactions(): HasMany
@@ -127,7 +149,8 @@ class Application extends Model
     }
 
     /**
-     * Append a ledger row describing what just happened to `paid_at`.
+     * Append a ledger row describing what just happened to one payment column
+     * (`paid_at` = Payment 1, `payment2_paid_at` = Payment 2).
      *
      * Called from the `updated` event so it captures every route to a payment
      * change — the row action, the bulk action and a manual form edit alike —
@@ -136,12 +159,13 @@ class Application extends Model
      * Member name and section are denormalised onto the row so the history stays
      * readable after a rename, and survives a force-delete of the member.
      */
-    public function recordPaymentTransaction(): void
+    public function recordPaymentTransaction(string $column): void
     {
-        $fee = (float) config('icpep.membership_fee');
-        $previous = $this->getOriginal('paid_at');
+        $kind = $column === 'payment2_paid_at' ? PaymentTransaction::PAYMENT_2 : PaymentTransaction::PAYMENT_1;
+        $fee = (float) config($kind === PaymentTransaction::PAYMENT_2 ? 'icpep.membership_fee_2' : 'icpep.membership_fee_1');
+        $previous = $this->getOriginal($column);
         $previous = $previous ? Carbon::parse($previous) : null;
-        $current = $this->paid_at;
+        $current = $this->{$column};
 
         [$action, $amount, $effectiveAt] = match (true) {
             // Unpaid -> paid.
@@ -166,6 +190,7 @@ class Application extends Model
             // semester's payment must stay in that semester's figures.
             'membership_term_id' => $this->membership_term_id,
             'action' => $action,
+            'kind' => $kind,
             'amount' => $amount,
             'effective_at' => $effectiveAt,
             'previous_effective_at' => $previous,
@@ -207,18 +232,6 @@ class Application extends Model
         }
 
         return $query->where('year_level', $year);
-    }
-
-    /** @param  Builder<Application>  $query */
-    public function scopePaid(Builder $query): Builder
-    {
-        return $query->whereNotNull('paid_at');
-    }
-
-    /** @param  Builder<Application>  $query */
-    public function scopeUnpaid(Builder $query): Builder
-    {
-        return $query->whereNull('paid_at');
     }
 
     /** Convenience: "Last Name, First Name, Middle Initial" e.g. "Dela Cruz, Juan, S." */

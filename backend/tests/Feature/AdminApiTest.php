@@ -78,15 +78,16 @@ class AdminApiTest extends TestCase
 
     public function test_me_returns_officer_and_meta(): void
     {
-        // Pinned rather than left to whatever MEMBERSHIP_FEE happens to be in
-        // .env — see test_dashboard_numbers_match_the_data for why.
-        config(['icpep.membership_fee' => 50]);
+        // Pinned rather than left to whatever MEMBERSHIP_FEE_1/2 happens to be
+        // in .env — see test_dashboard_numbers_match_the_data for why.
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
 
         $this->actingAs($this->admin())
             ->getJson('/api/admin/me')
             ->assertOk()
             ->assertJsonPath('user.email', env('ADMIN_EMAIL', 'admin@example.com'))
-            ->assertJsonPath('meta.fee', 50)
+            ->assertJsonPath('meta.feePayment1', 50)
+            ->assertJsonPath('meta.feePayment2', 25)
             ->assertJsonPath('meta.currency', '₱')
             ->assertJsonPath('meta.classOptions', ['3A', '3B', '4A', '4B']);
     }
@@ -156,12 +157,12 @@ class AdminApiTest extends TestCase
 
     public function test_dashboard_numbers_match_the_data(): void
     {
-        // Pinned rather than left to whatever MEMBERSHIP_FEE happens to be in
-        // .env — that's real config for the live site's actual fee, not a
+        // Pinned rather than left to whatever MEMBERSHIP_FEE_1/2 happens to be
+        // in .env — that's real config for the live site's actual fee, not a
         // fixture this assertion should be coupled to.
-        config(['icpep.membership_fee' => 50]);
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
 
-        $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now()]);
+        $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now(), 'payment2_paid_at' => now()]);
         $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year']);
 
         // Revenue is only returned to finance roles.
@@ -172,7 +173,10 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('stats.thirdYear', 1)
             ->assertJsonPath('stats.fourthYear', 1)
             ->assertJsonPath('stats.paid', 1)
-            ->assertJsonPath('stats.revenue', 50)
+            // One member fully paid (50+25), one paying nothing yet: 75
+            // collected, 75 still outstanding on the other.
+            ->assertJsonPath('stats.revenue', 75)
+            ->assertJsonPath('stats.pendingRevenue', 75)
             ->assertJsonCount(4, 'membersByClass.data')
             ->assertJsonCount(6, 'registrationsOverTime.data');
     }
@@ -197,7 +201,7 @@ class AdminApiTest extends TestCase
 
         // Payment filter.
         $this->actingAs($admin)
-            ->getJson('/api/admin/members?payment=unpaid')
+            ->getJson('/api/admin/members?payment=p1_unpaid')
             ->assertOk()
             ->assertJsonCount(2, 'data');
 
@@ -293,7 +297,10 @@ class AdminApiTest extends TestCase
         $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
 
         $this->assertSame(
-            ['Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email', 'Payment Status', 'Paid At', 'Registered At'],
+            [
+                'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email',
+                'Payment 1 Status', 'Payment 1 Paid At', 'Payment 2 Status', 'Payment 2 Paid At', 'Registered At',
+            ],
             $rows[0],
         );
         $this->assertCount(2, $rows); // header + the one 3A row — the 3B member is excluded.
@@ -318,7 +325,7 @@ class AdminApiTest extends TestCase
         $this->makeApplication(['paid_at' => now()]);
 
         $response = $this->actingAs($this->admin())
-            ->get('/api/admin/members/export/pdf?payment=paid&search=Dela')
+            ->get('/api/admin/members/export/pdf?payment=p1_paid&search=Dela')
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
 
@@ -347,9 +354,9 @@ class AdminApiTest extends TestCase
 
     public function test_payments_ledger_lists_and_filters(): void
     {
-        // Pinned rather than left to whatever MEMBERSHIP_FEE happens to be in
-        // .env — see test_dashboard_numbers_match_the_data for why.
-        config(['icpep.membership_fee' => 50]);
+        // Pinned rather than left to whatever MEMBERSHIP_FEE_1 happens to be
+        // in .env — see test_dashboard_numbers_match_the_data for why.
+        config(['icpep.membership_fee_1' => 50]);
 
         // Marking paid writes a 'paid' ledger row via the model event.
         $this->makeApplication(['section' => 'Section A'])->update(['paid_at' => now()]);
@@ -360,7 +367,29 @@ class AdminApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.action', 'paid')
+            ->assertJsonPath('data.0.kind', 'payment1')
             ->assertJsonPath('data.0.amount', 50);
+    }
+
+    public function test_payments_ledger_filters_by_payment_batch(): void
+    {
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
+
+        $this->makeApplication(['email' => 'batch@example.com'])->update(['paid_at' => now(), 'payment2_paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?kind=payment1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.kind', 'payment1')
+            ->assertJsonPath('data.0.amount', 50);
+
+        $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?kind=payment2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.kind', 'payment2')
+            ->assertJsonPath('data.0.amount', 25);
     }
 
     public function test_payments_ledger_tags_each_row_with_its_semester(): void
@@ -416,14 +445,14 @@ class AdminApiTest extends TestCase
         $member = $this->makeApplication();
         $admin = $this->treasurer();
 
-        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid", ['batch' => 1])->assertOk();
         $this->assertNotNull($member->fresh()->paid_at);
-        $this->assertDatabaseHas('payment_transactions', ['application_id' => $member->id, 'action' => 'paid']);
+        $this->assertDatabaseHas('payment_transactions', ['application_id' => $member->id, 'action' => 'paid', 'kind' => 'payment1']);
         // Payment History is the ledger for this — it isn't duplicated into
         // the Activity Log too.
         $this->assertDatabaseMissing('activity_logs', ['action' => 'paid']);
 
-        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid", ['batch' => 1])->assertOk();
         $this->assertNull($member->fresh()->paid_at);
     }
 
@@ -469,7 +498,7 @@ class AdminApiTest extends TestCase
         $paid = $this->makeApplication(['email' => 'p@example.com', 'paid_at' => now()->subDays(5)]);
 
         $this->actingAs($this->treasurer())
-            ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'paid'])
+            ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'payment1_paid'])
             ->assertOk()
             // `count` is the ids considered, not the rows changed — the admin
             // reports its own figure for what actually moved.
@@ -483,27 +512,29 @@ class AdminApiTest extends TestCase
 
     public function test_bulk_mark_paid_writes_the_ledger_in_bulk_and_reports_updates(): void
     {
-        config(['icpep.membership_fee' => 75]);
+        config(['icpep.membership_fee_1' => 50]);
 
         $a = $this->makeApplication(['email' => 'a@example.com', 'surname' => 'Alpha']);
         $b = $this->makeApplication(['email' => 'b@example.com', 'surname' => 'Bravo']);
 
         $response = $this->actingAs($this->treasurer())
-            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'paid'])
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'payment1_paid'])
             ->assertOk()
             ->assertJsonPath('count', 2)
             ->assertJsonCount(2, 'updated');
 
         $updated = collect($response->json('updated'))->keyBy('id');
-        $this->assertTrue($updated[$a->id]['isPaid']);
-        $this->assertNotNull($updated[$a->id]['paidAt']);
+        $this->assertTrue($updated[$a->id]['isPayment1Paid']);
+        $this->assertNotNull($updated[$a->id]['payment1PaidAt']);
+        $this->assertFalse($updated[$a->id]['isPayment2Paid']);
 
         // One ledger row per member — written as one bulk insert rather than
         // one round trip per member. Payment History is the ledger for this;
         // it isn't also duplicated into the Activity Log.
         $this->assertSame(1, $a->paymentTransactions()->where('action', PaymentTransaction::PAID)->count());
         $this->assertSame(1, $b->paymentTransactions()->where('action', PaymentTransaction::PAID)->count());
-        $this->assertSame(75.0, (float) $a->paymentTransactions()->sole()->amount);
+        $this->assertSame(50.0, (float) $a->paymentTransactions()->sole()->amount);
+        $this->assertSame(PaymentTransaction::PAYMENT_1, $a->paymentTransactions()->sole()->kind);
         $this->assertSame(0, ActivityLog::where('action', 'paid')->count());
     }
 
@@ -514,16 +545,86 @@ class AdminApiTest extends TestCase
         $member->paymentTransactions()->delete(); // isolate this test's own ledger row
 
         $this->actingAs($this->treasurer())
-            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'unpaid'])
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'payment1_unpaid'])
             ->assertOk()
-            ->assertJsonPath('updated.0.isPaid', false)
-            ->assertJsonPath('updated.0.paidAt', null);
+            ->assertJsonPath('updated.0.isPayment1Paid', false)
+            ->assertJsonPath('updated.0.payment1PaidAt', null);
 
         $tx = $member->paymentTransactions()->sole();
         $this->assertSame(PaymentTransaction::REVOKED, $tx->action);
         // The reversal is stamped against the original payment date, not today.
         $this->assertTrue($tx->effective_at->isSameDay($paidOn));
         $this->assertNull($member->fresh()->paid_at);
+    }
+
+    public function test_bulk_payment2_paid_requires_payment1_paid(): void
+    {
+        $notEligible = $this->makeApplication(['email' => 'n@example.com']); // Payment 1 unpaid
+        $eligible = $this->makeApplication(['email' => 'e@example.com', 'paid_at' => now()]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$notEligible->id, $eligible->id], 'action' => 'payment2_paid'])
+            ->assertOk()
+            ->assertJsonPath('count', 2)
+            // Only the eligible member is reported changed — the other is
+            // silently skipped, not errored, same as an already-paid member is.
+            ->assertJsonCount(1, 'updated');
+
+        $this->assertSame($eligible->id, $response->json('updated.0.id'));
+        $this->assertNull($notEligible->fresh()->payment2_paid_at);
+        $this->assertNotNull($eligible->fresh()->payment2_paid_at);
+    }
+
+    public function test_bulk_payment1_unpaid_is_blocked_while_payment2_is_paid(): void
+    {
+        $bothPaid = $this->makeApplication(['email' => 'both@example.com', 'paid_at' => now(), 'payment2_paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$bothPaid->id], 'action' => 'payment1_unpaid'])
+            ->assertOk()
+            ->assertJsonCount(0, 'updated');
+
+        $this->assertNotNull($bothPaid->fresh()->paid_at);
+    }
+
+    public function test_bulk_both_paid_pays_payment1_first_then_payment2(): void
+    {
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
+
+        $untouched = $this->makeApplication(['email' => 'untouched@example.com']);
+        $partial = $this->makeApplication(['email' => 'partial@example.com', 'paid_at' => now()->subDays(3)]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$untouched->id, $partial->id], 'action' => 'both_paid'])
+            ->assertOk()
+            ->assertJsonCount(2, 'updated');
+
+        $updated = collect($response->json('updated'))->keyBy('id');
+        $this->assertTrue($updated[$untouched->id]['isPayment1Paid']);
+        $this->assertTrue($updated[$untouched->id]['isPayment2Paid']);
+        $this->assertTrue($updated[$partial->id]['isPayment2Paid']);
+
+        // The already-paid member's Payment 1 date is untouched; only
+        // Payment 2 is newly written for them.
+        $this->assertTrue($partial->fresh()->paid_at->isSameDay(now()->subDays(3)));
+        $this->assertSame(1, $partial->paymentTransactions()->count());
+        $this->assertSame(2, $untouched->paymentTransactions()->count());
+    }
+
+    public function test_bulk_both_unpaid_reverses_both_payments(): void
+    {
+        $member = $this->makeApplication(['email' => 'both2@example.com', 'paid_at' => now(), 'payment2_paid_at' => now()]);
+        $member->paymentTransactions()->delete();
+
+        $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'both_unpaid'])
+            ->assertOk()
+            ->assertJsonPath('updated.0.isPayment1Paid', false)
+            ->assertJsonPath('updated.0.isPayment2Paid', false);
+
+        $this->assertNull($member->fresh()->paid_at);
+        $this->assertNull($member->fresh()->payment2_paid_at);
+        $this->assertSame(2, $member->paymentTransactions()->where('action', PaymentTransaction::REVOKED)->count());
     }
 
     public function test_bulk_delete_and_restore_report_no_row_patch(): void
