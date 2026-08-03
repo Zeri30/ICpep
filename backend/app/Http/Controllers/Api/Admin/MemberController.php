@@ -628,10 +628,37 @@ class MemberController extends Controller
             $out = fopen('php://output', 'w');
             fputcsv($out, self::EXPORT_COLUMNS);
             foreach ($members as $member) {
-                fputcsv($out, $this->exportRow($member));
+                fputcsv($out, array_map(self::escapeCsvFormula(...), $this->exportRow($member)));
             }
             fclose($out);
         }, $this->exportFilename($request, 'csv'), ['Content-Type' => 'text/csv']);
+    }
+
+    /**
+     * Every field here traces back to the public application form, which
+     * never restricted what characters a name or address could contain — so
+     * a surname of "=cmd|..." reaching a spreadsheet unescaped would run as a
+     * formula the moment an officer opens this CSV in Excel/Sheets, not
+     * merely display oddly. A leading apostrophe is the standard fix: it
+     * forces the cell to be read as text, and is itself invisible once
+     * opened. Only cells actually starting with a formula-triggering
+     * character pay for it — ordinary names and IDs pass through untouched.
+     */
+    private static function escapeCsvFormula(?string $value): string
+    {
+        // student_id is nullable (see the applications migration) — every
+        // other exportRow() field is a guaranteed string, but fputcsv() has
+        // always been fine printing null as empty, so this stays fine too.
+        $value ??= '';
+
+        return str_starts_with($value, '=')
+            || str_starts_with($value, '+')
+            || str_starts_with($value, '-')
+            || str_starts_with($value, '@')
+            || str_starts_with($value, "\t")
+            || str_starts_with($value, "\r")
+            ? "'".$value
+            : $value;
     }
 
     public function exportExcel(Request $request): StreamedResponse

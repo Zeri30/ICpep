@@ -336,6 +336,26 @@ class AdminApiTest extends TestCase
         $this->assertSame('2024-001', $rows[1][0]);
     }
 
+    /**
+     * A surname of "=cmd|..." reaching the CSV unescaped would run as a
+     * formula the moment an officer opens it in Excel/Sheets — the classic
+     * CSV/formula-injection hole, and the one field here that's free-text
+     * from the public application form rather than a fixed set of choices.
+     */
+    public function test_members_export_csv_escapes_a_formula_leading_full_name(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication(['surname' => '=cmd|\'/C calc\'!A0', 'given_name' => 'Juan']);
+
+        $response = $this->actingAs($this->admin())
+            ->get('/api/admin/members/export/csv')
+            ->assertOk();
+
+        $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
+
+        $this->assertStringStartsWith("'=", $rows[1][1]);
+    }
+
     public function test_members_export_excel_returns_xlsx_file(): void
     {
         Storage::fake('supabase');
