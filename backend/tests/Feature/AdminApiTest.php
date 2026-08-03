@@ -68,7 +68,12 @@ class AdminApiTest extends TestCase
     {
         $deactivated = User::factory()->inactive()->create(['email' => 'someone-else@example.com']);
 
-        $this->actingAs($deactivated)->getJson('/api/admin/me')->assertForbidden();
+        // `reason` is what tells the React admin's SessionEndedModal to show
+        // itself for this 403 specifically, rather than every permission
+        // denial — see lib/adminApi.ts's parse().
+        $this->actingAs($deactivated)->getJson('/api/admin/me')
+            ->assertForbidden()
+            ->assertJson(['reason' => 'account_deactivated']);
     }
 
     public function test_me_returns_officer_and_meta(): void

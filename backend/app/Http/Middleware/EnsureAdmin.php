@@ -32,6 +32,7 @@ class EnsureAdmin
             // while signed in elsewhere).
             return response()->json([
                 'message' => 'This account has been deactivated. Contact an administrator for access.',
+                'reason' => 'account_deactivated',
             ], 403);
         }
 

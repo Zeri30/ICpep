@@ -107,11 +107,11 @@ async function getCsrf(force = false): Promise<string> {
   return token;
 }
 
-/** Fired once when a 401 reveals the session is already gone — e.g. idle
-    timeout, User Management's "log out all admins", or a deactivation —
-    picked up by SessionEndedModal.tsx to explain why before redirecting,
-    instead of the officer just silently landing back on the public site
-    mid-click with no idea why. */
+/** Fired once a response reveals the session is already gone — e.g. idle
+    timeout or User Management's "log out all admins" (401), or a mid-session
+    deactivation (403) — picked up by SessionEndedModal.tsx to explain why
+    before redirecting, instead of the officer just silently landing back on
+    the public site mid-click with no idea why. */
 export const SESSION_ENDED_EVENT = "icpep:session-ended";
 export type SessionEndedDetail = { message: string };
 
@@ -134,9 +134,12 @@ function clearIdleActivityClock(): void {
   }
 }
 
-// Only the first 401 announces — SessionWatchdog's poll and whatever request
-// actually triggered this can both land around the same time, and only one
-// modal should show.
+// Only the first qualifying response announces — SessionWatchdog's poll and
+// whatever request actually triggered this can both land around the same
+// time, and only one modal should show. Also set proactively by the
+// intentional sign-out flows (signOut, logoutAllSessions) before they ask the
+// server to end the session — a poller racing the same request must not
+// mistake the officer's own logout for a forced one.
 let sessionEndedAnnounced = false;
 
 function announceSessionEnded(message: string): void {
@@ -154,16 +157,18 @@ async function parse(res: Response): Promise<unknown> {
 
   const message =
     (data as { message?: string }).message ?? "Something went wrong. Please try again.";
+  const reason = (data as { reason?: string }).reason;
 
-  // Session expired or signed out elsewhere. EnforceIdleTimeout sends a
-  // `reason` alongside a message that already explains itself (e.g. "Your
-  // session ended after being inactive for too long.") — anything else that
-  // 401s (a deleted session row, a deactivated account) just says
-  // "Unauthenticated." on its own, so a generic explanation stands in.
-  if (res.status === 401) {
-    announceSessionEnded(
-      typeof (data as { reason?: string }).reason === "string" ? message : GENERIC_SESSION_ENDED_MESSAGE,
-    );
+  // Session expired or signed out elsewhere. EnforceIdleTimeout's timeout
+  // (401) and EnsureAdmin's mid-session deactivation check (403) both send a
+  // `reason` alongside a message that already explains itself — anything
+  // else that 401s (a deleted session row, e.g. "log out all admins") just
+  // says "Unauthenticated." on its own, so a generic explanation stands in.
+  // Any other 403 (a permission Gate, an AuthorizationException) is the
+  // officer's own account being refused something, not a termination, so
+  // it's left alone here.
+  if (res.status === 401 || (res.status === 403 && reason === "account_deactivated")) {
+    announceSessionEnded(typeof reason === "string" ? message : GENERIC_SESSION_ENDED_MESSAGE);
   }
   throw new ApiError(res.status, message);
 }
@@ -204,6 +209,10 @@ export async function apiSend<T>(
 
 /** Sign out: clears the session and returns the landing-page URL. */
 export async function signOut(): Promise<void> {
+  // Set before the request goes out, not after: SessionWatchdog's poll (or
+  // any other page poll) can land a 401 while this call is in flight, or in
+  // the instant before window.location.href actually navigates away.
+  sessionEndedAnnounced = true;
   const { redirect } = await apiSend<{ redirect: string }>(
     "POST",
     "/auth/admin/logout",
@@ -223,6 +232,8 @@ export async function logoutOtherSessions(): Promise<void> {
 /** "Manage sessions" — sign this account out everywhere, including the
     device calling this, then return the landing-page URL. */
 export async function logoutAllSessions(): Promise<void> {
+  // Same race as signOut() — this ends the calling device's own session too.
+  sessionEndedAnnounced = true;
   const { redirect } = await apiSend<{ redirect: string }>("POST", "/me/sessions/logout-all");
   clearIdleActivityClock();
   window.location.href = redirect ?? "/";

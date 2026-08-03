@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\RememberMeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,7 +65,16 @@ class AdminAuthController extends Controller
         // so failing here always means one specific thing — say so plainly
         // rather than the vaguer "cannot access the admin", which read like a
         // permissions problem rather than a deactivated account.
-        if (! Auth::user()->canAccessAdmin()) {
+        //
+        // attempt() just succeeded, so a user is guaranteed to be signed in —
+        // Auth::user() is typed to the generic Authenticatable contract,
+        // which doesn't declare canAccessAdmin(), so this app-specific
+        // subclass is spelled out for the type checker (see EnsureAdmin for
+        // the same annotation).
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->canAccessAdmin()) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             RateLimiter::hit($key, self::DECAY_SECONDS);
