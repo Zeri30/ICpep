@@ -17,10 +17,9 @@
    the next request to bounce off a 401. */
 
 import { useEffect, useRef } from "react";
-import { pingActivity, signOut } from "@/lib/adminApi";
+import { IDLE_ACTIVITY_STORAGE_KEY as STORAGE_KEY, pingActivity, signOut } from "@/lib/adminApi";
 
 const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
-const STORAGE_KEY = "icpep:admin-last-activity";
 const PING_MIN_INTERVAL_MS = 2 * 60 * 1000;
 const LOCAL_WRITE_MIN_INTERVAL_MS = 5 * 1000;
 const CHECK_INTERVAL_MS = 60 * 1000;

@@ -118,6 +118,22 @@ export type SessionEndedDetail = { message: string };
 const GENERIC_SESSION_ENDED_MESSAGE =
   "You've been signed out. This can happen if your session ended, your account was deactivated, or an administrator signed every admin out.";
 
+/** IdleLogout's "last real activity" clock (see that component). Shared by
+    every tab *and every login* on this origin, so it has to be cleared
+    whenever a session actually ends — otherwise a timestamp left over from a
+    session that ended hours ago survives into the next, unrelated login and
+    IdleLogout reads it as "already idle", signing the freshly-logged-in
+    officer straight back out. */
+export const IDLE_ACTIVITY_STORAGE_KEY = "icpep:admin-last-activity";
+
+function clearIdleActivityClock(): void {
+  try {
+    window.localStorage.removeItem(IDLE_ACTIVITY_STORAGE_KEY);
+  } catch {
+    // Private mode / storage disabled — IdleLogout no-ops the same way.
+  }
+}
+
 // Only the first 401 announces — SessionWatchdog's poll and whatever request
 // actually triggered this can both land around the same time, and only one
 // modal should show.
@@ -126,6 +142,7 @@ let sessionEndedAnnounced = false;
 function announceSessionEnded(message: string): void {
   if (sessionEndedAnnounced || typeof window === "undefined") return;
   sessionEndedAnnounced = true;
+  clearIdleActivityClock();
   window.dispatchEvent(
     new CustomEvent<SessionEndedDetail>(SESSION_ENDED_EVENT, { detail: { message } }),
   );
@@ -193,6 +210,7 @@ export async function signOut(): Promise<void> {
     undefined,
     true,
   );
+  clearIdleActivityClock();
   window.location.href = redirect ?? "/";
 }
 
@@ -206,6 +224,7 @@ export async function logoutOtherSessions(): Promise<void> {
     device calling this, then return the landing-page URL. */
 export async function logoutAllSessions(): Promise<void> {
   const { redirect } = await apiSend<{ redirect: string }>("POST", "/me/sessions/logout-all");
+  clearIdleActivityClock();
   window.location.href = redirect ?? "/";
 }
 
