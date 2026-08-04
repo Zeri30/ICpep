@@ -42,7 +42,7 @@ import {
   ymd,
 } from "@/components/admin/schedule/calendarDates";
 import { Bar, Pill } from "@/components/admin/ui/Skeleton";
-import { useAdminResource } from "@/lib/adminApi";
+import { useEventsResource } from "@/components/admin/useEventsResource";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
 /** What the modal is currently doing: closed, opening a day, or opening an event. */
@@ -162,7 +162,7 @@ export default function EventCalendar() {
   // files events under, which is not necessarily the viewer's device's.
   const today = useMemo(() => todayIn(meta.timezone), [meta.timezone]);
 
-  const { data, loading, error, refresh } = useAdminResource<{ data: ScheduledEvent[] }>("/events");
+  const { data, loading, error, refresh } = useEventsResource<{ data: ScheduledEvent[] }>();
   const events = useMemo(() => data?.data ?? [], [data]);
 
   const [cursor, setCursor] = useState(() => {
@@ -326,7 +326,7 @@ export default function EventCalendar() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">
-            Calendar
+            Schedules
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {canManage

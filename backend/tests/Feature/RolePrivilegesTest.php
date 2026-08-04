@@ -80,7 +80,7 @@ class RolePrivilegesTest extends TestCase
         // the grant belongs to the role rather than the row it was opened from.
         $after = $this->member();
         $this->actingAs($this->acting(UserRole::President))
-            ->postJson("/api/admin/members/{$after->id}/toggle-paid")
+            ->postJson("/api/admin/members/{$after->id}/toggle-paid", ['batch' => 1])
             ->assertOk();
 
         $this->assertNotNull($after->fresh()->paid_at);
@@ -96,6 +96,7 @@ class RolePrivilegesTest extends TestCase
         $this->actingAs($this->acting(UserRole::Secretary))
             ->patchJson("/api/admin/members/{$member->id}", [
                 'surname' => 'Dela Cruz', 'givenName' => 'Juan', 'middleInitial' => 'S',
+                'studentId' => '1234567890',
                 'yearLevel' => '3rd Year', 'section' => 'Section A', 'birthday' => '2004-01-01',
                 'address' => '123 Rizal St', 'email' => 'juan@example.com', 'phone' => '09123456789',
                 'paidAt' => now()->toIso8601String(),
@@ -254,7 +255,7 @@ class RolePrivilegesTest extends TestCase
         $member = $this->member();
 
         $this->actingAs($treasurer)
-            ->postJson("/api/admin/members/{$member->id}/toggle-paid")
+            ->postJson("/api/admin/members/{$member->id}/toggle-paid", ['batch' => 1])
             ->assertOk();
     }
 

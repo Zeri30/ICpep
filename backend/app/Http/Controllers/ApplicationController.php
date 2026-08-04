@@ -76,7 +76,7 @@ class ApplicationController extends Controller
             'surname'        => ['required', 'string', 'max:100'],
             'givenName'      => ['required', 'string', 'max:100'],
             'middleInitial'  => ['nullable', 'string', 'max:1'],
-            'studentId'      => ['required', 'string', 'digits:10', 'unique:applications,student_id'],
+            'studentId'      => ['required', 'string', 'digits:10'],
             'yearLevel'      => ['required', 'string', 'max:50'],
             'section'        => ['required', 'string', 'max:50'],
             'birthday'       => ['required', 'date'],
@@ -88,19 +88,41 @@ class ApplicationController extends Controller
         ]);
 
         // Duplicate safety net (checked before we upload anything). One active
-        // application per email address within the current list: a student who
-        // already applied — by accident, a page refresh, the back button, or a
-        // second tab — is turned away with a clear message rather than filed
-        // twice. The email is matched case-insensitively so "Juan@x" and
-        // "juan@x" are the same person.
-        if ($this->alreadyApplied($term->id, $validated['email'])) {
+        // application per email address, and per student ID, within the current
+        // list: a student who already applied — by accident, a page refresh, the
+        // back button, or a second tab — is turned away with a clear message
+        // rather than filed twice. The email is matched case-insensitively so
+        // "Juan@x" and "juan@x" are the same person.
+        if ($this->alreadyApplied($term->id, $validated['email'], $validated['studentId'])) {
             return $this->duplicateResponse();
         }
+
+        // A returning student (same ID, an earlier term) already has a formal
+        // photo and e-signature on file. Reusing those instead of keeping a
+        // fresh pair per term is what keeps the bucket from growing every time
+        // the same person re-registers — see the migration that scoped
+        // student_id uniqueness per term for why this is now possible at all.
+        $previous = Application::withTrashed()
+            ->where('student_id', $validated['studentId'])
+            ->whereNotNull('picture_path')
+            ->orderByDesc('id')
+            ->first(['id', 'signature_path', 'picture_path']);
 
         // Upload files to the configured disk. store() generates a random,
         // collision-free name and returns the path within the bucket.
         $signaturePath = $request->file('signature')->store('signatures');
         $picturePath = $request->file('picture')->store('pictures');
+
+        if ($previous) {
+            // One student, one current photo/signature: point every one of
+            // this student's records — this term and every earlier one — at
+            // the freshly uploaded files, then remove the ones they replace.
+            Storage::delete(array_filter([$previous->signature_path, $previous->picture_path]));
+
+            Application::withTrashed()
+                ->where('student_id', $validated['studentId'])
+                ->update(['signature_path' => $signaturePath, 'picture_path' => $picturePath]);
+        }
 
         try {
             $application = Application::create([
@@ -120,10 +142,17 @@ class ApplicationController extends Controller
             ]);
         } catch (QueryException $e) {
             // Two submissions raced past the check above at the same moment; the
-            // unique index (applications_term_email_active_unique) is the last
-            // line of defence. 23505 is Postgres' unique-violation SQLSTATE.
+            // unique index (applications_term_email_active_unique /
+            // applications_term_student_id_active_unique) is the last line of
+            // defence. 23505 is Postgres' unique-violation SQLSTATE.
             if ($e->getCode() === '23505') {
-                Storage::delete([$signaturePath, $picturePath]);
+                // Only clean up the freshly uploaded files when nothing else
+                // references them yet — if $previous existed, the update above
+                // already made them canonical for this student's earlier rows,
+                // so deleting them here would break those instead.
+                if (! $previous) {
+                    Storage::delete([$signaturePath, $picturePath]);
+                }
 
                 return $this->duplicateResponse();
             }
@@ -137,12 +166,15 @@ class ApplicationController extends Controller
         ], 201);
     }
 
-    /** Is there already a live application under this email in the given list? */
-    private function alreadyApplied(int $termId, string $email): bool
+    /** Is there already a live application under this email or student ID in the given list? */
+    private function alreadyApplied(int $termId, string $email, string $studentId): bool
     {
         return Application::query()
             ->where('membership_term_id', $termId)
-            ->whereRaw('lower(email) = ?', [mb_strtolower(trim($email))])
+            ->where(function ($query) use ($email, $studentId): void {
+                $query->whereRaw('lower(email) = ?', [mb_strtolower(trim($email))])
+                    ->orWhere('student_id', $studentId);
+            })
             ->exists();
     }
 

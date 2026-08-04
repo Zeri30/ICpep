@@ -52,8 +52,12 @@ export type Member = {
   classCode: string;
   birthday: string | null;
   address: string;
-  isPaid: boolean;
-  paidAt: string | null;
+  /** Payment 1 (₱50) — must be paid before Payment 2 can be. */
+  isPayment1Paid: boolean;
+  payment1PaidAt: string | null;
+  /** Payment 2 (₱25) — only payable once Payment 1 is. */
+  isPayment2Paid: boolean;
+  payment2PaidAt: string | null;
   createdAt: string | null;
   deletedAt: string | null;
   photoUrl: string | null;
@@ -237,11 +241,16 @@ export type PaymentRow = {
   section: string | null;
   yearLevel: string | null;
   action: "paid" | "revoked" | "adjusted";
+  /** Which of the two sequential payment batches this row is for. */
+  kind: "payment1" | "payment2";
   amount: number;
   effectiveAt: string | null;
   previousEffectiveAt: string | null;
   recordedAt: string | null;
   actor: string | null;
+  /** Which semester this event belongs to. Null only for rows written before
+      terms existed. */
+  paymentTerm: { isCurrent: boolean; shortLabel: string } | null;
 };
 
 export type AdminUser = {

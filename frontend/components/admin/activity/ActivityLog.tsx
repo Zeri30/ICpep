@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { markModuleViewed, useAdminResource } from "@/lib/adminApi";
+import { markModuleViewed } from "@/lib/adminApi";
+import { useActivityLogResource } from "@/components/admin/activity/useActivityLogResource";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { ActivityRow, Paginated } from "@/lib/adminTypes";
 
@@ -53,10 +54,12 @@ const selectCls =
 const ACTION_CLS: Record<string, string> = {
   registered: "border-green-500/30 bg-green-500/10 text-green-400",
   restored: "border-green-500/30 bg-green-500/10 text-green-400",
-  paid: "border-green-500/30 bg-green-500/10 text-green-400",
   deleted: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
   updated: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   login: "border-line bg-white/5 text-secondary-foreground",
+  logout: "border-line bg-white/5 text-secondary-foreground",
+  login_failed: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
+  remember_token_reused: "border-red-500/30 bg-red-500/10 text-red-400",
   // User Management.
   user_created: "border-green-500/30 bg-green-500/10 text-green-400",
   user_activated: "border-green-500/30 bg-green-500/10 text-green-400",
@@ -64,6 +67,7 @@ const ACTION_CLS: Record<string, string> = {
   password_reset: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   user_deactivated: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
   user_deleted: "border-red-500/30 bg-red-500/10 text-red-400",
+  users_logged_out_all: "border-red-500/30 bg-red-500/10 text-red-400",
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -100,7 +104,7 @@ export default function ActivityLog() {
     return p.toString();
   }, [debounced, action, from, until, page]);
 
-  const { data, loading, error } = useAdminResource<Paginated<ActivityRow>>(`/activity?${qs}`);
+  const { data, loading, fetching, error } = useActivityLogResource<Paginated<ActivityRow>>(`/activity?${qs}`);
 
   const applyPreset = (range: { from: string; until: string }) => {
     setFrom(range.from);
@@ -165,8 +169,6 @@ export default function ActivityLog() {
             <option value="updated">Edited</option>
             <option value="deleted">Deleted</option>
             <option value="restored">Restored</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
           </optgroup>
           <optgroup label="User management">
             <option value="user_created">User created</option>
@@ -175,8 +177,14 @@ export default function ActivityLog() {
             <option value="user_deactivated">User deactivated</option>
             <option value="user_deleted">User deleted</option>
             <option value="password_reset">Password reset</option>
+            <option value="users_logged_out_all">Logged out all admins</option>
           </optgroup>
-          <option value="login">Login</option>
+          <optgroup label="Sign-in">
+            <option value="login">Login</option>
+            <option value="logout">Logout</option>
+            <option value="login_failed">Failed login</option>
+            <option value="remember_token_reused">Remember-me cookie reused</option>
+          </optgroup>
         </select>
 
         <div className="mx-1 hidden h-6 w-px bg-line sm:block" />
@@ -237,7 +245,7 @@ export default function ActivityLog() {
           loading && !data ? (
             <PaginationSkeleton />
           ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} />
+            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
           ) : null
         }
       />

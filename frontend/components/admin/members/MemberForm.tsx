@@ -35,8 +35,10 @@ type FormState = {
   address: string;
   email: string;
   phone: string;
-  isPaid: boolean;
-  paidAt: string; // datetime-local value
+  isPayment1Paid: boolean;
+  payment1PaidAt: string; // datetime-local value
+  isPayment2Paid: boolean;
+  payment2PaidAt: string; // datetime-local value
 };
 
 /** Convert an ISO timestamp to the value a <input type="datetime-local"> wants. */
@@ -69,8 +71,10 @@ export function useMemberForm({ member, onDone }: { member: Member; onDone: () =
     address: member.address,
     email: member.email,
     phone: member.phone,
-    isPaid: member.isPaid,
-    paidAt: toLocalInput(member.paidAt),
+    isPayment1Paid: member.isPayment1Paid,
+    payment1PaidAt: toLocalInput(member.payment1PaidAt),
+    isPayment2Paid: member.isPayment2Paid,
+    payment2PaidAt: toLocalInput(member.payment2PaidAt),
   }));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -84,7 +88,12 @@ export function useMemberForm({ member, onDone }: { member: Member; onDone: () =
     try {
       // The toggle owns paid state; keep the existing time when it was already
       // paid, else stamp now — mirroring the Filament form.
-      const paidAt = form.isPaid ? (form.paidAt ? new Date(form.paidAt).toISOString() : new Date().toISOString()) : null;
+      const paidAt = form.isPayment1Paid
+        ? (form.payment1PaidAt ? new Date(form.payment1PaidAt).toISOString() : new Date().toISOString())
+        : null;
+      const payment2PaidAt = form.isPayment2Paid
+        ? (form.payment2PaidAt ? new Date(form.payment2PaidAt).toISOString() : new Date().toISOString())
+        : null;
       await apiSend("PATCH", `/members/${member.id}`, {
         surname: form.surname,
         givenName: form.givenName,
@@ -97,6 +106,7 @@ export function useMemberForm({ member, onDone }: { member: Member; onDone: () =
         email: form.email,
         phone: form.phone,
         paidAt,
+        payment2PaidAt,
       });
       notify("Member updated");
       onDone();
@@ -158,19 +168,72 @@ export function MemberFields({ state, boxed = true }: { state: MemberFormState; 
         // marks where personal data ends and a financial action begins.
         <section className={boxed ? section : "border-t border-line/60 pt-5"}>
           <h2 className={heading}>Membership Fee</h2>
-          <label className="flex items-center gap-3">
-            <input type="checkbox" checked={form.isPaid} onChange={(e) => set({ isPaid: e.target.checked })} className="size-5 accent-primary" />
-            <span className="text-sm text-foreground">
-              Paid <span className="text-muted-foreground">· adds {meta.currency}{meta.fee.toFixed(0)} to revenue</span>
-            </span>
-          </label>
-          {form.isPaid && (
-            <div className="mt-4 max-w-xs">
-              <label className={labelCls}>Date paid</label>
-              <input type="datetime-local" className={inputCls} value={form.paidAt} onChange={(e) => set({ paidAt: e.target.value })} />
-              <p className="mt-1.5 text-xs text-muted-foreground">Back-date this if the fee was collected earlier.</p>
+          <div className="space-y-5">
+            <div>
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={form.isPayment1Paid}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    // Payment 2 can't stay marked paid once Payment 1 is
+                    // unchecked — the same sequencing rule the backend
+                    // enforces (see MemberController::update).
+                    set(checked ? { isPayment1Paid: true } : { isPayment1Paid: false, isPayment2Paid: false });
+                  }}
+                  className="size-5 accent-primary"
+                />
+                <span className="text-sm text-foreground">
+                  Payment 1 – Paid{" "}
+                  <span className="text-muted-foreground">· adds {meta.currency}{meta.feePayment1.toFixed(0)} to revenue</span>
+                </span>
+              </label>
+              {form.isPayment1Paid && (
+                <div className="mt-3 max-w-xs">
+                  <label className={labelCls}>Date paid</label>
+                  <input
+                    type="datetime-local"
+                    className={inputCls}
+                    value={form.payment1PaidAt}
+                    onChange={(e) => set({ payment1PaidAt: e.target.value })}
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">Back-date this if the fee was collected earlier.</p>
+                </div>
+              )}
             </div>
-          )}
+
+            <div className={form.isPayment1Paid ? "" : "opacity-50"}>
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={form.isPayment2Paid}
+                  disabled={!form.isPayment1Paid}
+                  onChange={(e) => set({ isPayment2Paid: e.target.checked })}
+                  className="size-5 accent-primary disabled:cursor-not-allowed"
+                />
+                <span className="text-sm text-foreground">
+                  Payment 2 – Paid{" "}
+                  <span className="text-muted-foreground">· adds {meta.currency}{meta.feePayment2.toFixed(0)} to revenue</span>
+                </span>
+              </label>
+              {!form.isPayment1Paid ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">Complete Payment 1 first.</p>
+              ) : (
+                form.isPayment2Paid && (
+                  <div className="mt-3 max-w-xs">
+                    <label className={labelCls}>Date paid</label>
+                    <input
+                      type="datetime-local"
+                      className={inputCls}
+                      value={form.payment2PaidAt}
+                      onChange={(e) => set({ payment2PaidAt: e.target.value })}
+                    />
+                    <p className="mt-1.5 text-xs text-muted-foreground">Back-date this if the fee was collected earlier.</p>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </section>
       )}
     </>

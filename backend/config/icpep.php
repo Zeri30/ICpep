@@ -5,10 +5,14 @@ return [
     |--------------------------------------------------------------------------
     | Membership fee
     |--------------------------------------------------------------------------
-    | Amount (in PHP) each member pays. Drives the "expected revenue" figure on
-    | the admin dashboard. Change MEMBERSHIP_FEE in .env to update it.
+    | Collected in two sequential batches rather than one flat amount — ₱50
+    | (Payment 1) then ₱25 (Payment 2), ₱75 combined. Drives the "expected
+    | revenue" figure on the admin dashboard and the ledger amount recorded
+    | for each batch. Change MEMBERSHIP_FEE_1 / MEMBERSHIP_FEE_2 in .env to
+    | update them.
     */
-    'membership_fee' => (float) env('MEMBERSHIP_FEE', 50),
+    'membership_fee_1' => (float) env('MEMBERSHIP_FEE_1', 50),
+    'membership_fee_2' => (float) env('MEMBERSHIP_FEE_2', 25),
 
     'currency_symbol' => env('MEMBERSHIP_CURRENCY', '₱'),
 
@@ -34,4 +38,16 @@ return [
     | a relative path against. Same value CORS allows (see config/cors.php).
     */
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin idle timeout
+    |--------------------------------------------------------------------------
+    | Minutes of no genuine officer activity before a signed-in admin session
+    | is forced out — see App\Http\Middleware\EnforceIdleTimeout. Distinct
+    | from SESSION_LIFETIME (config/session.php): that resets on any request,
+    | including the admin UI's own background polling, so it does not reflect
+    | whether anyone is actually there.
+    */
+    'idle_timeout_minutes' => (int) env('ADMIN_IDLE_TIMEOUT_MINUTES', 360),
 ];

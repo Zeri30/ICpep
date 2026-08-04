@@ -18,12 +18,12 @@ type Counts = { members: number; payments: number; users: number; activity: numb
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null, need: null },
   { href: "/admin/members", label: "Members List", icon: Users, badgeKey: "members", need: "members.view" },
-  // Open to every role: reading the calendar needs no ability, only changing it
-  // does. So there is no `need` here — the module itself is not gated.
-  { href: "/admin/calendar", label: "Calendar", icon: CalendarDays, badgeKey: null, need: null },
+  // Open to every role: reading the schedule needs no ability, only changing
+  // it does. So there is no `need` here — the module itself is not gated.
+  { href: "/admin/schedules", label: "Schedules", icon: CalendarDays, badgeKey: null, need: null },
   { href: "/admin/payments", label: "Payment History", icon: Wallet, badgeKey: "payments", need: "finance.view" },
   { href: "/admin/users", label: "User Management", icon: ShieldCheck, badgeKey: "users", need: "users.manage" },
-  // Open to every role too — same reasoning as the Calendar above.
+  // Open to every role too — same reasoning as Schedules above.
   { href: "/admin/activity", label: "Activity Log", icon: Clock, badgeKey: "activity", need: null },
 ] as const satisfies ReadonlyArray<{
   href: string;

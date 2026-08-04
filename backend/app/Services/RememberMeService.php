@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ActivityLog;
 use App\Models\RememberToken;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -98,6 +99,21 @@ class RememberMeService
             // not match what was issued, the signature of a copied/leaked
             // cookie. There is no way to tell the legitimate device from the
             // copy from here, so every token this account holds is revoked.
+            //
+            // Not ActivityLog::record() — nobody is signed in on this request
+            // (that is exactly why AuthenticateViaRememberToken is trying this
+            // cookie at all), so there is no Auth::user() to tag it with. The
+            // account the token belonged to is the one this event is about.
+            $victim = User::find($token->user_id);
+            ActivityLog::create([
+                'actor' => $victim?->email,
+                'actor_name' => $victim?->name,
+                'actor_role' => $victim?->role?->value,
+                'ip_address' => $request->ip(),
+                'action' => 'remember_token_reused',
+                'description' => 'A "remember me" cookie was reused after being rotated — the signature of a copied cookie. Every remember-me token on this account has been revoked.',
+            ]);
+
             RememberToken::where('user_id', $token->user_id)->delete();
             self::forgetCookie();
 
@@ -122,6 +138,20 @@ class RememberMeService
     public static function forgetAllForUser(int $userId): void
     {
         RememberToken::where('user_id', $userId)->delete();
+    }
+
+    /**
+     * Every remember-me token on every account except $userId's own — the
+     * "log out all admins" kill switch's counterpart to evicting every
+     * `sessions` row but this account's. Scoped by account rather than by
+     * "not this request's cookie": an admin with no remember-me cookie at
+     * all (the common case) has no selector to exclude, which used to make
+     * this wipe every token unconditionally, including that admin's own
+     * other devices.
+     */
+    public static function forgetAllExcept(int $userId): void
+    {
+        RememberToken::where('user_id', '!=', $userId)->delete();
     }
 
     /** Every device except the one whose cookie is on this request. */

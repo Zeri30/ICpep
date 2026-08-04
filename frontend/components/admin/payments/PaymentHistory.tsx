@@ -5,12 +5,12 @@
    (descriptive), never summed. */
 
 import { CheckCircle2, History, PencilLine, Search, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
-import { markModuleViewed, useAdminResource } from "@/lib/adminApi";
+import { apiGet, markModuleViewed, useAdminResource } from "@/lib/adminApi";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
@@ -34,23 +34,35 @@ const EVENT = {
   adjusted: { label: "Date adjusted", cls: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent", Icon: PencilLine },
 } as const;
 
-function EventBadge({ action }: { action: PaymentRow["action"] }) {
+const KIND_LABEL: Record<PaymentRow["kind"], string> = {
+  payment1: "Payment 1",
+  payment2: "Payment 2",
+};
+
+function EventBadge({ action, paymentTerm }: { action: PaymentRow["action"]; paymentTerm: PaymentRow["paymentTerm"] }) {
   const e = EVENT[action] ?? EVENT.adjusted;
   const Icon = e.Icon;
+  // Which semester this event belongs to — "Current" for the active roster,
+  // otherwise the school-year it happened under.
+  const suffix = paymentTerm ? (paymentTerm.isCurrent ? "(Current)" : `(${paymentTerm.shortLabel})`) : "";
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${e.cls}`}>
-      <Icon size={12} /> {e.label}
+      <Icon size={12} /> {e.label}{suffix}
     </span>
   );
 }
 
 export default function PaymentHistory() {
   const { meta, money } = useAdmin();
-  const { selected: term, loading: termsLoading, isViewingPast } = useTerms();
+  const { selected: term, initialTermId, isViewingPast } = useTerms();
+  // Fire right away rather than waiting on `/terms` to resolve — see
+  // Dashboard.tsx/MembersList.tsx for the same pattern and its reasoning.
+  const termId = term?.id ?? initialTermId;
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [action, setAction] = useState("");
-  const [section, setSection] = useState("");
+  const [kind, setKind] = useState("");
+  const [klass, setKlass] = useState("");
   const [page, setPage] = useState(1);
 
   // Opening the list clears its sidebar badge — see markModuleViewed.
@@ -64,10 +76,12 @@ export default function PaymentHistory() {
   }, [search]);
 
   // A different list is a different dataset — go back to page 1 rather than
-  // landing on a page number that may not exist in it.
-  const [renderedTermId, setRenderedTermId] = useState(term?.id);
-  if (term?.id !== renderedTermId) {
-    setRenderedTermId(term?.id);
+  // landing on a page number that may not exist in it. Tracks `termId` (the
+  // guess-or-resolved id the query string actually uses), not `term?.id`
+  // directly — see MembersList.tsx for why that distinction matters.
+  const [renderedTermId, setRenderedTermId] = useState(termId);
+  if (termId !== renderedTermId) {
+    setRenderedTermId(termId);
     setPage(1);
   }
 
@@ -75,31 +89,104 @@ export default function PaymentHistory() {
     const p = new URLSearchParams();
     // The ledger is scoped to the same semester as the Members module, so a
     // term's collected fees and its headcount describe the same people.
-    if (term) p.set("term", String(term.id));
+    if (termId) p.set("term", String(termId));
     if (debounced) p.set("search", debounced);
     if (action) p.set("action", action);
-    if (section) p.set("section", section);
+    if (kind) p.set("kind", kind);
+    // Same combined year+section code the Members List filters on ("3A"..
+    // "4B"), resolved server-side against the two denormalised columns.
+    if (klass) p.set("class", klass);
     p.set("page", String(page));
     return p.toString();
-  }, [term, debounced, action, section, page]);
+  }, [termId, debounced, action, kind, klass, page]);
 
-  const { data, error } = useAdminResource<Paginated<PaymentRow>>(
-    termsLoading ? null : `/payments?${qs}`,
-  );
+  const { data, error, fetching, mutate } = useAdminResource<Paginated<PaymentRow>>(`/payments?${qs}`);
   const reset = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
+
+  // Same filters as `qs`, minus pagination — a poll always asks about every
+  // row those filters match, not just whichever page is on screen, since a
+  // new event always lands on page 1 regardless of what page is displayed.
+  const changesQs = useMemo(() => {
+    const p = new URLSearchParams(qs);
+    p.delete("page");
+    return p.toString();
+  }, [qs]);
 
   // Which semester the rows in `data` were fetched for — same reset-on-change
   // pattern as MembersList, so a term switch never shows the previous term's
   // ledger under the new term's heading while the new page is in flight.
-  const [dataTermId, setDataTermId] = useState(term?.id);
+  // Tracks `termId`, not `term?.id` — see MembersList.tsx.
+  const [dataTermId, setDataTermId] = useState(termId);
   const [lastData, setLastData] = useState(data);
   if (data !== lastData) {
     setLastData(data);
-    setDataTermId(term?.id);
+    setDataTermId(termId);
   }
-  const otherTerm = data !== null && term?.id !== dataTermId;
+  const otherTerm = data !== null && termId !== dataTermId;
   const rows = otherTerm ? [] : (data?.data ?? []);
   const awaitingRows = !error && (data === null || otherTerm);
+
+  /**
+   * Real-time sync: every few seconds, ask the server for ledger rows added
+   * since the last check (see PaymentController::changes, already filtered
+   * to match `changesQs`) and prepend them if the officer is on page 1 —
+   * where a new event always lands — so a payment another officer records
+   * elsewhere shows up here without a manual refresh, without ever
+   * refetching the page. Skipped on any other page: a row landing there
+   * isn't missing, it just isn't on the page in front of them yet.
+   *
+   * `pollRef` always calls through to the latest closure (current
+   * `changesQs`, `page` and `mutate`) kept fresh below, so the interval
+   * itself is set up once per term rather than needing to restart on every
+   * filter/page change — restarting would reset the `since` checkpoint to
+   * "now" and risk a change landing in the gap being missed.
+   */
+  const pollRef = useRef<(since: string) => Promise<string>>(async (since) => since);
+  useEffect(() => {
+    pollRef.current = async (since: string): Promise<string> => {
+      try {
+        const p = new URLSearchParams(changesQs);
+        p.set("since", since);
+        const { added, since: next } = await apiGet<{ added: PaymentRow[]; since: string }>(`/payments/changes?${p}`);
+
+        if (added.length > 0 && page === 1) {
+          mutate((prev) => {
+            if (!prev) return prev;
+            const data = [...added, ...prev.data].slice(0, prev.meta.per_page);
+            return {
+              data,
+              meta: {
+                ...prev.meta,
+                total: prev.meta.total + added.length,
+                // Page 1 always starts at row 1 once it holds anything — this
+                // branch only ever runs on page 1 (see the guard above), so
+                // recomputing both from `data.length` is safe even coming
+                // from an empty filtered page (from/to were null).
+                from: data.length === 0 ? null : 1,
+                to: data.length === 0 ? null : data.length,
+              },
+            };
+          });
+        }
+
+        return next;
+      } catch {
+        // Best-effort — retry from the same checkpoint next tick rather than
+        // silently skipping ahead over whatever landed during the failure.
+        return since;
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (!termId) return;
+
+    let since = new Date().toISOString();
+    const id = setInterval(async () => {
+      since = await pollRef.current(since);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [termId]);
 
   const amountCell = (v: number) => {
     if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;
@@ -126,16 +213,33 @@ export default function PaymentHistory() {
         </div>
       ),
     },
-    { key: "event", header: "Event", width: "14%", render: (r) => <EventBadge action={r.action} />, skeleton: <Pill w="w-20" /> },
+    {
+      key: "event",
+      header: "Event",
+      width: "14%",
+      render: (r) => (
+        <div className="flex flex-col items-start gap-1">
+          <EventBadge action={r.action} paymentTerm={r.paymentTerm} />
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{KIND_LABEL[r.kind]}</span>
+        </div>
+      ),
+      // Two lines, same reasoning as Member's — the cell now stacks the
+      // event badge over which payment batch it was.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Pill w="w-20" />
+          <Bar w="w-14" h="h-3" />
+        </div>
+      ),
+    },
     {
       key: "amount",
       header: "Amount",
-      align: "right",
       width: "16%",
-      // Fixed-width columns give every gap the same size at the default
-      // padding, but that default still reads as tight for a right-aligned
-      // number sitting next to left-aligned text — widen just this pair.
-      className: "pr-8",
+      // Left-aligned like every other column, so the fixed-width layout's
+      // default padding gives every column boundary the same visual gap —
+      // right-aligning just this one pushed its short text away from its
+      // neighbors on one side and left a wide gap on the other.
       render: (r) => amountCell(r.amount),
       skeleton: <Bar w="w-16" />,
     },
@@ -143,7 +247,6 @@ export default function PaymentHistory() {
       key: "yearLevel",
       header: "Year Level",
       width: "16%",
-      className: "pl-8",
       render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span>,
       skeleton: <Bar w="w-12" />,
     },
@@ -161,17 +264,6 @@ export default function PaymentHistory() {
     // Fills the space below the topbar and scrolls rows internally — see
     // MembersList for the height maths.
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
-      {/* Which semester's ledger this is. Same control as the Members module,
-          sharing the same selection, so switching here follows you there. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <TermSelect />
-        {isViewingPast && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-secondary/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            <History size={12} /> Past list
-          </span>
-        )}
-      </div>
-
       <div>
         <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
         {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
@@ -180,18 +272,35 @@ export default function PaymentHistory() {
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="relative w-full sm:w-auto">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={search} onChange={(e) => reset(setSearch)(e.target.value)} placeholder="Search member or officer…" className={`${selectCls} w-full pl-9 sm:w-56`} />
+          <input value={search} onChange={(e) => reset(setSearch)(e.target.value)} placeholder="Search member or officer…" className={`${selectCls} w-full pl-9 sm:w-72`} />
         </div>
         <select value={action} onChange={(e) => reset(setAction)(e.target.value)} className={selectCls} aria-label="Event">
-          <option value="">Any event</option>
+          <option value="">All</option>
           <option value="paid">Paid</option>
           <option value="revoked">Revoked</option>
-          <option value="adjusted">Date adjusted</option>
         </select>
-        <select value={section} onChange={(e) => reset(setSection)(e.target.value)} className={selectCls} aria-label="Section">
-          <option value="">Any section</option>
-          {meta.sections.map((s) => <option key={s} value={s}>{s}</option>)}
+        <select value={kind} onChange={(e) => reset(setKind)(e.target.value)} className={selectCls} aria-label="Payment batch">
+          <option value="">All batches</option>
+          <option value="payment1">Payment 1</option>
+          <option value="payment2">Payment 2</option>
         </select>
+        <select value={klass} onChange={(e) => reset(setKlass)(e.target.value)} className={selectCls} aria-label="Year & Section">
+          <option value="">All </option>
+          {meta.classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        {/* Which semester's ledger this is. Same control as the Members
+            module, sharing the same selection, so switching here follows you
+            there. Pushed to the far right of the filter row, away from the
+            search/event/section controls it doesn't narrow alongside. */}
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <TermSelect />
+          {isViewingPast && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-secondary/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <History size={12} /> Past list
+            </span>
+          )}
+        </div>
       </div>
 
       <DataTable
@@ -209,7 +318,7 @@ export default function PaymentHistory() {
           awaitingRows ? (
             <PaginationSkeleton />
           ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} />
+            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
           ) : null
         }
       />

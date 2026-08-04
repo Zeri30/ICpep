@@ -56,7 +56,9 @@ export type Officer = {
 };
 
 export type AdminMeta = {
-  fee: number;
+  /** Two sequential payment batches per member, ₱50 then ₱25 — see MeController::show. */
+  feePayment1: number;
+  feePayment2: number;
   currency: string;
   classOptions: string[];
   sections: string[];
@@ -107,16 +109,69 @@ async function getCsrf(force = false): Promise<string> {
   return token;
 }
 
+/** Fired once a response reveals the session is already gone — e.g. idle
+    timeout or User Management's "log out all admins" (401), or a mid-session
+    deactivation (403) — picked up by SessionEndedModal.tsx to explain why
+    before redirecting, instead of the officer just silently landing back on
+    the public site mid-click with no idea why. */
+export const SESSION_ENDED_EVENT = "icpep:session-ended";
+export type SessionEndedDetail = { message: string };
+
+const GENERIC_SESSION_ENDED_MESSAGE =
+  "You've been signed out. This can happen if your session ended, your account was deactivated, or an administrator signed every admin out.";
+
+/** IdleLogout's "last real activity" clock (see that component). Shared by
+    every tab *and every login* on this origin, so it has to be cleared
+    whenever a session actually ends — otherwise a timestamp left over from a
+    session that ended hours ago survives into the next, unrelated login and
+    IdleLogout reads it as "already idle", signing the freshly-logged-in
+    officer straight back out. */
+export const IDLE_ACTIVITY_STORAGE_KEY = "icpep:admin-last-activity";
+
+function clearIdleActivityClock(): void {
+  try {
+    window.localStorage.removeItem(IDLE_ACTIVITY_STORAGE_KEY);
+  } catch {
+    // Private mode / storage disabled — IdleLogout no-ops the same way.
+  }
+}
+
+// Only the first qualifying response announces — SessionWatchdog's poll and
+// whatever request actually triggered this can both land around the same
+// time, and only one modal should show. Also set proactively by the
+// intentional sign-out flows (signOut, logoutAllSessions) before they ask the
+// server to end the session — a poller racing the same request must not
+// mistake the officer's own logout for a forced one.
+let sessionEndedAnnounced = false;
+
+function announceSessionEnded(message: string): void {
+  if (sessionEndedAnnounced || typeof window === "undefined") return;
+  sessionEndedAnnounced = true;
+  clearIdleActivityClock();
+  window.dispatchEvent(
+    new CustomEvent<SessionEndedDetail>(SESSION_ENDED_EVENT, { detail: { message } }),
+  );
+}
+
 async function parse(res: Response): Promise<unknown> {
   const data = await res.json().catch(() => ({}));
   if (res.ok) return data;
 
-  // Session expired or signed out elsewhere — return to the public site.
-  if (res.status === 401 && typeof window !== "undefined") {
-    window.location.href = "/";
-  }
   const message =
     (data as { message?: string }).message ?? "Something went wrong. Please try again.";
+  const reason = (data as { reason?: string }).reason;
+
+  // Session expired or signed out elsewhere. EnforceIdleTimeout's timeout
+  // (401) and EnsureAdmin's mid-session deactivation check (403) both send a
+  // `reason` alongside a message that already explains itself — anything
+  // else that 401s (a deleted session row, e.g. "log out all admins") just
+  // says "Unauthenticated." on its own, so a generic explanation stands in.
+  // Any other 403 (a permission Gate, an AuthorizationException) is the
+  // officer's own account being refused something, not a termination, so
+  // it's left alone here.
+  if (res.status === 401 || (res.status === 403 && reason === "account_deactivated")) {
+    announceSessionEnded(typeof reason === "string" ? message : GENERIC_SESSION_ENDED_MESSAGE);
+  }
   throw new ApiError(res.status, message);
 }
 
@@ -156,12 +211,17 @@ export async function apiSend<T>(
 
 /** Sign out: clears the session and returns the landing-page URL. */
 export async function signOut(): Promise<void> {
+  // Set before the request goes out, not after: SessionWatchdog's poll (or
+  // any other page poll) can land a 401 while this call is in flight, or in
+  // the instant before window.location.href actually navigates away.
+  sessionEndedAnnounced = true;
   const { redirect } = await apiSend<{ redirect: string }>(
     "POST",
     "/auth/admin/logout",
     undefined,
     true,
   );
+  clearIdleActivityClock();
   window.location.href = redirect ?? "/";
 }
 
@@ -174,7 +234,10 @@ export async function logoutOtherSessions(): Promise<void> {
 /** "Manage sessions" — sign this account out everywhere, including the
     device calling this, then return the landing-page URL. */
 export async function logoutAllSessions(): Promise<void> {
+  // Same race as signOut() — this ends the calling device's own session too.
+  sessionEndedAnnounced = true;
   const { redirect } = await apiSend<{ redirect: string }>("POST", "/me/sessions/logout-all");
+  clearIdleActivityClock();
   window.location.href = redirect ?? "/";
 }
 
@@ -195,6 +258,18 @@ export async function markModuleViewed(module: "members" | "payments" | "users" 
   }
 }
 
+/** Real-interaction heartbeat for the 6-hour inactivity timeout (see
+    components/admin/IdleLogout.tsx and the backend's EnforceIdleTimeout).
+    Errors are swallowed — a missed heartbeat just means the next one, or the
+    server's own check on any other request, settles it. */
+export async function pingActivity(): Promise<void> {
+  try {
+    await apiSend<{ ok: true }>("POST", "/me/activity-ping");
+  } catch {
+    // Best-effort — see above.
+  }
+}
+
 /** Fetch a resource once, optionally re-fetching on an interval (like Filament's
     widget polling). Pass `path = null` to stay idle. */
 export function useAdminResource<T>(
@@ -204,6 +279,13 @@ export function useAdminResource<T>(
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Unlike `loading` (which starts true and never goes true again — it
+  // describes only the very first fetch), this is true for every in-flight
+  // request against the current `path`, including a page/filter/sort change
+  // well after the initial load. Callers with a pager use it to disable the
+  // page controls while a click's request is still outstanding, so a second
+  // click can't queue an overlapping request — see Pagination's `disabled`.
+  const [fetching, setFetching] = useState(false);
   const { pollMs } = opts;
 
   /**
@@ -220,6 +302,7 @@ export function useAdminResource<T>(
   const load = useCallback(async () => {
     if (path === null) return;
     const mine = ++requestId.current;
+    setFetching(true);
     try {
       const next = await apiGet<T>(path);
       if (mine !== requestId.current) return;
@@ -231,7 +314,10 @@ export function useAdminResource<T>(
     } finally {
       // Guarded too: a superseded request must not report that the current one
       // has finished loading.
-      if (mine === requestId.current) setLoading(false);
+      if (mine === requestId.current) {
+        setLoading(false);
+        setFetching(false);
+      }
     }
   }, [path]);
 
@@ -245,5 +331,16 @@ export function useAdminResource<T>(
     return () => clearInterval(id);
   }, [load, pollMs]);
 
-  return { data, error, loading, refresh: load };
+  /**
+   * Patches `data` in place from an updater, rather than re-fetching — for a
+   * caller that already knows exactly what changed (e.g. a real-time delta
+   * poll reporting one new row) and would otherwise pay for a full refetch
+   * just to repaint fields it was just handed. Mirrors
+   * useMembersListResource's `mutate`.
+   */
+  const mutate = useCallback((updater: (prev: T | null) => T | null) => {
+    setData(updater);
+  }, []);
+
+  return { data, error, loading, fetching, refresh: load, mutate };
 }

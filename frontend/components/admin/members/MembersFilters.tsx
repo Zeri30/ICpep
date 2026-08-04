@@ -75,9 +75,15 @@ export default function MembersFilters({
       </select>
 
       <select value={value.payment} onChange={(e) => set({ payment: e.target.value })} className={selectCls} aria-label="Payment">
-        <option value="">All payment</option>
-        <option value="paid">Paid</option>
-        <option value="unpaid">Unpaid</option>
+        <option value="">All Payments</option>
+        <option value="p1_paid">Payment 1 – Paid</option>
+        <option value="p1_unpaid">Payment 1 – Unpaid</option>
+        <option value="p2_paid">Payment 2 – Paid</option>
+        <option value="p2_unpaid">Payment 2 – Unpaid</option>
+        <option value="both_paid">Both Paid</option>
+        <option value="both_unpaid">Both Unpaid</option>
+        <option value="p1_paid_p2_unpaid">Payment 1 Paid, Payment 2 Unpaid</option>
+        <option value="p1_unpaid_p2_paid">Payment 1 Unpaid, Payment 2 Paid</option>
       </select>
 
       <select value={value.trashed} onChange={(e) => set({ trashed: e.target.value })} className={selectCls} aria-label="Trashed">

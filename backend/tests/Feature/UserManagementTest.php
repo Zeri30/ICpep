@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -193,6 +194,34 @@ class UserManagementTest extends TestCase
             ->assertUnprocessable();
 
         $this->assertTrue($me->fresh()->is_active);
+    }
+
+    /* --------------------------------------------------- log out all admins */
+
+    /** Regression test for the scoping bug: the endpoint used to exclude only
+     *  the one session id that clicked it, so a caller signed in on more than
+     *  one device lost their own other sessions too — contrary to the
+     *  endpoint's own promise to keep "the one making this request" signed
+     *  in, not just "the one tab". */
+    public function test_logout_all_admins_keeps_every_device_of_the_caller(): void
+    {
+        $me = $this->manager();
+        $other = User::factory()->create();
+
+        DB::table('sessions')->insert([
+            ['id' => 'me-device-a', 'user_id' => $me->id, 'payload' => 'x', 'last_activity' => time()],
+            ['id' => 'me-device-b', 'user_id' => $me->id, 'payload' => 'y', 'last_activity' => time()],
+            ['id' => 'other-device', 'user_id' => $other->id, 'payload' => 'z', 'last_activity' => time()],
+        ]);
+
+        $this->actingAs($me)
+            ->postJson('/api/admin/users/logout-all-sessions')
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertSame(2, DB::table('sessions')->where('user_id', $me->id)->count());
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $other->id)->count());
+        $this->assertDatabaseHas('activity_logs', ['action' => 'users_logged_out_all']);
     }
 
     /* -------------------------------------------------------- password reset */

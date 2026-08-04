@@ -38,9 +38,23 @@ class PaymentHistoryTest extends TestCase
 
         $tx = $member->paymentTransactions()->sole();
         $this->assertSame(PaymentTransaction::PAID, $tx->action);
-        $this->assertSame(config('icpep.membership_fee'), (float) $tx->amount);
+        $this->assertSame(PaymentTransaction::PAYMENT_1, $tx->kind);
+        $this->assertSame(config('icpep.membership_fee_1'), (float) $tx->amount);
         $this->assertSame($member->full_name, $tx->member_name);
         $this->assertSame('Section A', $tx->section);
+    }
+
+    public function test_marking_payment2_paid_records_a_payment2_transaction(): void
+    {
+        $member = $this->member(['paid_at' => now()->subDay()]);
+        $member->paymentTransactions()->delete();
+
+        $member->update(['payment2_paid_at' => now()]);
+
+        $tx = $member->paymentTransactions()->sole();
+        $this->assertSame(PaymentTransaction::PAID, $tx->action);
+        $this->assertSame(PaymentTransaction::PAYMENT_2, $tx->kind);
+        $this->assertSame(config('icpep.membership_fee_2'), (float) $tx->amount);
     }
 
     public function test_revoking_records_a_negative_transaction_against_the_original_date(): void
@@ -53,7 +67,7 @@ class PaymentHistoryTest extends TestCase
 
         $tx = $member->paymentTransactions()->sole();
         $this->assertSame(PaymentTransaction::REVOKED, $tx->action);
-        $this->assertSame(-1 * config('icpep.membership_fee'), (float) $tx->amount);
+        $this->assertSame(-1 * config('icpep.membership_fee_1'), (float) $tx->amount);
         // The reversal must land in the period it cancels, not the period it was
         // entered in, or a past month keeps counting money that was given back.
         $this->assertTrue($tx->effective_at->isSameDay($paidOn));
@@ -95,7 +109,7 @@ class PaymentHistoryTest extends TestCase
 
     public function test_period_totals_follow_the_members_current_state(): void
     {
-        $fee = (float) config('icpep.membership_fee');
+        $fee = (float) config('icpep.membership_fee_1');
         $collected = fn (Carbon $from, Carbon $until): float => Application::query()
             ->whereBetween('paid_at', [$from, $until])->count() * $fee;
         $today = fn (): float => $collected(Carbon::today()->startOfDay(), Carbon::today()->endOfDay());
@@ -127,7 +141,10 @@ class PaymentHistoryTest extends TestCase
 
         $tx = PaymentTransaction::where('application_id', $member->id)->sole();
         $this->assertSame(PaymentTransaction::PAID, $tx->action);
-        $this->assertSame(config('icpep.membership_fee'), (float) $tx->amount);
+        // This is a frozen historical migration (predates the two-payment
+        // split) — it reads the now-retired `icpep.membership_fee` config key
+        // with its own hardcoded 50 fallback, not the current fee config.
+        $this->assertSame(50.0, (float) $tx->amount);
         // A null actor is what marks a row the system wrote rather than an
         // officer — the backfill's signature now that its note is gone.
         $this->assertNull($tx->actor);

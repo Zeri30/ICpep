@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\MembershipTerm;
+use App\Models\PaymentTransaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -66,16 +68,26 @@ class AdminApiTest extends TestCase
     {
         $deactivated = User::factory()->inactive()->create(['email' => 'someone-else@example.com']);
 
-        $this->actingAs($deactivated)->getJson('/api/admin/me')->assertForbidden();
+        // `reason` is what tells the React admin's SessionEndedModal to show
+        // itself for this 403 specifically, rather than every permission
+        // denial — see lib/adminApi.ts's parse().
+        $this->actingAs($deactivated)->getJson('/api/admin/me')
+            ->assertForbidden()
+            ->assertJson(['reason' => 'account_deactivated']);
     }
 
     public function test_me_returns_officer_and_meta(): void
     {
+        // Pinned rather than left to whatever MEMBERSHIP_FEE_1/2 happens to be
+        // in .env — see test_dashboard_numbers_match_the_data for why.
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
+
         $this->actingAs($this->admin())
             ->getJson('/api/admin/me')
             ->assertOk()
             ->assertJsonPath('user.email', env('ADMIN_EMAIL', 'admin@example.com'))
-            ->assertJsonPath('meta.fee', 50)
+            ->assertJsonPath('meta.feePayment1', 50)
+            ->assertJsonPath('meta.feePayment2', 25)
             ->assertJsonPath('meta.currency', '₱')
             ->assertJsonPath('meta.classOptions', ['3A', '3B', '4A', '4B']);
     }
@@ -90,14 +102,43 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('redirect', rtrim(config('app.frontend_url'), '/').'/admin');
     }
 
+    /** A wrong password is auditable after the fact, not just rate-limited in the moment. */
+    public function test_a_failed_login_is_recorded_in_the_activity_log(): void
+    {
+        $admin = $this->admin();
+        $admin->forceFill(['password' => bcrypt('secret1234')])->save();
+
+        $this->postJson('/auth/admin/login', ['email' => $admin->email, 'password' => 'wrong-password'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'actor' => $admin->email,
+            'action' => 'login_failed',
+        ]);
+    }
+
     public function test_logout_clears_the_session_and_returns_landing(): void
     {
-        $this->actingAs($this->admin())
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
             ->postJson('/auth/admin/logout')
             ->assertOk()
             ->assertJsonPath('redirect', config('app.frontend_url'));
 
         $this->assertGuest();
+        $this->assertDatabaseHas('activity_logs', [
+            'actor' => $admin->email,
+            'action' => 'logout',
+        ]);
+    }
+
+    /** Safe to call with no live session (see AdminAuthController::logout) — and nothing to audit either. */
+    public function test_logout_with_no_session_logs_nothing(): void
+    {
+        $this->postJson('/auth/admin/logout')->assertOk();
+
+        $this->assertDatabaseMissing('activity_logs', ['action' => 'logout']);
     }
 
     /* -------------------------------------------------- manage sessions */
@@ -145,7 +186,12 @@ class AdminApiTest extends TestCase
 
     public function test_dashboard_numbers_match_the_data(): void
     {
-        $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now()]);
+        // Pinned rather than left to whatever MEMBERSHIP_FEE_1/2 happens to be
+        // in .env — that's real config for the live site's actual fee, not a
+        // fixture this assertion should be coupled to.
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
+
+        $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now(), 'payment2_paid_at' => now()]);
         $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year']);
 
         // Revenue is only returned to finance roles.
@@ -156,7 +202,10 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('stats.thirdYear', 1)
             ->assertJsonPath('stats.fourthYear', 1)
             ->assertJsonPath('stats.paid', 1)
-            ->assertJsonPath('stats.revenue', 50)
+            // One member fully paid (50+25), one paying nothing yet: 75
+            // collected, 75 still outstanding on the other.
+            ->assertJsonPath('stats.revenue', 75)
+            ->assertJsonPath('stats.pendingRevenue', 75)
             ->assertJsonCount(4, 'membersByClass.data')
             ->assertJsonCount(6, 'registrationsOverTime.data');
     }
@@ -181,7 +230,7 @@ class AdminApiTest extends TestCase
 
         // Payment filter.
         $this->actingAs($admin)
-            ->getJson('/api/admin/members?payment=unpaid')
+            ->getJson('/api/admin/members?payment=p1_unpaid')
             ->assertOk()
             ->assertJsonCount(2, 'data');
 
@@ -266,8 +315,8 @@ class AdminApiTest extends TestCase
     public function test_members_export_csv_respects_filters_and_search(): void
     {
         Storage::fake('supabase');
-        $this->makeApplication(['surname' => 'ThreeA', 'given_name' => 'Juan', 'student_id' => '2024-001', 'year_level' => '3rd Year', 'section' => 'Section A']);
-        $this->makeApplication(['surname' => 'ThreeB', 'given_name' => 'Maria', 'student_id' => '2024-002', 'year_level' => '3rd Year', 'section' => 'Section B']);
+        $this->makeApplication(['surname' => 'ThreeA', 'given_name' => 'Juan', 'student_id' => '2024-001', 'year_level' => '3rd Year', 'section' => 'Section A', 'email' => 'threea@example.com']);
+        $this->makeApplication(['surname' => 'ThreeB', 'given_name' => 'Maria', 'student_id' => '2024-002', 'year_level' => '3rd Year', 'section' => 'Section B', 'email' => 'threeb@example.com']);
 
         $response = $this->actingAs($this->admin())
             ->get('/api/admin/members/export/csv?class=3A')
@@ -277,11 +326,34 @@ class AdminApiTest extends TestCase
         $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
 
         $this->assertSame(
-            ['Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email', 'Payment Status', 'Paid At', 'Registered At'],
+            [
+                'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email',
+                'Payment 1 Status', 'Payment 1 Paid At', 'Payment 2 Status', 'Payment 2 Paid At', 'Registered At',
+            ],
             $rows[0],
         );
         $this->assertCount(2, $rows); // header + the one 3A row — the 3B member is excluded.
         $this->assertSame('2024-001', $rows[1][0]);
+    }
+
+    /**
+     * A surname of "=cmd|..." reaching the CSV unescaped would run as a
+     * formula the moment an officer opens it in Excel/Sheets — the classic
+     * CSV/formula-injection hole, and the one field here that's free-text
+     * from the public application form rather than a fixed set of choices.
+     */
+    public function test_members_export_csv_escapes_a_formula_leading_full_name(): void
+    {
+        Storage::fake('supabase');
+        $this->makeApplication(['surname' => '=cmd|\'/C calc\'!A0', 'given_name' => 'Juan']);
+
+        $response = $this->actingAs($this->admin())
+            ->get('/api/admin/members/export/csv')
+            ->assertOk();
+
+        $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
+
+        $this->assertStringStartsWith("'=", $rows[1][1]);
     }
 
     public function test_members_export_excel_returns_xlsx_file(): void
@@ -302,7 +374,7 @@ class AdminApiTest extends TestCase
         $this->makeApplication(['paid_at' => now()]);
 
         $response = $this->actingAs($this->admin())
-            ->get('/api/admin/members/export/pdf?payment=paid&search=Dela')
+            ->get('/api/admin/members/export/pdf?payment=p1_paid&search=Dela')
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
 
@@ -331,6 +403,10 @@ class AdminApiTest extends TestCase
 
     public function test_payments_ledger_lists_and_filters(): void
     {
+        // Pinned rather than left to whatever MEMBERSHIP_FEE_1 happens to be
+        // in .env — see test_dashboard_numbers_match_the_data for why.
+        config(['icpep.membership_fee_1' => 50]);
+
         // Marking paid writes a 'paid' ledger row via the model event.
         $this->makeApplication(['section' => 'Section A'])->update(['paid_at' => now()]);
 
@@ -340,7 +416,154 @@ class AdminApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.action', 'paid')
+            ->assertJsonPath('data.0.kind', 'payment1')
             ->assertJsonPath('data.0.amount', 50);
+    }
+
+    public function test_payments_ledger_filters_by_payment_batch(): void
+    {
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
+
+        $this->makeApplication(['email' => 'batch@example.com'])->update(['paid_at' => now(), 'payment2_paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?kind=payment1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.kind', 'payment1')
+            ->assertJsonPath('data.0.amount', 50);
+
+        $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?kind=payment2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.kind', 'payment2')
+            ->assertJsonPath('data.0.amount', 25);
+    }
+
+    public function test_payments_ledger_tags_each_row_with_its_semester(): void
+    {
+        $current = MembershipTerm::current();
+        $past = MembershipTerm::factory()->term(2027, 1)->create(); // not current
+
+        $this->makeApplication(['email' => 'a@example.com', 'membership_term_id' => $current?->id])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'b@example.com', 'membership_term_id' => $past->id])->update(['paid_at' => now()]);
+
+        $rows = $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?term='.$current?->id)
+            ->assertOk()
+            ->json('data');
+        $this->assertTrue(collect($rows)->first()['paymentTerm']['isCurrent']);
+
+        $rows = $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?term='.$past->id)
+            ->assertOk()
+            ->json('data');
+        $this->assertFalse(collect($rows)->first()['paymentTerm']['isCurrent']);
+        $this->assertSame('27-28, Sem 1', collect($rows)->first()['paymentTerm']['shortLabel']);
+    }
+
+    public function test_payments_ledger_filters_by_combined_year_and_section(): void
+    {
+        $this->makeApplication(['email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A'])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'b@example.com', 'year_level' => '3rd Year', 'section' => 'Section B'])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'c@example.com', 'year_level' => '4th Year', 'section' => 'Section A'])->update(['paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->getJson('/api/admin/payments?class=3A')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.yearLevel', '3rd Year')
+            ->assertJsonPath('data.0.section', 'Section A');
+    }
+
+    /**
+     * The list PaymentController::index() builds is cached against
+     * PaymentTransaction::cacheVersion() — this proves both halves of that:
+     * a repeat request for the same filters hits the cache (no query touches
+     * payment_transactions the second time), and a real write still bumps the
+     * version and reaches every officer's next request, never leaving a
+     * cached page stuck showing what the ledger looked like before it.
+     */
+    public function test_payments_ledger_is_cached_until_the_next_write(): void
+    {
+        $treasurer = $this->treasurer();
+        $this->makeApplication(['email' => 'a@example.com'])->update(['paid_at' => now()]);
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(1, 'data');
+
+        DB::enableQueryLog();
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(1, 'data');
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+
+        $this->assertTrue(
+            $queries->every(fn (string $sql): bool => ! str_contains($sql, 'payment_transactions')),
+            'A repeat request with the same filters should be served from cache, not re-query the ledger.',
+        );
+
+        $this->makeApplication(['email' => 'b@example.com'])->update(['paid_at' => now()]);
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    /**
+     * Backs Payment History's real-time poll: an officer's tab asks "anything
+     * new since my last check?" and patches just those rows in rather than
+     * refetching the page. Proves the delta only ever contains what actually
+     * landed after `since`, and that the `since` it hands back is safe to
+     * poll again with (nothing new means an empty `added`, not a repeat).
+     */
+    public function test_payments_changes_reports_new_ledger_rows_since_a_point_in_time(): void
+    {
+        $treasurer = $this->treasurer();
+        $this->makeApplication(['email' => 'old@example.com'])->update(['paid_at' => now()->subMinute()]);
+
+        $since = now()->toIso8601String();
+
+        $this->travel(1)->second();
+        $this->makeApplication(['email' => 'new@example.com', 'surname' => 'Reyes'])->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($treasurer)
+            ->getJson('/api/admin/payments/changes?since='.urlencode($since))
+            ->assertOk()
+            ->assertJsonCount(1, 'added');
+
+        $this->assertSame('Reyes, Juan, S.', $response->json('added.0.memberName'));
+        $nextSince = $response->json('since');
+        $this->assertNotEmpty($nextSince);
+
+        // Polling again with the checkpoint the server just handed back must
+        // not re-report the same row.
+        $this->actingAs($treasurer)
+            ->getJson('/api/admin/payments/changes?since='.urlencode($nextSince))
+            ->assertOk()
+            ->assertJsonCount(0, 'added');
+    }
+
+    /**
+     * Same guarantee as above, for Members List: only the member a payment
+     * write actually touched comes back, shaped exactly like bulk()'s
+     * `updated` so the client patches both through the same function.
+     */
+    public function test_members_changes_reports_only_the_affected_members_payment_state(): void
+    {
+        $treasurer = $this->treasurer();
+        $untouched = $this->makeApplication(['email' => 'untouched@example.com']);
+        $paid = $this->makeApplication(['email' => 'paid@example.com']);
+
+        $since = now()->toIso8601String();
+        $this->travel(1)->second();
+        $paid->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($treasurer)
+            ->getJson('/api/admin/members/changes?since='.urlencode($since))
+            ->assertOk()
+            ->assertJsonCount(1, 'updated');
+
+        $response->assertJsonPath('updated.0.id', $paid->id);
+        $response->assertJsonPath('updated.0.isPayment1Paid', true);
+        $this->assertNotContains($untouched->id, collect($response->json('updated'))->pluck('id'));
     }
 
     public function test_activity_log_lists_and_filters_by_action(): void
@@ -355,17 +578,19 @@ class AdminApiTest extends TestCase
 
     /* ---------------------------------------------------------- member writes */
 
-    public function test_toggle_paid_flips_state_and_logs(): void
+    public function test_toggle_paid_flips_state_and_records_a_payment_transaction(): void
     {
         $member = $this->makeApplication();
         $admin = $this->treasurer();
 
-        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid", ['batch' => 1])->assertOk();
         $this->assertNotNull($member->fresh()->paid_at);
-        $this->assertDatabaseHas('activity_logs', ['action' => 'paid']);
-        $this->assertDatabaseHas('payment_transactions', ['application_id' => $member->id, 'action' => 'paid']);
+        $this->assertDatabaseHas('payment_transactions', ['application_id' => $member->id, 'action' => 'paid', 'kind' => 'payment1']);
+        // Payment History is the ledger for this — it isn't duplicated into
+        // the Activity Log too.
+        $this->assertDatabaseMissing('activity_logs', ['action' => 'paid']);
 
-        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid")->assertOk();
+        $this->actingAs($admin)->postJson("/api/admin/members/{$member->id}/toggle-paid", ['batch' => 1])->assertOk();
         $this->assertNull($member->fresh()->paid_at);
     }
 
@@ -378,6 +603,7 @@ class AdminApiTest extends TestCase
                 'surname' => 'Reyes',
                 'givenName' => 'Ana',
                 'middleInitial' => null,
+                'studentId' => '1234567890',
                 'yearLevel' => '4th Year',
                 'section' => 'Section B',
                 'birthday' => '2003-05-05',
@@ -410,7 +636,7 @@ class AdminApiTest extends TestCase
         $paid = $this->makeApplication(['email' => 'p@example.com', 'paid_at' => now()->subDays(5)]);
 
         $this->actingAs($this->treasurer())
-            ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'paid'])
+            ->postJson('/api/admin/members/bulk', ['ids' => [$unpaid->id, $paid->id], 'action' => 'payment1_paid'])
             ->assertOk()
             // `count` is the ids considered, not the rows changed — the admin
             // reports its own figure for what actually moved.
@@ -420,6 +646,205 @@ class AdminApiTest extends TestCase
         // Already paid: the original date stands, and no second fee is recorded.
         $this->assertTrue($paid->fresh()->paid_at->isSameDay(now()->subDays(5)));
         $this->assertSame(0, $paid->paymentTransactions()->count());
+    }
+
+    public function test_bulk_mark_paid_writes_the_ledger_in_bulk_and_reports_updates(): void
+    {
+        config(['icpep.membership_fee_1' => 50]);
+
+        $a = $this->makeApplication(['email' => 'a@example.com', 'surname' => 'Alpha']);
+        $b = $this->makeApplication(['email' => 'b@example.com', 'surname' => 'Bravo']);
+
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'payment1_paid'])
+            ->assertOk()
+            ->assertJsonPath('count', 2)
+            ->assertJsonCount(2, 'updated');
+
+        $updated = collect($response->json('updated'))->keyBy('id');
+        $this->assertTrue($updated[$a->id]['isPayment1Paid']);
+        $this->assertNotNull($updated[$a->id]['payment1PaidAt']);
+        $this->assertFalse($updated[$a->id]['isPayment2Paid']);
+
+        // One ledger row per member — written as one bulk insert rather than
+        // one round trip per member. Payment History is the ledger for this;
+        // it isn't also duplicated into the Activity Log.
+        $this->assertSame(1, $a->paymentTransactions()->where('action', PaymentTransaction::PAID)->count());
+        $this->assertSame(1, $b->paymentTransactions()->where('action', PaymentTransaction::PAID)->count());
+        $this->assertSame(50.0, (float) $a->paymentTransactions()->sole()->amount);
+        $this->assertSame(PaymentTransaction::PAYMENT_1, $a->paymentTransactions()->sole()->kind);
+        $this->assertSame(0, ActivityLog::where('action', 'paid')->count());
+    }
+
+    /**
+     * bulkSetPayment()'s ledger insert goes through PaymentTransaction::insert(),
+     * which — unlike a single ->create() — doesn't fire model events, so it
+     * can't rely on the `created` hook to bump Payment History's cache
+     * version; MemberController calls bumpCacheVersion() itself right after.
+     * This confirms that call is actually there: a page cached before a bulk
+     * payment run must not still be what a request sees right after it.
+     */
+    public function test_bulk_mark_paid_invalidates_the_cached_ledger(): void
+    {
+        $treasurer = $this->treasurer();
+        $member = $this->makeApplication(['email' => 'a@example.com']);
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(0, 'data');
+
+        $this->actingAs($treasurer)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'payment1_paid'])
+            ->assertOk();
+
+        $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(1, 'data');
+    }
+
+    public function test_bulk_mark_unpaid_reverses_against_the_original_date(): void
+    {
+        $paidOn = now()->subDays(5);
+        $member = $this->makeApplication(['email' => 'c@example.com', 'paid_at' => $paidOn]);
+        $member->paymentTransactions()->delete(); // isolate this test's own ledger row
+
+        $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'payment1_unpaid'])
+            ->assertOk()
+            ->assertJsonPath('updated.0.isPayment1Paid', false)
+            ->assertJsonPath('updated.0.payment1PaidAt', null);
+
+        $tx = $member->paymentTransactions()->sole();
+        $this->assertSame(PaymentTransaction::REVOKED, $tx->action);
+        // The reversal is stamped against the original payment date, not today.
+        $this->assertTrue($tx->effective_at->isSameDay($paidOn));
+        $this->assertNull($member->fresh()->paid_at);
+    }
+
+    public function test_bulk_payment2_paid_requires_payment1_paid(): void
+    {
+        $notEligible = $this->makeApplication(['email' => 'n@example.com']); // Payment 1 unpaid
+        $eligible = $this->makeApplication(['email' => 'e@example.com', 'paid_at' => now()]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$notEligible->id, $eligible->id], 'action' => 'payment2_paid'])
+            ->assertOk()
+            ->assertJsonPath('count', 2)
+            // Only the eligible member is reported changed — the other is
+            // silently skipped, not errored, same as an already-paid member is.
+            ->assertJsonCount(1, 'updated');
+
+        $this->assertSame($eligible->id, $response->json('updated.0.id'));
+        $this->assertNull($notEligible->fresh()->payment2_paid_at);
+        $this->assertNotNull($eligible->fresh()->payment2_paid_at);
+    }
+
+    public function test_bulk_payment1_unpaid_is_blocked_while_payment2_is_paid(): void
+    {
+        $bothPaid = $this->makeApplication(['email' => 'both@example.com', 'paid_at' => now(), 'payment2_paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$bothPaid->id], 'action' => 'payment1_unpaid'])
+            ->assertOk()
+            ->assertJsonCount(0, 'updated');
+
+        $this->assertNotNull($bothPaid->fresh()->paid_at);
+    }
+
+    public function test_bulk_both_paid_pays_payment1_first_then_payment2(): void
+    {
+        config(['icpep.membership_fee_1' => 50, 'icpep.membership_fee_2' => 25]);
+
+        $untouched = $this->makeApplication(['email' => 'untouched@example.com']);
+        $partial = $this->makeApplication(['email' => 'partial@example.com', 'paid_at' => now()->subDays(3)]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$untouched->id, $partial->id], 'action' => 'both_paid'])
+            ->assertOk()
+            ->assertJsonCount(2, 'updated');
+
+        $updated = collect($response->json('updated'))->keyBy('id');
+        $this->assertTrue($updated[$untouched->id]['isPayment1Paid']);
+        $this->assertTrue($updated[$untouched->id]['isPayment2Paid']);
+        $this->assertTrue($updated[$partial->id]['isPayment2Paid']);
+
+        // The already-paid member's Payment 1 date is untouched; only
+        // Payment 2 is newly written for them.
+        $this->assertTrue($partial->fresh()->paid_at->isSameDay(now()->subDays(3)));
+        $this->assertSame(1, $partial->paymentTransactions()->count());
+        $this->assertSame(2, $untouched->paymentTransactions()->count());
+    }
+
+    public function test_bulk_both_unpaid_reverses_both_payments(): void
+    {
+        $member = $this->makeApplication(['email' => 'both2@example.com', 'paid_at' => now(), 'payment2_paid_at' => now()]);
+        $member->paymentTransactions()->delete();
+
+        $this->actingAs($this->treasurer())
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'both_unpaid'])
+            ->assertOk()
+            ->assertJsonPath('updated.0.isPayment1Paid', false)
+            ->assertJsonPath('updated.0.isPayment2Paid', false);
+
+        $this->assertNull($member->fresh()->paid_at);
+        $this->assertNull($member->fresh()->payment2_paid_at);
+        $this->assertSame(2, $member->paymentTransactions()->where('action', PaymentTransaction::REVOKED)->count());
+    }
+
+    public function test_bulk_delete_and_restore_report_no_row_patch(): void
+    {
+        $member = $this->makeApplication(['email' => 'd@example.com']);
+        $admin = $this->admin();
+
+        // delete/restore change which page a row belongs on, so the client
+        // still needs a real refetch for these — `updated` stays empty.
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'delete'])
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('updated', []);
+        $this->assertSoftDeleted('applications', ['id' => $member->id]);
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$member->id], 'action' => 'restore'])
+            ->assertOk()
+            ->assertJsonPath('updated', []);
+        $this->assertNotSoftDeleted('applications', ['id' => $member->id]);
+    }
+
+    /**
+     * bulkDelete()/bulkRestore() write the deleted_at flip as one batched
+     * UPDATE and the activity log as one bulk insert, standing in for the N
+     * individual delete()/restore() calls (and the N activity-log rows their
+     * model events would have written one at a time) that a loop would cost
+     * over a multi-member selection — same trade already made for the ledger
+     * in bulkSetPayment(). This locks in that each member still gets its own
+     * log row with the right description, even though nothing writes them
+     * one at a time anymore.
+     */
+    public function test_bulk_delete_and_restore_log_one_activity_row_per_member(): void
+    {
+        $a = $this->makeApplication(['email' => 'a@example.com', 'surname' => 'Alpha']);
+        $b = $this->makeApplication(['email' => 'b@example.com', 'surname' => 'Bravo']);
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'delete'])
+            ->assertOk()
+            ->assertJsonPath('count', 2);
+
+        $this->assertSoftDeleted('applications', ['id' => $a->id]);
+        $this->assertSoftDeleted('applications', ['id' => $b->id]);
+        $this->assertSame(2, ActivityLog::where('action', 'deleted')->count());
+        $this->assertSame(
+            'Moved Alpha, Juan, S. to Deleted',
+            ActivityLog::where('action', 'deleted')->where('applicant', 'Alpha, Juan, S.')->sole()->description,
+        );
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/members/bulk', ['ids' => [$a->id, $b->id], 'action' => 'restore'])
+            ->assertOk()
+            ->assertJsonPath('count', 2);
+
+        $this->assertNotSoftDeleted('applications', ['id' => $a->id]);
+        $this->assertNotSoftDeleted('applications', ['id' => $b->id]);
+        $this->assertSame(2, ActivityLog::where('action', 'restored')->count());
     }
 
     /**

@@ -166,10 +166,14 @@ export default function Membership() {
         // when the next membership cycle begins.
         const applied = readApplied();
         if (applied !== null) {
-          // Clear only on a confirmed newer period (a numeric marker that no
-          // longer matches). An unknown-period marker or a matching one stays.
-          const staleForNewPeriod =
-            reg.periodId != null && applied !== APPLIED_UNKNOWN && applied !== String(reg.periodId);
+          // Clear once the period id is known and doesn't match the stored
+          // marker. This also covers a marker recorded while the period id
+          // was unknown (APPLIED_UNKNOWN): once a real period id shows up,
+          // it can't be the same period that was unknown before, so treat it
+          // as stale too — otherwise that device would stay "already
+          // applied" forever. Safe either way since the backend still
+          // enforces the real duplicate check.
+          const staleForNewPeriod = reg.periodId != null && applied !== String(reg.periodId);
           if (staleForNewPeriod) {
             clearApplied();
           } else {

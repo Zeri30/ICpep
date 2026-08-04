@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -473,6 +474,14 @@ class Event extends Model
      * job, because the two answers ("is this event still taking attendance" and
      * "record this") belong to different questions and only the caller knows
      * which refusal to report.
+     *
+     * The idempotency above covers two sequential calls; two calls landing at
+     * the same instant (a double-tap on a slow connection, a retried request)
+     * can both read firstOrNew() as "no row yet" before either has saved, and
+     * then both try to insert. The unique index on (event_id, user_id) — see
+     * that migration — is what actually stops the duplicate; the catch below
+     * only keeps the request that lost the race from surfacing that as a
+     * server error instead of the same successful check-in the winner got.
      */
     public function checkIn(User $officer, AttendanceMethod $method): EventAttendance
     {
@@ -489,7 +498,16 @@ class Event extends Model
             // Cleared, so a self check-in is never attributed to whoever last
             // corrected the row.
             'recorded_by' => null,
-        ])->save();
+        ]);
+
+        try {
+            $record->save();
+        } catch (UniqueConstraintViolationException) {
+            // Lost the race: the other request's row already says what this
+            // one would have. Same pattern as ApplicationController::store's
+            // duplicate-application race.
+            return $this->attendance()->where('user_id', $officer->id)->firstOrFail();
+        }
 
         return $record;
     }

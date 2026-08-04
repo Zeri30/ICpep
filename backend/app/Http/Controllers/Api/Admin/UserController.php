@@ -244,6 +244,35 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * "Log out all admins" — the kill switch for when a change (a role's
+     * permissions, an account's own role, this feature itself) needs to take
+     * effect everywhere without messaging every officer to sign out and back
+     * in. Ends every session and revokes every remember-me token on every
+     * administrator account except the one making this request, so whoever
+     * clicked it stays signed in to see the result.
+     *
+     * Scoped by user_id, not by session id/cookie: the caller may well be
+     * signed in on more than one device, and all of those are "the one
+     * making this request" too, not just the tab that happened to click the
+     * button.
+     */
+    public function logoutAllAdminSessions(Request $request): JsonResponse
+    {
+        DB::table('sessions')
+            ->where('user_id', '!=', $request->user()->id)
+            ->delete();
+
+        RememberMeService::forgetAllExcept($request->user()->id);
+
+        ActivityLog::record(
+            'users_logged_out_all',
+            "{$request->user()->name} signed every other administrator out",
+        );
+
+        return response()->json(['ok' => true]);
+    }
+
     /** Permanent, irreversible removal. Super-Admin only (route middleware). */
     public function destroy(Request $request, User $user): JsonResponse
     {

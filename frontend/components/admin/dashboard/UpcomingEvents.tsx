@@ -2,12 +2,12 @@
 
 /* The dashboard's calendar widget.
  *
- * Not a chronological list of everything ahead — that's the Calendar module's
+ * Not a chronological list of everything ahead — that's the Schedules module's
  * job, and it already does it. This is the two things worth a glance without
  * leaving the dashboard: what's next, and — for the secretariat only, since
  * they are the ones who can clear it — whether anything from the past still
  * needs an outcome recorded. The rest of the upcoming schedule is a
- * secondary, compact list underneath, read by every role, same as Calendar.
+ * secondary, compact list underneath, read by every role, same as Schedules.
  */
 
 import { AlertTriangle, CalendarDays, ChevronRight } from "lucide-react";
@@ -18,10 +18,10 @@ import CategoryTag from "@/components/admin/schedule/CategoryTag";
 import { TimingBadge } from "@/components/admin/schedule/StatusBadge";
 import { formatShortDate, todayIn } from "@/components/admin/schedule/calendarDates";
 import { Bar, Pill } from "@/components/admin/ui/Skeleton";
-import { useAdminResource } from "@/lib/adminApi";
+import { useEventsResource } from "@/components/admin/useEventsResource";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
-/** Rows after the emphasized next event, before the rest defer to Calendar. */
+/** Rows after the emphasized next event, before the rest defer to Schedules. */
 const MAX_LATER_ROWS = 4;
 
 /** The widget's data-dependent parts, in placeholder form — the emphasized
@@ -60,11 +60,11 @@ function UpcomingEventsSkeleton() {
 
 export default function UpcomingEvents() {
   const { meta, can } = useAdmin();
-  // Only the secretariat can clear an unrecorded outcome — see Calendar's
+  // Only the secretariat can clear an unrecorded outcome — see Schedules'
   // NeedsUpdateBadge for the same call.
   const canManageSchedule = can("schedule.manage");
   const today = useMemo(() => todayIn(meta.timezone), [meta.timezone]);
-  const { data, loading } = useAdminResource<{ data: ScheduledEvent[] }>("/events");
+  const { data, loading } = useEventsResource<{ data: ScheduledEvent[] }>();
 
   const { next, later, unrecordedCount } = useMemo(() => {
     const events = data?.data ?? [];
@@ -85,10 +85,10 @@ export default function UpcomingEvents() {
           Schedule
         </h2>
         <Link
-          href="/admin/calendar"
+          href="/admin/schedules"
           className="flex shrink-0 items-center gap-0.5 text-xs font-semibold uppercase tracking-wide text-primary transition-colors hover:text-primary-glow"
         >
-          Calendar <ChevronRight size={14} />
+          Schedules <ChevronRight size={14} />
         </Link>
       </div>
 
@@ -97,7 +97,7 @@ export default function UpcomingEvents() {
           is actually an outstanding task rather than a status to glance at. */}
       {canManageSchedule && unrecordedCount > 0 && (
         <Link
-          href="/admin/calendar"
+          href="/admin/schedules"
           className="mt-3 flex items-center gap-2 rounded-lg border border-amber-accent/30 bg-amber-accent/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-accent transition-colors hover:bg-amber-accent/15"
         >
           <AlertTriangle size={13} className="shrink-0" />

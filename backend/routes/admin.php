@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Admin\PaymentController;
 use App\Http\Controllers\Api\Admin\RegistrationController;
 use App\Http\Controllers\Api\Admin\RolePermissionController;
 use App\Http\Controllers\Api\Admin\UserController;
+use App\Http\Middleware\EnforceIdleTimeout;
 use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -31,9 +32,12 @@ use Illuminate\Support\Facades\Route;
 // has gone stale (the account was reset or changed its password elsewhere) is
 // rejected before anything else here even asks who it belongs to — see the
 // alias's own note in bootstrap/app.php for what it does and why.
-Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
+Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class])->group(function () {
     // Open to any active administrator.
     Route::get('/me', [MeController::class, 'show'])->name('me');
+    // Polled by SessionWatchdog.tsx to notice a remotely-ended session fast —
+    // see MeController::ping.
+    Route::get('/me/ping', [MeController::class, 'ping'])->name('me.ping');
     // The one write EnsureAdmin still lets a must-change-password account
     // reach — see the middleware for why everything else is closed to it.
     Route::post('/me/password', [MeController::class, 'updatePassword'])->name('me.password.update');
@@ -41,6 +45,11 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // difference between the two.
     Route::post('/me/sessions/logout-others', [MeController::class, 'logoutOtherSessions'])->name('me.sessions.logout-others');
     Route::post('/me/sessions/logout-all', [MeController::class, 'logoutAllSessions'])->name('me.sessions.logout-all');
+    // The 6-hour inactivity timeout's heartbeat — see EnforceIdleTimeout and
+    // components/admin/IdleLogout.tsx. Deliberately not itself exempt from
+    // EnforceIdleTimeout: an officer's first action after 6+ idle hours
+    // should end the session, not extend it.
+    Route::post('/me/activity-ping', [MeController::class, 'activityPing'])->name('me.activity-ping');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/counts', [DashboardController::class, 'counts'])->name('counts');
     Route::get('/activity', [ActivityController::class, 'index'])->name('activity.index');
@@ -53,6 +62,8 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     // Acting on payments is a separate ability and still needs members.payment.
     Route::middleware('permission:finance.view')->group(function () {
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+        // Polled by PaymentHistory.tsx for real-time sync — see PaymentController::changes.
+        Route::get('/payments/changes', [PaymentController::class, 'changes'])->name('payments.changes');
         Route::post('/me/views/payments', [MeController::class, 'viewedPayments'])->name('me.views.payments');
     });
 
@@ -100,6 +111,10 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
     Route::middleware('permission:members.view')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->name('members.index');
         Route::post('/me/views/members', [MeController::class, 'viewedMembers'])->name('me.views.members');
+        // Polled by MembersList.tsx for real-time payment sync — see
+        // MemberController::changes. Declared before /members/{application} for
+        // the same reason /members/export/* is.
+        Route::get('/members/changes', [MemberController::class, 'changes'])->name('members.changes');
         Route::get('/members/export/csv', [MemberController::class, 'exportCsv'])->name('members.export.csv');
         Route::get('/members/export/excel', [MemberController::class, 'exportExcel'])->name('members.export.excel');
         Route::get('/members/export/pdf', [MemberController::class, 'exportPdf'])->name('members.export.pdf');
@@ -114,7 +129,7 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
         Route::post('/members/bulk', [MemberController::class, 'bulk'])->name('members.bulk');
         Route::patch('/members/{application}', [MemberController::class, 'update'])->name('members.update');
         Route::delete('/members/{application}', [MemberController::class, 'destroy'])->name('members.destroy');
-        Route::post('/members/{application}/toggle-paid', [MemberController::class, 'togglePaid'])->name('members.togglePaid');
+        Route::post('/members/{application}/toggle-paid', [MemberController::class, 'togglePayment'])->name('members.togglePaid');
         Route::post('/members/{application}/restore', [MemberController::class, 'restore'])->withTrashed()->name('members.restore');
     });
 
@@ -129,6 +144,9 @@ Route::middleware(['auth.session', EnsureAdmin::class])->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/me/views/users', [MeController::class, 'viewedUsers'])->name('me.views.users');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
+        // Declared before /users/{user} for the same reason /users/roles is —
+        // otherwise "logout-all-sessions" would be taken for an account id.
+        Route::post('/users/logout-all-sessions', [UserController::class, 'logoutAllAdminSessions'])->name('users.logoutAllSessions');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
         Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');

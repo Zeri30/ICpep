@@ -6,6 +6,7 @@ use App\Enums\Permission;
 use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * The editable permission matrix. One row per role that the Programming Team has
@@ -48,10 +49,21 @@ class RolePermission extends Model
      */
     private static ?array $memo = null;
 
-    /** Drop the memo after a write, so the same request sees its own change. */
+    /**
+     * Cross-request cache backing the memo above — every admin request reads
+     * this at least once (Gates, the `permission:*` middleware), so without
+     * this the table is queried fresh on every single request even though it
+     * only changes when the Privileges panel is used. Cleared by flush(), the
+     * same call every write already makes.
+     */
+    private const CACHE_KEY = 'role_permissions.overrides';
+
+    /** Drop the memo — and the cross-request cache — after a write, so the
+        same request (and every one after it) sees the change. */
     public static function flush(): void
     {
         self::$memo = null;
+        Cache::forget(self::CACHE_KEY);
     }
 
     /**
@@ -200,10 +212,10 @@ class RolePermission extends Model
         }
 
         try {
-            return self::$memo = self::query()
+            return self::$memo = Cache::rememberForever(self::CACHE_KEY, static fn (): array => self::query()
                 ->pluck('permissions', 'role')
                 ->map(static fn (mixed $values): array => is_array($values) ? $values : [])
-                ->all();
+                ->all());
         } catch (QueryException) {
             // Authorization runs through here on every admin request, so a
             // missing table (code deployed ahead of its migration) would take

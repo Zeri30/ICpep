@@ -27,6 +27,10 @@ class AuthenticateViaRememberToken
             if ($user) {
                 Auth::guard('web')->login($user);
                 $request->session()->regenerate();
+                // A cookie revival is a genuine return — starts the 6-hour
+                // inactivity clock fresh, same as a password login. See
+                // EnforceIdleTimeout.
+                $request->session()->put('last_meaningful_activity', now()->timestamp);
             }
         }
 

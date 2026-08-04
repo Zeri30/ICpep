@@ -73,7 +73,7 @@ function ViewMemberDialog({ memberId, onClose }: { memberId: number; onClose: ()
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.3, ease: easeOutExpo }}
-            className="w-full max-w-lg rounded-xl border border-line bg-card p-5 shadow-[0_24px_70px_rgba(0,0,0,0.7)]"
+            className="w-full max-w-2xl rounded-xl border border-line bg-card p-6 shadow-[0_24px_70px_rgba(0,0,0,0.7)] sm:p-7"
           >
             <div className="flex items-center justify-between gap-4">
               <h2
@@ -92,7 +92,7 @@ function ViewMemberDialog({ memberId, onClose }: { memberId: number; onClose: ()
               </button>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-5">
               {loading && !m ? (
                 <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
                   <Loader2 size={16} className="animate-spin" /> Loading…
