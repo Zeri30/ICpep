@@ -11,6 +11,7 @@ import Manifesto from "@/components/sections/Manifesto";
 import Board from "@/components/sections/Board";
 import Teams from "@/components/sections/Teams";
 import Events from "@/components/sections/Events";
+import UpcomingEvents from "@/components/sections/UpcomingEvents";
 // Gallery is hidden until we have real photos to put in it. To restore:
 // re-add <Gallery /> below and the "gallery" entry in NAV_LINKS (lib/data.ts).
 // import Gallery from "@/components/sections/Gallery";
@@ -43,6 +44,7 @@ export default async function Home() {
         <Board />
         <Teams />
         <Events />
+        <UpcomingEvents />
         <Membership />
         <Faqs />
         <Contact />
