@@ -90,7 +90,7 @@ const GAP = 0.64;
 /** Front = the officer's card art, shown whole. The designed photos already
     carry their own name/role/logo, so nothing is drawn over them; only a bare
     studio portrait gets a scrim and a name. */
-function CardFront({ o }: { o: Officer }) {
+function CardFront({ o, onPhotoLoad }: { o: Officer; onPhotoLoad?: () => void }) {
   const accent = accentOf(o);
   return (
     <div
@@ -111,6 +111,15 @@ function CardFront({ o }: { o: Officer }) {
           /* Bare portraits are taller than the 4:5 card, so bias the crop up
              and keep the face off the cut line. */
           style={o.plainPortrait ? { objectPosition: "50% 18%" } : undefined}
+          /* A card that finishes decoding after the deck's initial layout
+             pass can sit fully loaded but unpainted — Chromium sometimes
+             fails to composite an <img> that decodes after a 3D-transformed
+             ancestor's layer was first created, and nothing forces a repaint
+             until the deck's transform next changes (e.g. on the first drag
+             or tap). Re-running the deck's own transform pass the moment
+             each photo is ready is that forced repaint, without waiting on
+             the visitor to interact first. */
+          onLoad={onPhotoLoad}
         />
       ) : (
         <div className="absolute inset-0 grid place-items-center">
@@ -428,7 +437,7 @@ export default function Board() {
                   transform: flipped.has(i) ? "rotateY(180deg)" : "rotateY(0deg)",
                 }}
               >
-                <CardFront o={o} />
+                <CardFront o={o} onPhotoLoad={render} />
                 <CardBack o={o} index={i} />
               </button>
             </div>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\OfficerController;
 use App\Http\Controllers\SharedEventController;
+use App\Http\Controllers\UpcomingEventsController;
 use Illuminate\Support\Facades\Route;
 
 // Public and unauthenticated, so each is throttled by IP alone — see the
@@ -17,6 +18,13 @@ Route::get('/registration-status', [ApplicationController::class, 'status'])
 // The executive board, read from the same accounts User Management edits —
 // see OfficerController for which roles are shown.
 Route::get('/officers', [OfficerController::class, 'index'])
+    ->middleware('throttle:public-reads');
+
+// The landing page's Upcoming Events section — every Scheduled event dated
+// today or later, straight from the Secretary's calendar. See
+// UpcomingEventsController for why cancelled, done, and past events never
+// reach it.
+Route::get('/events/upcoming', [UpcomingEventsController::class, 'index'])
     ->middleware('throttle:public-reads');
 
 // Submit a membership application (multipart form-data with files).
