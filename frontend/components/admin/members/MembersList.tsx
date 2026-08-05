@@ -291,6 +291,13 @@ export default function MembersList() {
    * rule (Payment 2 needs Payment 1; revoking unwinds in reverse order) and
    * its 422 message surfaces through the same failure toast as any other
    * action here if the disabled state in the menu is somehow bypassed.
+   *
+   * Not routed through `run()`: that helper always follows up with a full
+   * list refetch, which costs more the larger the current filtered list is
+   * (a fresh COUNT + page query) — and it's pure waste here, since
+   * toggle-paid's response is already the member's full post-toggle state.
+   * The row is patched in place from that response via applyPaymentUpdate
+   * instead, the same path the bulk actions and the payment-sync poll use.
    */
   async function togglePayment(member: Member, batch: 1 | 2) {
     const key = `${member.id}:${batch}`;
@@ -302,14 +309,63 @@ export default function MembersList() {
     setPendingPayments((s) => new Set(s).add(key));
     const wasPaid = batch === 1 ? member.isPayment1Paid : member.isPayment2Paid;
     try {
-      await run(
-        () => apiSend("POST", `/members/${member.id}/toggle-paid`, { batch }),
-        wasPaid ? `Payment ${batch} revoked` : `Payment ${batch} marked as paid`,
+      const { data: updated } = await apiSend<{ data: Member }>(
+        "POST", `/members/${member.id}/toggle-paid`, { batch },
       );
+      applyPaymentUpdate([{
+        id: updated.id,
+        isPayment1Paid: updated.isPayment1Paid,
+        payment1PaidAt: updated.payment1PaidAt,
+        isPayment2Paid: updated.isPayment2Paid,
+        payment2PaidAt: updated.payment2PaidAt,
+      }]);
+      notify(wasPaid ? `Payment ${batch} revoked` : `Payment ${batch} marked as paid`);
+    } catch (e) {
+      notify("Action failed", { tone: "warning", body: e instanceof Error ? e.message : undefined });
     } finally {
       setPendingPayments((s) => {
         const next = new Set(s);
         next.delete(key);
+        return next;
+      });
+    }
+  }
+
+  /**
+   * Per-row "both payments" shortcut — same instant-apply, no-confirm
+   * philosophy as togglePayment above, but routed through the bulk endpoint
+   * with a single-member id list instead of two separate toggle-paid calls.
+   * That gets this one row the same guarantee the toolbar's bulk action
+   * already has: bulkSetBothPayments runs inside one DB::transaction, so
+   * Payment 1 and Payment 2 either both land or neither does — no
+   * in-between state from a request that fails partway. The response's
+   * `updated` row is patched in directly via applyPaymentUpdate, the same
+   * path the 10s payment-sync poll already uses, instead of paying for a
+   * full page refetch just to repaint two fields whose new values just came
+   * back in the response.
+   */
+  async function toggleBothPayments(member: Member, target: "paid" | "unpaid") {
+    const key1 = `${member.id}:1`;
+    const key2 = `${member.id}:2`;
+    if (pendingPayments.has(key1) || pendingPayments.has(key2)) return;
+
+    const action: PaymentAction = target === "paid" ? "both_paid" : "both_unpaid";
+    if (!eligibleForPaymentAction(member, action)) return;
+
+    setPendingPayments((s) => new Set(s).add(key1).add(key2));
+    try {
+      const { updated } = await apiSend<{ count: number; updated: BulkPaymentUpdate[] }>(
+        "POST", "/members/bulk", { ids: [member.id], action },
+      );
+      applyPaymentUpdate(updated);
+      notify(target === "paid" ? "Both payments marked as paid" : "Both payments revoked");
+    } catch (e) {
+      notify("Action failed", { tone: "warning", body: e instanceof Error ? e.message : undefined });
+    } finally {
+      setPendingPayments((s) => {
+        const next = new Set(s);
+        next.delete(key1);
+        next.delete(key2);
         return next;
       });
     }
@@ -602,6 +658,7 @@ export default function MembersList() {
                 onClose={() => setPaymentMenuFor(null)}
                 member={m}
                 onToggle={(batch) => togglePayment(m, batch)}
+                onToggleBoth={(target) => toggleBothPayments(m, target)}
                 pending={pendingPayments.has(`${m.id}:1`) || pendingPayments.has(`${m.id}:2`)}
               />
             )}
@@ -894,7 +951,10 @@ function BulkPaymentMenu({ onAction }: { onAction: (action: PaymentAction) => vo
  * reflects the member's current state (Mark as Paid vs. Revoke Payment) and
  * applies instantly on click, no confirm dialog (see togglePayment). Payment
  * 2 is disabled until Payment 1 is paid; Payment 1's revoke is disabled while
- * Payment 2 is still paid — both mirror the backend's sequencing rule.
+ * Payment 2 is still paid — both mirror the backend's sequencing rule. The
+ * "Mark Both" shortcuts below the divider walk both batches through that
+ * same sequencing (see toggleBothPayments) and disable once both are
+ * already in the target state.
  *
  * While a toggle for this member is in flight (`pending`), the trigger itself
  * is disabled and shows a spinner in place of the Wallet icon — the menu
@@ -907,6 +967,7 @@ function PaymentActionsMenu({
   onClose,
   member,
   onToggle,
+  onToggleBoth,
   pending,
 }: {
   open: boolean;
@@ -914,6 +975,7 @@ function PaymentActionsMenu({
   onClose: () => void;
   member: Member;
   onToggle: (batch: 1 | 2) => void;
+  onToggleBoth: (target: "paid" | "unpaid") => void;
   pending: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -932,10 +994,17 @@ function PaymentActionsMenu({
   // Mirrors MemberController::togglePayment's two guards exactly.
   const payment2Disabled = !member.isPayment1Paid && !member.isPayment2Paid;
   const payment1RevokeDisabled = member.isPayment1Paid && member.isPayment2Paid;
+  const bothPaidDisabled = member.isPayment1Paid && member.isPayment2Paid;
+  const bothUnpaidDisabled = !member.isPayment1Paid && !member.isPayment2Paid;
 
   const act = (batch: 1 | 2) => {
     onClose();
     onToggle(batch);
+  };
+
+  const actBoth = (target: "paid" | "unpaid") => {
+    onClose();
+    onToggleBoth(target);
   };
 
   return (
@@ -967,6 +1036,25 @@ function PaymentActionsMenu({
           >
             {member.isPayment2Paid ? <RotateCcw size={15} /> : <CheckCircle2 size={15} className="text-green-400" />}
             Payment 2 – {member.isPayment2Paid ? "Revoke Payment" : "Mark as Paid"}
+          </button>
+          <div className="my-1 border-t border-line" />
+          <button
+            onClick={() => actBoth("paid")}
+            disabled={bothPaidDisabled}
+            title={bothPaidDisabled ? "Both payments are already paid" : undefined}
+            className={item}
+          >
+            <CheckCircle2 size={15} className="text-green-400" />
+            Mark Both as Paid
+          </button>
+          <button
+            onClick={() => actBoth("unpaid")}
+            disabled={bothUnpaidDisabled}
+            title={bothUnpaidDisabled ? "Both payments are already unpaid" : undefined}
+            className={`${item} text-red-400 hover:text-red-300`}
+          >
+            <RotateCcw size={15} />
+            Mark Both as Unpaid
           </button>
         </div>
       )}
