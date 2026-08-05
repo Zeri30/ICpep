@@ -8,6 +8,7 @@ import Logo from "@/components/ui/Logo";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import SignOutButton from "@/components/admin/layout/SignOutModal";
 import { MODULE_VIEWED_EVENT, useAdminResource } from "@/lib/adminApi";
+import { formatBadgeCount } from "@/lib/adminFormat";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 
 import type { Permission } from "@/lib/adminApi";
@@ -103,7 +104,7 @@ export default function AdminSidebar({
               <span className="flex-1 uppercase tracking-wide font-head text-xs">{label}</span>
               {typeof badge === "number" && badge > 0 && (
                 <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
-                  {badge}
+                  {formatBadgeCount(badge)}
                 </span>
               )}
             </Link>
