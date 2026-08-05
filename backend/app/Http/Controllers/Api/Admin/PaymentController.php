@@ -6,11 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentTransactionResource;
 use App\Models\MembershipTerm;
 use App\Models\PaymentTransaction;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Read-only payment-history ledger, open to every administrator for
@@ -163,5 +169,164 @@ class PaymentController extends Controller
             $perPage,
             (int) $request->integer('page', 1),
         ]));
+    }
+
+    /* ----------------------------------------------------------------- export */
+
+    /** Column order shared by every export format — mirrors MemberController's. */
+    private const EXPORT_COLUMNS = [
+        'Member', 'Section', 'Year Level', 'Event', 'Batch', 'Amount', 'Semester', 'Recorded At', 'Recorded By',
+    ];
+
+    /**
+     * Columns exportRow() (and the PDF view) actually read. The ledger
+     * already denormalises member_name/section/year_level onto the row
+     * itself (see PaymentTransaction), so — unlike MemberController's
+     * export — this never needs to join `applications` at all.
+     */
+    private const EXPORT_SELECT_COLUMNS = [
+        'id', 'membership_term_id', 'member_name', 'section', 'year_level',
+        'action', 'kind', 'amount', 'actor', 'created_at',
+    ];
+
+    /** Human-readable labels — same wording PaymentHistory.tsx's EVENT/KIND_LABEL show on screen. */
+    private const ACTION_LABELS = [
+        PaymentTransaction::PAID => 'Paid',
+        PaymentTransaction::REVOKED => 'Revoked',
+        PaymentTransaction::ADJUSTED => 'Date Adjusted',
+    ];
+
+    private const KIND_LABELS = [
+        PaymentTransaction::PAYMENT_1 => 'Payment 1',
+        PaymentTransaction::PAYMENT_2 => 'Payment 2',
+    ];
+
+    public function exportCsv(Request $request): StreamedResponse
+    {
+        $rows = $this->exportRows($request);
+
+        return response()->streamDownload(function () use ($rows): void {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, self::EXPORT_COLUMNS);
+            foreach ($rows as $row) {
+                fputcsv($out, array_map(self::escapeCsvFormula(...), $this->exportRow($row)));
+            }
+            fclose($out);
+        }, $this->exportFilename($request, 'csv'), ['Content-Type' => 'text/csv']);
+    }
+
+    /**
+     * Same formula-injection guard as MemberController::escapeCsvFormula —
+     * member_name and actor both ultimately trace back to free-text names
+     * (the public application form, and an officer's own account name), so
+     * the risk is identical and the fix is identical.
+     */
+    private static function escapeCsvFormula(?string $value): string
+    {
+        $value ??= '';
+
+        return str_starts_with($value, '=')
+            || str_starts_with($value, '+')
+            || str_starts_with($value, '-')
+            || str_starts_with($value, '@')
+            || str_starts_with($value, "\t")
+            || str_starts_with($value, "\r")
+            ? "'".$value
+            : $value;
+    }
+
+    public function exportExcel(Request $request): StreamedResponse
+    {
+        $rows = $this->exportRows($request);
+
+        return response()->streamDownload(function () use ($rows): void {
+            $writer = new XlsxWriter;
+            $writer->openToFile('php://output');
+            $writer->addRow(Row::fromValues(self::EXPORT_COLUMNS));
+            foreach ($rows as $row) {
+                $writer->addRow(Row::fromValues($this->exportRow($row)));
+            }
+            $writer->close();
+        }, $this->exportFilename($request, 'xlsx'), [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /** Printable ledger: logo, org name, applied filters, table, total. */
+    public function exportPdf(Request $request): Response
+    {
+        $term = MembershipTerm::resolve($request->input('term'));
+        $rows = $this->exportRows($request);
+
+        $pdf = Pdf::loadView('admin.payments.export-pdf', [
+            'transactions' => $rows,
+            'term' => $term,
+            'filters' => $this->filterSummary($request, $term),
+            'actionLabels' => self::ACTION_LABELS,
+            'kindLabels' => self::KIND_LABELS,
+            'generatedAt' => now(),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->stream($this->exportFilename($request, 'pdf'));
+    }
+
+    /** Every transaction the current filters + search match, in list order — unpaginated. */
+    private function exportRows(Request $request): Collection
+    {
+        $term = MembershipTerm::resolve($request->query('term'));
+
+        return $this->filtered($request, $term)
+            ->with('membershipTerm')
+            ->latest()
+            ->select(self::EXPORT_SELECT_COLUMNS)
+            ->get();
+    }
+
+    /** @return list<string> */
+    private function exportRow(PaymentTransaction $row): array
+    {
+        return [
+            $row->member_name,
+            $row->section ?? '',
+            $row->year_level ?? '',
+            self::ACTION_LABELS[$row->action] ?? ucfirst($row->action),
+            self::KIND_LABELS[$row->kind] ?? $row->kind,
+            number_format((float) $row->amount, 2),
+            $row->membershipTerm?->label ?? '',
+            optional($row->created_at)->toDateTimeString() ?? '',
+            $row->actor ?? 'System',
+        ];
+    }
+
+    private function exportFilename(Request $request, string $ext): string
+    {
+        $term = MembershipTerm::resolve($request->input('term'));
+        $slug = $term ? str($term->label)->slug() : 'payment-history';
+
+        return "payment-history-{$slug}-".now()->format('Y-m-d').".{$ext}";
+    }
+
+    /** Human-readable list of the filters currently applied, for the PDF header. */
+    private function filterSummary(Request $request, ?MembershipTerm $term): array
+    {
+        $summary = [];
+
+        if ($term) {
+            $summary['Semester'] = $term->label;
+        }
+        if ($action = $request->input('action')) {
+            $summary['Event'] = self::ACTION_LABELS[$action] ?? ucfirst($action);
+        }
+        if ($kind = $request->input('kind')) {
+            $summary['Batch'] = self::KIND_LABELS[$kind] ?? $kind;
+        }
+        if ($class = $request->input('class')) {
+            $summary['Year & Section'] = $class;
+        }
+        if ($search = trim((string) $request->input('search'))) {
+            $summary['Search'] = $search;
+        }
+
+        return $summary;
     }
 }

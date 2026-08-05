@@ -8,6 +8,7 @@ import { CheckCircle2, History, PencilLine, Search, XCircle } from "lucide-react
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
+import ExportMenu from "@/components/admin/ui/ExportMenu";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
 import { apiGet, markModuleViewed, useAdminResource } from "@/lib/adminApi";
@@ -107,6 +108,15 @@ export default function PaymentHistory() {
   // row those filters match, not just whichever page is on screen, since a
   // new event always lands on page 1 regardless of what page is displayed.
   const changesQs = useMemo(() => {
+    const p = new URLSearchParams(qs);
+    p.delete("page");
+    return p.toString();
+  }, [qs]);
+
+  // Same filters/search as the table, minus pagination — an export always
+  // covers every matching transaction, not just the page currently on
+  // screen. See MembersList.tsx for the same pattern.
+  const exportQueryString = useMemo(() => {
     const p = new URLSearchParams(qs);
     p.delete("page");
     return p.toString();
@@ -264,9 +274,13 @@ export default function PaymentHistory() {
     // Fills the space below the topbar and scrolls rows internally — see
     // MembersList for the height maths.
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
-      <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
-        {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
+          {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+        </div>
+        {/* Open to every role that can see the ledger — reading it is all it takes to export it. */}
+        <ExportMenu base="/api/admin/payments/export" queryString={exportQueryString} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5">
