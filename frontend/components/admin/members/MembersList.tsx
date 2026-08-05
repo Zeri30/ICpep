@@ -19,10 +19,10 @@ import {
   Eye,
   FileSpreadsheet,
   FileText,
+  FileType,
   Loader2,
   MoreVertical,
   Pencil,
-  Printer,
   RotateCcw,
   Trash2,
   Wallet,
@@ -839,7 +839,7 @@ export default function MembersList() {
   );
 }
 
-/** Export the current filtered/searched list as CSV, Excel, or a printable PDF. */
+/** Export the current filtered/searched list as CSV, Excel, or PDF. */
 function ExportMenu({ queryString }: { queryString: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -862,7 +862,7 @@ function ExportMenu({ queryString }: { queryString: string }) {
         onClick={() => setOpen((o) => !o)}
         className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-secondary/60 px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:w-auto"
       >
-        <Download size={16} /> Export / Print
+        <Download size={16} /> Export
         <ChevronDown size={14} className={open ? "rotate-180 transition-transform" : "transition-transform"} />
       </button>
       {open && (
@@ -874,7 +874,7 @@ function ExportMenu({ queryString }: { queryString: string }) {
             <FileSpreadsheet size={15} /> Export as Excel
           </a>
           <a href={`${base}/pdf?${queryString}`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
-            <Printer size={15} /> Print as PDF
+            <FileType size={15} /> Export as PDF
           </a>
         </div>
       )}
