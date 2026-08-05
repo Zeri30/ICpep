@@ -83,8 +83,11 @@ class DashboardController extends Controller
             $users->where('created_at', '>', $since);
         }
 
-        // Not scoped to the term — the log itself isn't either.
-        $activity = ActivityLog::query();
+        // Not scoped to the term — the log itself isn't either. Excludes
+        // whatever this officer's Activity Log itself hides (see
+        // ActivityController), so the sidebar badge never advertises "new"
+        // rows the module then doesn't actually show them.
+        $activity = ActivityLog::query()->whereNotIn('action', ActivityLog::hiddenActionsFor($request->user()));
         if ($since = $lastViewed->get('activity')) {
             $activity->where('created_at', '>', $since);
         }

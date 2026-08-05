@@ -21,7 +21,6 @@ class ActivityController extends Controller
 {
     private const ACTIONS = [
         'registered', 'updated', 'deleted', 'restored', 'login', 'login_failed', 'logout',
-        'remember_token_reused',
         // User Management.
         'user_created', 'user_updated', 'user_activated', 'user_deactivated', 'user_deleted', 'password_reset',
         'users_logged_out_all',
@@ -29,10 +28,14 @@ class ActivityController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        // Historical rows from before payments moved to their own ledger —
-        // excluded outright rather than left reachable only by bypassing the
-        // dropdown, since the whole point is that they no longer belong here.
-        $query = ActivityLog::query()->whereNotIn('action', ['paid', 'unpaid'])->latest();
+        // Historical rows from before payments moved to their own ledger, plus
+        // whichever rows this viewer's role shouldn't see at all (always the
+        // "remember me" cookie internals, and sign-in/account-lifecycle events
+        // for every role but the Programming Team) — excluded outright rather
+        // than left reachable only by bypassing the dropdown, since the whole
+        // point is that they no longer belong in this viewer's log.
+        $hidden = ['paid', 'unpaid', ...ActivityLog::hiddenActionsFor($request->user())];
+        $query = ActivityLog::query()->whereNotIn('action', $hidden)->latest();
 
         if (($action = $request->query('action')) && in_array($action, self::ACTIONS, true)) {
             $query->where('action', $action);
