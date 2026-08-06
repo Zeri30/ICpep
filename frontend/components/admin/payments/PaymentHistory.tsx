@@ -16,6 +16,7 @@ import { useTerms } from "@/components/admin/MembershipTermProvider";
 import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Paginated, PaymentRow } from "@/lib/adminTypes";
+import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 /**
  * How many placeholder rows to draw while the first page is in flight.
@@ -149,7 +150,9 @@ export default function PaymentHistory() {
    * `changesQs`, `page` and `mutate`) kept fresh below, so the interval
    * itself is set up once per term rather than needing to restart on every
    * filter/page change — restarting would reset the `since` checkpoint to
-   * "now" and risk a change landing in the gap being missed.
+   * "now" and risk a change landing in the gap being missed. Paused while
+   * the tab is hidden and caught back up on becoming visible again — see
+   * useVisibilityInterval.
    */
   const pollRef = useRef<(since: string) => Promise<string>>(async (since) => since);
   useEffect(() => {
@@ -188,15 +191,15 @@ export default function PaymentHistory() {
     };
   });
 
+  const sinceRef = useRef(new Date().toISOString());
   useEffect(() => {
     if (!termId) return;
-
-    let since = new Date().toISOString();
-    const id = setInterval(async () => {
-      since = await pollRef.current(since);
-    }, 10_000);
-    return () => clearInterval(id);
+    sinceRef.current = new Date().toISOString();
   }, [termId]);
+
+  useVisibilityInterval(async () => {
+    sinceRef.current = await pollRef.current(sinceRef.current);
+  }, termId ? 10_000 : null);
 
   const amountCell = (v: number) => {
     if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;

@@ -43,6 +43,7 @@ import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Ske
 import { apiGet, apiSend, markModuleViewed } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
+import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 /** The six bulk payment verbs — see MemberController::bulk()'s PAYMENT_ACTIONS. */
 type PaymentAction =
@@ -452,25 +453,30 @@ export default function MembersList() {
    * and patch just those rows in — through the exact same applyPaymentUpdate
    * a bulk action's own response already goes through — so a payment another
    * officer records elsewhere shows up here without a manual refresh, without
-   * ever refetching the whole page.
+   * ever refetching the whole page. Paused while the tab is hidden and caught
+   * back up on becoming visible again — see useVisibilityInterval.
    *
    * `sinceRef` is a cursor, not state: it moves forward on every poll (using
    * the checkpoint the server hands back, not the client's own clock) and
    * doesn't need to trigger a re-render. `applyRef` holds the latest
-   * `applyPaymentUpdate` (which closes over `filters` and `mutate`) so the
-   * interval below can be set up once per term and still always call the
-   * current version, rather than needing to restart on every filter change.
+   * `applyPaymentUpdate` (which closes over `filters` and `mutate`), and
+   * `pollRef` the latest poll tick itself (which closes over `termId` and
+   * `sinceRef`) — useVisibilityInterval is called once, unconditionally, with
+   * a stable wrapper that always calls through to whichever closure is
+   * current, rather than needing to restart on every term/filter change.
    */
   const applyRef = useRef(applyPaymentUpdate);
   useEffect(() => {
     applyRef.current = applyPaymentUpdate;
   });
 
+  const sinceRef = useRef(new Date().toISOString());
+  const pollRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     if (!termId) return;
 
-    const sinceRef = { current: new Date().toISOString() };
-    const poll = async () => {
+    sinceRef.current = new Date().toISOString();
+    pollRef.current = async () => {
       try {
         const qs = new URLSearchParams({ term: String(termId), since: sinceRef.current });
         const { updated, since } = await apiGet<{ updated: BulkPaymentUpdate[]; since: string }>(
@@ -484,10 +490,11 @@ export default function MembersList() {
         // skipped over.
       }
     };
-
-    const id = setInterval(poll, 10_000);
-    return () => clearInterval(id);
   }, [termId]);
+
+  useVisibilityInterval(() => {
+    pollRef.current();
+  }, termId ? 10_000 : null);
 
   async function confirmAction() {
     if (!confirm) return;
