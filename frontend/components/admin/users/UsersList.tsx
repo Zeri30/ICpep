@@ -35,6 +35,7 @@ import { apiSend, markModuleViewed } from "@/lib/adminApi";
 import { useUsersListResource } from "@/components/admin/users/useUsersListResource";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { AdminUser, Paginated } from "@/lib/adminTypes";
+import { useOutsideClick } from "@/lib/useOutsideClick";
 
 type Confirm =
   | { kind: "toggle"; user: AdminUser }
@@ -374,14 +375,7 @@ function RowMenu({
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open, onClose]);
+  useOutsideClick(ref, onClose, open);
 
   const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
   const disabled = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-muted-foreground/50 cursor-not-allowed";

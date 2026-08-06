@@ -7,20 +7,14 @@
    copy of this pattern for the export architecture this mirrors. */
 
 import { ChevronDown, Download, FileSpreadsheet, FileText, FileType } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useOutsideClick } from "@/lib/useOutsideClick";
 
 export default function ExportMenu({ base, queryString }: { base: string; queryString: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useOutsideClick(ref, () => setOpen(false), open);
 
   const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
 

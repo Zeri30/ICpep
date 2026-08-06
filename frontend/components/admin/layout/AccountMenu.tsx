@@ -6,12 +6,13 @@
    SignOutButton used. */
 
 import { ChevronDown, LogOut, Monitor } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import ManageSessionsModal from "@/components/admin/layout/ManageSessionsModal";
 import { signOut } from "@/lib/adminApi";
 import { familyStyle, findRole } from "@/lib/roleFamily";
+import { useOutsideClick } from "@/lib/useOutsideClick";
 
 export default function AccountMenu() {
   const { officer, meta } = useAdmin();
@@ -22,19 +23,7 @@ export default function AccountMenu() {
 
   const roleTint = familyStyle(findRole(meta.roles, officer.role)?.family).text;
 
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onClick);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useOutsideClick(rootRef, () => setOpen(false), open, { closeOnEscape: true });
 
   return (
     <div ref={rootRef} className="relative">

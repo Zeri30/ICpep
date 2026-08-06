@@ -41,6 +41,7 @@ import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Ske
 import { apiGet, apiSend, markModuleViewed } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
+import { useOutsideClick } from "@/lib/useOutsideClick";
 import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 /** The six bulk payment verbs — see MemberController::bulk()'s PAYMENT_ACTIONS. */
@@ -865,14 +866,7 @@ function BulkPaymentMenu({ onAction }: { onAction: (action: PaymentAction) => vo
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useOutsideClick(ref, () => setOpen(false), open);
 
   const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
   const heading = "px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground";
@@ -941,14 +935,7 @@ function PaymentActionsMenu({
   pending: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open, onClose]);
+  useOutsideClick(ref, onClose, open);
 
   const item =
     "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-secondary-foreground";
@@ -1044,14 +1031,7 @@ function RowMenu({
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open, onClose]);
+  useOutsideClick(ref, onClose, open);
 
   const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
 
