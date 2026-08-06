@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -152,61 +153,70 @@ class EventController extends Controller
         $previous = $event->status;
 
         if ($status !== $previous) {
-            $event->update(['status' => $status]);
+            // Atomic: the status change and everything it cascades into — the
+            // share revoke, the absences recorded or taken back, and the
+            // activity log entries describing all of it — either all land or
+            // none does. Without this, a failure partway (a crash, a lost
+            // connection) between the status update and, say, recordAbsentees()
+            // could leave an event marked Done with no absences on record and
+            // no log line explaining why it changed.
+            DB::transaction(function () use ($event, $status, $previous): void {
+                $event->update(['status' => $status]);
 
-            // Closing an event withdraws its share link for good. Reopening
-            // does not bring it back — sharing again mints a new one — so
-            // whoever was sent the old link stays shut out, which is the point
-            // of revoking rather than pausing it.
-            if ($status->isClosed()) {
-                $hadLink = $event->shareUrl() !== null;
-                $event->revokeShare();
+                // Closing an event withdraws its share link for good. Reopening
+                // does not bring it back — sharing again mints a new one — so
+                // whoever was sent the old link stays shut out, which is the point
+                // of revoking rather than pausing it.
+                if ($status->isClosed()) {
+                    $hadLink = $event->shareUrl() !== null;
+                    $event->revokeShare();
 
-                if ($hadLink) {
-                    ActivityLog::record(
-                        'event_share_revoked',
-                        "Revoked the share link for {$event->title} — the event is now {$status->label()}",
-                    );
+                    if ($hadLink) {
+                        ActivityLog::record(
+                            'event_share_revoked',
+                            "Revoked the share link for {$event->title} — the event is now {$status->label()}",
+                        );
+                    }
                 }
-            }
 
-            // Closing the event closes attendance with it: every active officer
-            // who never checked in is recorded Absent, because this is the
-            // moment "nobody has said" stops being an honest reading of a
-            // missing row.
-            //
-            // Only for Done. A cancelled event did not take place, so nobody
-            // missed it — a roster of eleven absences for a meeting that never
-            // happened would be a false record rather than an empty one.
-            if ($status === EventStatus::Done) {
-                $absent = $event->recordAbsentees();
+                // Closing the event closes attendance with it: every active officer
+                // who never checked in is recorded Absent, because this is the
+                // moment "nobody has said" stops being an honest reading of a
+                // missing row.
+                //
+                // Only for Done. A cancelled event did not take place, so nobody
+                // missed it — a roster of eleven absences for a meeting that never
+                // happened would be a false record rather than an empty one.
+                if ($status === EventStatus::Done) {
+                    $absent = $event->recordAbsentees();
 
-                if ($absent > 0) {
-                    ActivityLog::record(
-                        'attendance_closed',
-                        "Recorded {$absent} ".($absent === 1 ? 'officer' : 'officers')
-                            ." absent from {$event->title}",
-                    );
+                    if ($absent > 0) {
+                        ActivityLog::record(
+                            'attendance_closed',
+                            "Recorded {$absent} ".($absent === 1 ? 'officer' : 'officers')
+                                ." absent from {$event->title}",
+                        );
+                    }
                 }
-            }
 
-            // Leaving Done takes those absences back — and only those. Every
-            // check-in stands, and so does every correction the secretariat
-            // made by hand; retracting an outcome is not a reason to discard a
-            // decision somebody made.
-            //
-            // Covers Done → Cancelled as well as Done → Scheduled: an event
-            // corrected to cancelled did not take place after all, so the
-            // absences it recorded describe a meeting nobody could have
-            // attended.
-            if ($previous === EventStatus::Done && $status !== EventStatus::Done) {
-                $event->reopenAttendance();
-            }
+                // Leaving Done takes those absences back — and only those. Every
+                // check-in stands, and so does every correction the secretariat
+                // made by hand; retracting an outcome is not a reason to discard a
+                // decision somebody made.
+                //
+                // Covers Done → Cancelled as well as Done → Scheduled: an event
+                // corrected to cancelled did not take place after all, so the
+                // absences it recorded describe a meeting nobody could have
+                // attended.
+                if ($previous === EventStatus::Done && $status !== EventStatus::Done) {
+                    $event->reopenAttendance();
+                }
 
-            ActivityLog::record(
-                'event_status_changed',
-                "Marked {$event->title} as {$status->label()} (was {$previous->label()})",
-            );
+                ActivityLog::record(
+                    'event_status_changed',
+                    "Marked {$event->title} as {$status->label()} (was {$previous->label()})",
+                );
+            });
         }
 
         return response()->json(new EventResource($event->fresh()->load('creator')));
