@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -110,7 +111,7 @@ class UserController extends Controller
         // handed back once below so whoever created the account can pass it
         // along. Signing in is already by email (AdminAuthController::login),
         // so there is no separate "username" to generate.
-        $defaultPassword = $this->generateDefaultPassword($data);
+        $defaultPassword = $this->generateDefaultPassword();
 
         $user = User::create([
             'name' => $this->composeName($data),
@@ -198,11 +199,11 @@ class UserController extends Controller
 
     /**
      * Put the account back into the same first-login state a newly created one
-     * starts in: a fresh system-generated password, built from the account's
-     * own name the same way {@see self::generateDefaultPassword()} builds one
-     * at creation, and {@see \App\Models\User::$must_change_password} forced
-     * back on so it must be replaced before anything else. Everything else on
-     * the account — name, email, role — is untouched.
+     * starts in: a fresh, random system-generated password (see
+     * {@see self::generateDefaultPassword()}) and
+     * {@see \App\Models\User::$must_change_password} forced back on so it
+     * must be replaced before anything else. Everything else on the account —
+     * name, email, role — is untouched.
      *
      * Deliberately not "let the officer resetting it type in a password of
      * their choosing": that password is one more secret that has to be handed
@@ -224,11 +225,7 @@ class UserController extends Controller
             ], 422);
         }
 
-        $defaultPassword = $this->generateDefaultPassword([
-            'first_name' => (string) $user->first_name,
-            'middle_initial' => $user->middle_initial,
-            'last_name' => (string) $user->last_name,
-        ]);
+        $defaultPassword = $this->generateDefaultPassword();
 
         $user->update([
             'password' => Hash::make($defaultPassword),
@@ -315,32 +312,25 @@ class UserController extends Controller
     }
 
     /**
-     * The first-login password a newly created account starts with —
-     * "first.last.m", or "first.last" when there's no middle initial (the
-     * same name parts {@see self::composeName()} builds the display name
-     * from). Lowercased throughout and with the spaces stripped out of
-     * whichever part has them (a first or last name of more than one word),
-     * so the password an officer is read out or hands over is always one
-     * simple, unspaced token per part. The officer is forced to replace it
-     * before doing anything else.
+     * The first-login password a newly created (or reset) account starts
+     * with — a fresh, cryptographically random 16-character string (letters,
+     * numbers and symbols), not derived from anything about the account.
      *
-     * @param  array{first_name:string,middle_initial?:?string,last_name:string}  $data
+     * Deliberately not built from the officer's name the way an earlier
+     * version of this did ("first.last.m"): a name is public/knowable
+     * information, not a secret, so anyone who knew how an officer's name is
+     * spelled could sign in as them during the window before their real
+     * first login — no guessing required, which meant the account-lockout
+     * protections elsewhere in this app (rate limiting, etc.) never even
+     * came into play. Random generation on every call also means no two
+     * accounts, and no two resets of the same account, ever share a
+     * password. The officer is forced to replace it before doing anything
+     * else (see `must_change_password`), so this only ever needs to get them
+     * to that screen — it's never a password anyone keeps.
      */
-    private function generateDefaultPassword(array $data): string
+    private function generateDefaultPassword(): string
     {
-        $middle = trim((string) ($data['middle_initial'] ?? ''));
-
-        return mb_strtolower(implode('.', array_filter([
-            $this->collapseSpaces($data['first_name']),
-            $this->collapseSpaces($data['last_name']),
-            $middle === '' ? null : $middle,
-        ])));
-    }
-
-    /** "Mark  Arone " → "MarkArone" — every space gone, not just the outer ones. */
-    private function collapseSpaces(string $value): string
-    {
-        return str_replace(' ', '', trim($value));
+        return Str::password(16);
     }
 
     /** "jUAN dela  CRUZ" → "Juan Dela Cruz" — normalized regardless of how it arrived. */
