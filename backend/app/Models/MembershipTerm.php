@@ -40,10 +40,32 @@ class MembershipTerm extends Model
      */
     private const CURRENT_CACHE_KEY = 'membership_term.current';
 
+    /**
+     * Cache key prefix for {@see self::resolve()}'s explicit-id lookups —
+     * the other half of "the term an admin request is asking about", read on
+     * every Members/Dashboard/Payments/Activity request that names a term
+     * (e.g. every non-default Payment History page). Terms are edited a
+     * handful of times a year, so this is invalidated the same blunt way as
+     * CURRENT_CACHE_KEY: any save/delete on any term forgets it, rather than
+     * tracking which id changed.
+     */
+    private const TERM_CACHE_KEY_PREFIX = 'membership_term.byid.';
+
     protected static function booted(): void
     {
-        static::saved(fn () => Cache::forget(self::CURRENT_CACHE_KEY));
-        static::deleted(fn () => Cache::forget(self::CURRENT_CACHE_KEY));
+        static::saved(function (self $term): void {
+            Cache::forget(self::CURRENT_CACHE_KEY);
+            Cache::forget(self::termCacheKey($term->id));
+        });
+        static::deleted(function (self $term): void {
+            Cache::forget(self::CURRENT_CACHE_KEY);
+            Cache::forget(self::termCacheKey($term->id));
+        });
+    }
+
+    private static function termCacheKey(int $id): string
+    {
+        return self::TERM_CACHE_KEY_PREFIX.$id;
     }
 
     protected $fillable = [
@@ -89,7 +111,16 @@ class MembershipTerm extends Model
      */
     public static function resolve(int|string|null $id): ?self
     {
-        return ($id ? static::find($id) : null) ?? static::current();
+        if (! $id) {
+            return static::current();
+        }
+
+        $term = Cache::rememberForever(
+            self::termCacheKey((int) $id),
+            static fn (): ?self => static::find($id),
+        );
+
+        return $term ?? static::current();
     }
 
     /**
