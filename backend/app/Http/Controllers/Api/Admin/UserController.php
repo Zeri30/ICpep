@@ -279,7 +279,16 @@ class UserController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    /** Permanent, irreversible removal. Super-Admin only (route middleware). */
+    /**
+     * Permanent, irreversible removal.
+     *
+     * Gated by the same `permission:users.manage` as every other route in
+     * this group (see routes/admin.php) — there is no separate "Super Admin"
+     * tier that reserves this one action to a smaller set of accounts than
+     * the rest of User Management. The only account-specific guard here is
+     * {@see self::isSelf()} below: whoever holds users.manage may delete any
+     * *other* administrator, just never their own signed-in account.
+     */
     public function destroy(Request $request, User $user): JsonResponse
     {
         if ($this->isSelf($request, $user)) {

@@ -228,10 +228,17 @@ class RolePermission extends Model
 
     /**
      * Every ability the Privileges panel does not own is pinned back to what
-     * {@see UserRole::defaultPermissions()} says — so today a stored row can
-     * only ever move paid/unpaid, and `users.manage` in particular stays with
-     * the Programming Team. Applied on read, so even a hand-edited database row
-     * cannot hand out an ability the panel was never allowed to grant.
+     * {@see UserRole::defaultPermissions()} says. Today every ability is
+     * editable (see {@see Permission::isEditable()}) — `users.manage`
+     * included — so in practice this pins nothing back; the stored row is
+     * taken as-is. What it guards against is an ability {@see
+     * Permission::isEditable()} still returns `false` for (one added later
+     * and not yet opted in): applied on read, so even a hand-edited database
+     * row can't hand out an ability the panel isn't allowed to grant. The
+     * separate protection against `users.manage` itself being stripped from
+     * every active account is {@see RolePermissionController::refuseLockout()},
+     * not this method — this one has nothing to do with that ability
+     * specifically.
      *
      * @param  list<Permission>  $permissions
      * @return list<Permission>
