@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('remember-tokens:prune')->daily();
+Schedule::command('activity-log:prune')->daily();

@@ -41,6 +41,23 @@ class ActivityController extends Controller
             $query->where('action', $action);
         }
 
+        // Leading-wildcard LIKE — same tradeoff as PaymentController::filtered's
+        // search, and deliberately left as a plain LIKE for the same reason:
+        // no B-tree index can serve it, so this is a sequential scan by
+        // design, and at this org's scale (a few hundred rows per term, and
+        // now bounded from growing unboundedly by the scheduled prune — see
+        // icpep.activity_log_retention_days and PruneActivityLogs) that scan
+        // costs a fraction of a millisecond. Not worth a pg_trgm GIN index
+        // and its write-time/storage cost until there's an actual reason to
+        // pay it.
+        //
+        // Revisit if the row count climbs into the low thousands or a search
+        // is ever *measured* slow: add `CREATE EXTENSION IF NOT EXISTS
+        // pg_trgm;` plus `CREATE INDEX ... USING gin (column gin_trgm_ops)`
+        // on description/actor_name/actor, then swap these LIKEs for
+        // `whereRaw('column ILIKE ?', ...)` (trigram indexes need ILIKE/LIKE
+        // via raw SQL to be picked up on Postgres, not Eloquent's portable
+        // 'like' operator).
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('description', 'like', "%{$search}%")
