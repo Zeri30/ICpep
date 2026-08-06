@@ -1,12 +1,12 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowUpRight, Check, Lightbulb, Sparkles, Target, Zap } from "lucide-react";
+import { ArrowUpRight, Lightbulb, Sparkles, Target, Zap } from "lucide-react";
 import Reveal from "@/components/ui/Reveal";
 import SectionHeading from "@/components/ui/SectionHeading";
 import PresentationInner from "@/components/ui/PresentationInner";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
-import { ACTIVITIES, BENEFITS, OBJECTIVES } from "@/lib/data";
+import { ACTIVITIES, BENEFITS, OBJECTIVES_TEXT } from "@/lib/data";
 
 export default function About() {
   return (
@@ -78,23 +78,7 @@ export default function About() {
               <h3 className="font-display font-bold text-xl uppercase tracking-wide mb-6 flex items-center gap-3">
                 <Target size={22} className="text-primary" /> Objectives
               </h3>
-              <ul className="space-y-4">
-                {OBJECTIVES.map((o, i) => (
-                  <motion.li
-                    key={i}
-                    initial={{ opacity: 0, x: -16 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, amount: 0.4 }}
-                    transition={{ delay: i * 0.07, duration: 0.4 }}
-                    className="flex gap-3 text-secondary-foreground leading-relaxed"
-                  >
-                    <span className="mt-1 grid place-items-center w-5 h-5 shrink-0 rounded-full bg-primary/15 text-primary-glow">
-                      <Check size={12} />
-                    </span>
-                    {o}
-                  </motion.li>
-                ))}
-              </ul>
+              <p className="text-secondary-foreground leading-relaxed">{OBJECTIVES_TEXT}</p>
             </div>
           </Reveal>
           <Reveal delay={0.1}>
@@ -103,14 +87,14 @@ export default function About() {
                 <Sparkles size={22} className="text-primary" /> What We Do
               </h3>
               <p className="text-secondary-foreground leading-relaxed">
-                Throughout the academic year, ICPEP runs technical{" "}
-                <span className="text-foreground font-medium">seminars and workshops</span>, organizes{" "}
-                <span className="text-foreground font-medium">coding competitions and hackathons</span>, joins
-                regional and national <span className="text-foreground font-medium">ICPEP events</span>, leads{" "}
-                <span className="text-foreground font-medium">community outreach</span> programs that bring
-                technology to local schools, and holds{" "}
-                <span className="text-foreground font-medium">team-building activities</span> that turn
-                classmates into lifelong colleagues.
+                Throughout the academic year, ICPEP conducts{" "}
+                <span className="text-foreground font-medium">technical seminars and workshops</span>, organizes{" "}
+                <span className="text-foreground font-medium">coding competitions and hackathons</span>,
+                participates in{" "}
+                <span className="text-foreground font-medium">regional and national ICPEP events</span>, and
+                leads{" "}
+                <span className="text-foreground font-medium">community outreach programs</span> that
+                introduce technology and engineering concepts to local schools and partner communities.
               </p>
               <div className="mt-8 grid grid-cols-2 gap-3">
                 {ACTIVITIES.map((a) => (
