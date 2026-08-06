@@ -43,6 +43,14 @@ class MemberController extends Controller
         'createdAt' => 'created_at',
     ];
 
+    /**
+     * Ids a single bulk() request may carry. The selection this is built from
+     * is always what an officer manually ticked in the table — nowhere near
+     * this many in practice — so the limit exists only to bound how long the
+     * transaction below can hold its row locks, not to constrain real use.
+     */
+    private const MAX_BULK_IDS = 500;
+
     /* ------------------------------------------------------------------ read */
 
     /**
@@ -302,7 +310,7 @@ class MemberController extends Controller
     public function bulk(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
+            'ids' => ['required', 'array', 'min:1', 'max:'.self::MAX_BULK_IDS],
             'ids.*' => ['integer'],
             'action' => ['required', Rule::in([...self::PAYMENT_ACTIONS, 'delete', 'restore'])],
         ]);

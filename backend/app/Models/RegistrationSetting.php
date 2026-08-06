@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Singleton holding whether the public membership form accepts submissions.
@@ -22,6 +23,21 @@ class RegistrationSetting extends Model
         'End of School Year',
         'Semestral Break',
     ];
+
+    /**
+     * Cache key for {@see self::instance()} — read on every public landing-page
+     * load (registration-status) and every application submission, but changes
+     * only when an officer opens/closes registration. Same
+     * cache-forever-and-invalidate-on-write shape as
+     * {@see MembershipTerm::CURRENT_CACHE_KEY}, for the same reason.
+     */
+    private const INSTANCE_CACHE_KEY = 'registration_setting.instance';
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => Cache::forget(self::INSTANCE_CACHE_KEY));
+        static::deleted(fn () => Cache::forget(self::INSTANCE_CACHE_KEY));
+    }
 
     protected $fillable = [
         'is_open',
@@ -45,7 +61,10 @@ class RegistrationSetting extends Model
      */
     public static function instance(): self
     {
-        return static::firstOrCreate([], ['is_open' => true]);
+        return Cache::rememberForever(
+            self::INSTANCE_CACHE_KEY,
+            static fn (): self => static::firstOrCreate([], ['is_open' => true]),
+        );
     }
 
     public function close(string $reason): void

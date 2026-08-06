@@ -108,16 +108,19 @@ class ApplicationController extends Controller
             ->orderByDesc('id')
             ->first(['id', 'signature_path', 'picture_path']);
 
-        // Upload files to the configured disk. store() generates a random,
-        // collision-free name and returns the path within the bucket.
-        $signaturePath = $request->file('signature')->store('signatures');
-        $picturePath = $request->file('picture')->store('pictures');
+        // Upload to the Supabase bucket explicitly — named the same way
+        // MemberController::download() and MemberResource::signedUrl() already
+        // name it when reading these files back, rather than trusting that
+        // FILESYSTEM_DISK's default happens to still agree. store() generates
+        // a random, collision-free name and returns the path within the bucket.
+        $signaturePath = $request->file('signature')->store('signatures', 'supabase');
+        $picturePath = $request->file('picture')->store('pictures', 'supabase');
 
         if ($previous) {
             // One student, one current photo/signature: point every one of
             // this student's records — this term and every earlier one — at
             // the freshly uploaded files, then remove the ones they replace.
-            Storage::delete(array_filter([$previous->signature_path, $previous->picture_path]));
+            Storage::disk('supabase')->delete(array_filter([$previous->signature_path, $previous->picture_path]));
 
             Application::withTrashed()
                 ->where('student_id', $validated['studentId'])
@@ -151,7 +154,7 @@ class ApplicationController extends Controller
                 // already made them canonical for this student's earlier rows,
                 // so deleting them here would break those instead.
                 if (! $previous) {
-                    Storage::delete([$signaturePath, $picturePath]);
+                    Storage::disk('supabase')->delete([$signaturePath, $picturePath]);
                 }
 
                 return $this->duplicateResponse();
