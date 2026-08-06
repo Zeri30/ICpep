@@ -521,6 +521,13 @@ class Event extends Model
      * favour of a sheet of paper, so this is a first-class action rather than a
      * repair hatch — which is why it is stamped {@see AttendanceMethod::Override}
      * and carries who made it.
+     *
+     * Two officers correcting the same record at the same instant can both
+     * read firstOrNew() as "no row yet" before either has saved, same as
+     * {@see self::checkIn()} — the unique index on (event_id, user_id) is
+     * what actually stops the duplicate; the catch below just keeps the
+     * request that lost the race from surfacing that as a server error
+     * instead of the row the winner already wrote.
      */
     public function setAttendance(User $officer, AttendanceStatus $status, User $by): EventAttendance
     {
@@ -535,7 +542,13 @@ class Event extends Model
                 ? ($record->checked_in_at ?? now())
                 : null,
             'recorded_by' => $by->id,
-        ])->save();
+        ]);
+
+        try {
+            $record->save();
+        } catch (UniqueConstraintViolationException) {
+            return $this->attendance()->where('user_id', $officer->id)->firstOrFail();
+        }
 
         return $record;
     }
