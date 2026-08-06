@@ -17,9 +17,6 @@ import {
   Clock,
   Download,
   Eye,
-  FileSpreadsheet,
-  FileText,
-  FileType,
   Loader2,
   MoreVertical,
   Pencil,
@@ -34,6 +31,7 @@ import TermBar from "@/components/admin/members/TermBar";
 import Badge from "@/components/ui/Badge";
 import ConfirmDialog, { type ConfirmTone } from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
+import ExportMenu from "@/components/admin/ui/ExportMenu";
 import Pagination from "@/components/admin/ui/Pagination";
 import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/admin/members/MembersFilters";
 import EditMemberModal from "@/components/admin/members/EditMemberModal";
@@ -710,7 +708,7 @@ export default function MembersList() {
           ) : null}
         </div>
         {/* Open to every role — reading the list is all it takes to export it. */}
-        <ExportMenu queryString={exportQueryString} />
+        <ExportMenu base="/api/admin/members/export" queryString={exportQueryString} />
       </div>
 
       {/* Filters and the bulk actions share one row: the selection controls
@@ -842,49 +840,6 @@ export default function MembersList() {
         onConfirm={confirmAction}
         onClose={() => setConfirm(null)}
       />
-    </div>
-  );
-}
-
-/** Export the current filtered/searched list as CSV, Excel, or PDF. */
-function ExportMenu({ queryString }: { queryString: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open]);
-
-  const base = "/api/admin/members/export";
-  const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
-
-  return (
-    <div ref={ref} className="relative w-full sm:w-auto">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-secondary/60 px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:w-auto"
-      >
-        <Download size={16} /> Export
-        <ChevronDown size={14} className={open ? "rotate-180 transition-transform" : "transition-transform"} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-11 z-20 w-52 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] sm:left-auto sm:right-0">
-          <a href={`${base}/csv?${queryString}`} className={item} onClick={() => setOpen(false)}>
-            <FileText size={15} /> Export as CSV
-          </a>
-          <a href={`${base}/excel?${queryString}`} className={item} onClick={() => setOpen(false)}>
-            <FileSpreadsheet size={15} /> Export as Excel
-          </a>
-          <a href={`${base}/pdf?${queryString}`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
-            <FileType size={15} /> Export as PDF
-          </a>
-        </div>
-      )}
     </div>
   );
 }
