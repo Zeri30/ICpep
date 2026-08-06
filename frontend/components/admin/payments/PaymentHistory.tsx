@@ -267,7 +267,24 @@ export default function PaymentHistory() {
       render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span>,
       skeleton: <Bar w="w-40" />,
     },
-    { key: "actor", header: "By", width: "12%", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span>, skeleton: <Bar w="w-24" /> },
+    {
+      key: "actor",
+      header: "By",
+      width: "12%",
+      render: (r) => (
+        <div className="leading-tight">
+          <p className="whitespace-nowrap font-medium text-foreground">{r.actorName ?? r.actor ?? "System"}</p>
+          {r.actorRoleLabel && <p className="text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
+        </div>
+      ),
+      // Two lines, because the cell has two — name over role.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-24" />
+          <Bar w="w-16" h="h-3" />
+        </div>
+      ),
+    },
   ];
 
   return (

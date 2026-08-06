@@ -33,6 +33,8 @@ class PaymentTransaction extends Model
         'effective_at',
         'previous_effective_at',
         'actor',
+        'actor_name',
+        'actor_role',
         'member_name',
         'section',
         'year_level',

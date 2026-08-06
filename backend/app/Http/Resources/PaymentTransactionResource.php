@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\UserRole;
 use App\Models\PaymentTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -30,7 +31,14 @@ class PaymentTransactionResource extends JsonResource
             'effectiveAt' => optional($this->effective_at)->toIso8601String(),
             'previousEffectiveAt' => optional($this->previous_effective_at)->toIso8601String(),
             'recordedAt' => optional($this->created_at)->toIso8601String(),
+            // Name first, falling back to the recorded email for rows with no
+            // account behind them (seeded rows, or written before names were
+            // captured) — same fallback ActivityLogResource uses.
+            'actorName' => $this->actor_name ?: $this->actor,
             'actor' => $this->actor,
+            'actorRoleLabel' => $this->actor_role
+                ? (UserRole::tryFrom($this->actor_role)?->label() ?? $this->actor_role)
+                : null,
             // Which semester this event belongs to — badges the Event column
             // "(Current)" or a school-year label, same as the Activity Log.
             // Null only for rows written before terms existed.

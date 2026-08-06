@@ -416,6 +416,8 @@ class MemberController extends Controller
                 'effective_at' => $effectiveAt,
                 'previous_effective_at' => $previous,
                 'actor' => $user?->email,
+                'actor_name' => $user?->name,
+                'actor_role' => $user?->role?->value,
                 'member_name' => $member->full_name,
                 'section' => $member->section,
                 'year_level' => $member->year_level,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentTransactionResource;
 use App\Models\MembershipTerm;
@@ -143,6 +144,9 @@ class PaymentController extends Controller
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('member_name', 'like', "%{$search}%")
+                    // The name is what the table shows, so it has to be what
+                    // the search matches; email stays searchable behind it.
+                    ->orWhere('actor_name', 'like', "%{$search}%")
                     ->orWhere('actor', 'like', "%{$search}%")
                     ->orWhereHas('application', fn (Builder $a): Builder => $a
                         ->where('surname', 'like', "%{$search}%")
@@ -186,7 +190,7 @@ class PaymentController extends Controller
      */
     private const EXPORT_SELECT_COLUMNS = [
         'id', 'membership_term_id', 'member_name', 'section', 'year_level',
-        'action', 'kind', 'amount', 'actor', 'created_at',
+        'action', 'kind', 'amount', 'actor', 'actor_name', 'actor_role', 'created_at',
     ];
 
     /** Human-readable labels — same wording PaymentHistory.tsx's EVENT/KIND_LABEL show on screen. */
@@ -294,8 +298,22 @@ class PaymentController extends Controller
             number_format((float) $row->amount, 2),
             $row->membershipTerm?->label ?? '',
             optional($row->created_at)->toDateTimeString() ?? '',
-            $row->actor ?? 'System',
+            $this->recordedByLabel($row),
         ];
+    }
+
+    /** "Juan Dela Cruz (Treasurer)" — name over email, role alongside for the
+        same transparency the on-screen "By" column shows. */
+    private function recordedByLabel(PaymentTransaction $row): string
+    {
+        $name = $row->actor_name ?: $row->actor;
+        if (! $name) {
+            return 'System';
+        }
+
+        $role = $row->actor_role ? (UserRole::tryFrom($row->actor_role)?->label() ?? $row->actor_role) : null;
+
+        return $role ? "{$name} ({$role})" : $name;
     }
 
     private function exportFilename(Request $request, string $ext): string

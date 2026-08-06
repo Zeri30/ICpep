@@ -195,6 +195,8 @@ class Application extends Model
             'effective_at' => $effectiveAt,
             'previous_effective_at' => $previous,
             'actor' => Auth::user()?->email,
+            'actor_name' => Auth::user()?->name,
+            'actor_role' => Auth::user()?->role?->value,
             'member_name' => $this->full_name,
             'section' => $this->section,
             'year_level' => $this->year_level,

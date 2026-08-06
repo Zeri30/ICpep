@@ -119,7 +119,17 @@
                     <td class="amount">{{ number_format((float) $row->amount, 2) }}</td>
                     <td>{{ $row->membershipTerm?->label ?? '—' }}</td>
                     <td>{{ optional($row->created_at)->format('M j, Y g:i A') }}</td>
-                    <td>{{ $row->actor ?? 'System' }}</td>
+                    <td>
+                        @php($actorName = $row->actor_name ?: $row->actor)
+                        @if ($actorName)
+                            {{ $actorName }}
+                            @if ($row->actor_role)
+                                <br><span style="color:#777;">{{ \App\Enums\UserRole::tryFrom($row->actor_role)?->label() ?? $row->actor_role }}</span>
+                            @endif
+                        @else
+                            System
+                        @endif
+                    </td>
                 </tr>
             @endforeach
         </tbody>
