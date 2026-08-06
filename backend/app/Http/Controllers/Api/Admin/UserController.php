@@ -178,13 +178,22 @@ class UserController extends Controller
             return $this->reject('You cannot deactivate your own account while signed in.');
         }
 
-        $user->update(['is_active' => ! $user->is_active]);
+        // Flips whatever the row's value is *at the moment this statement
+        // runs*, computed by the database in one atomic UPDATE — not
+        // `! $user->is_active`, which would flip whatever this request
+        // happened to load earlier. Two admins toggling the same account at
+        // nearly the same instant would otherwise both read the same
+        // starting value and race to the same result (a lost update); this
+        // way each UPDATE inverts the row as it actually stands, so two
+        // overlapping toggles still compose correctly.
+        User::whereKey($user->id)->update(['is_active' => DB::raw('NOT is_active')]);
+        $user->refresh();
 
         $user->is_active
             ? ActivityLog::record('user_activated', "Activated admin {$user->name}", $user->name)
             : ActivityLog::record('user_deactivated', "Deactivated admin {$user->name}", $user->name);
 
-        return new UserResource($user->fresh());
+        return new UserResource($user);
     }
 
     /**
