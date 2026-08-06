@@ -65,6 +65,12 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Production's channel (LOG_STACK=daily — see .env.example): one file
+        // per calendar day (laravel-YYYY-MM-DD.log) instead of "single"'s one
+        // ever-growing file, with files older than `days` deleted
+        // automatically on the next write. Nothing else about what gets
+        // logged or how changes between the two drivers — this only affects
+        // how the log directory is organized and bounded over time.
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
