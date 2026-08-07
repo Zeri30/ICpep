@@ -100,19 +100,41 @@ class AttendanceTest extends TestCase
      * Checking in needs no ability beyond being an active officer. The
      * view-only roles are exactly the ones most likely to be sitting in the
      * room, so a permission check here would defeat the module.
+     *
+     * Excludes the Programming Team — see
+     * test_the_programming_team_cannot_check_in() — which runs the system
+     * rather than holding a seat on the org chart, and so is not tracked here
+     * at all.
      */
     public function test_every_officer_role_can_check_itself_in(): void
     {
         $event = $this->liveEvent();
+        $roles = array_filter(UserRole::cases(), fn (UserRole $r): bool => $r !== UserRole::ProgrammingTeam);
 
-        foreach (UserRole::cases() as $role) {
+        foreach ($roles as $role) {
             $this->actingAs($this->officer($role))
                 ->postJson('/api/admin/check-in', ['token' => $event->qr_token])
                 ->assertOk()
                 ->assertJsonPath('status', 'present');
         }
 
-        $this->assertSame(count(UserRole::cases()), $event->attendance()->count());
+        $this->assertSame(count($roles), $event->attendance()->count());
+    }
+
+    /**
+     * The Programming Team's account runs the system, not a seat on the org
+     * chart — it has no attendance to record, at any event, by any method.
+     */
+    public function test_the_programming_team_cannot_check_in(): void
+    {
+        $event = $this->liveEvent();
+
+        $this->actingAs($this->officer(UserRole::ProgrammingTeam))
+            ->postJson('/api/admin/check-in', ['token' => $event->qr_token])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('token');
+
+        $this->assertSame(0, $event->attendance()->count());
     }
 
     /** Nobody signed in is nobody at all: there is no anonymous check-in. */

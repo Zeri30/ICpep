@@ -16,6 +16,7 @@ import {
   UserX,
   XCircle,
 } from "lucide-react";
+import { useAdmin } from "@/components/admin/AdminProvider";
 import type { ScheduledEvent } from "@/lib/adminTypes";
 
 /**
@@ -105,13 +106,17 @@ export function TimingBadge({ event }: { event: ScheduledEvent }) {
  * actually recorded. The modal says `pending` in words, where there is room to
  * explain it.
  *
- * Shown to every role. The roster — who *else* was there — stays the
- * secretariat's; your own line is simply yours.
+ * Shown to every role except the Programming Team, whose account runs the
+ * system rather than holding a seat on the org chart — see MyAttendance in
+ * EventModal for the same exclusion on the modal's own attendance panel.
+ * The roster — who *else* was there — stays the secretariat's; your own
+ * line is simply yours.
  */
 export function MyAttendanceBadge({ event }: { event: ScheduledEvent }) {
+  const { officer } = useAdmin();
   const { status, statusLabel, checkedInLabel } = event.myAttendance;
 
-  if (status === "pending") return null;
+  if (officer.role === "programming_team" || status === "pending") return null;
 
   const present = status === "present";
 

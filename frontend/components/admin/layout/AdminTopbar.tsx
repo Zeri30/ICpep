@@ -2,10 +2,12 @@
 
 import { Menu, QrCode } from "lucide-react";
 import { useState } from "react";
+import { useAdmin } from "@/components/admin/AdminProvider";
 import AccountMenu from "@/components/admin/layout/AccountMenu";
 import CheckInModal from "@/components/attendance/CheckInModal";
 
 export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
+  const { officer } = useAdmin();
   const [scannerOpen, setScannerOpen] = useState(false);
 
   return (
@@ -20,16 +22,22 @@ export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
 
       <div className="ml-auto flex items-center gap-4">
         {/* Mobile only, in the corner sign-out used to sit in — see
-            AdminSidebar for where sign-out went instead. */}
-        <button
-          type="button"
-          onClick={() => setScannerOpen(true)}
-          aria-label="Scan attendance QR"
-          title="Scan attendance QR"
-          className="grid size-10 place-items-center rounded-md border border-primary/50 text-primary transition-colors hover:bg-primary/10 sm:hidden"
-        >
-          <QrCode size={18} />
-        </button>
+            AdminSidebar for where sign-out went instead. Not for the
+            Programming Team: that account runs the system rather than
+            holding a seat on the org chart, so it has no attendance to scan
+            in — the endpoint refuses it the same way (see
+            AttendanceController::store()). */}
+        {officer.role !== "programming_team" && (
+          <button
+            type="button"
+            onClick={() => setScannerOpen(true)}
+            aria-label="Scan attendance QR"
+            title="Scan attendance QR"
+            className="grid size-10 place-items-center rounded-md border border-primary/50 text-primary transition-colors hover:bg-primary/10 sm:hidden"
+          >
+            <QrCode size={18} />
+          </button>
+        )}
 
         <div className="hidden sm:block">
           <AccountMenu />

@@ -394,26 +394,34 @@ export default function PaymentHistory() {
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={search} onChange={(e) => reset(setSearch)(e.target.value)} placeholder="Search member or officer…" className={`${selectCls} w-full pl-9 sm:w-72`} />
         </div>
-        <select value={action} onChange={(e) => reset(setAction)(e.target.value)} className={selectCls} aria-label="Event">
-          <option value="">All</option>
-          <option value="paid">Paid</option>
-          <option value="revoked">Revoked</option>
-        </select>
-        <select value={kind} onChange={(e) => reset(setKind)(e.target.value)} className={selectCls} aria-label="Payment batch">
-          <option value="">All batches</option>
-          <option value="payment1">Payment 1</option>
-          <option value="payment2">Payment 2</option>
-        </select>
-        <select value={klass} onChange={(e) => reset(setKlass)(e.target.value)} className={selectCls} aria-label="Year & Section">
-          <option value="">All </option>
-          {meta.classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        {/* Below `sm` this is a two-column grid, so the three selects line up
+            in a clean block instead of raggedly wrapping one-by-one next to a
+            full-width search bar — same fix as the Members List filters.
+            `sm:contents` drops the wrapper from the flow at `sm`+, handing
+            its children back to the parent's flex row exactly as before. */}
+        <div className="grid w-full grid-cols-2 gap-2 sm:contents">
+          <select value={action} onChange={(e) => reset(setAction)(e.target.value)} className={`${selectCls} w-full sm:w-auto`} aria-label="Event">
+            <option value="">All</option>
+            <option value="paid">Paid</option>
+            <option value="revoked">Revoked</option>
+          </select>
+          <select value={kind} onChange={(e) => reset(setKind)(e.target.value)} className={`${selectCls} w-full sm:w-auto`} aria-label="Payment batch">
+            <option value="">All batches</option>
+            <option value="payment1">Payment 1</option>
+            <option value="payment2">Payment 2</option>
+          </select>
+          <select value={klass} onChange={(e) => reset(setKlass)(e.target.value)} className={`${selectCls} col-span-2 w-full sm:col-span-1 sm:w-auto`} aria-label="Year & Section">
+            <option value="">All </option>
+            {meta.classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
 
         {/* Which semester's ledger this is. Same control as the Members
             module, sharing the same selection, so switching here follows you
             there. Pushed to the far right of the filter row, away from the
-            search/event/section controls it doesn't narrow alongside. */}
-        <div className="ml-auto flex flex-wrap items-center gap-3">
+            search/event/section controls it doesn't narrow alongside — but
+            stacked full-width above `sm`, where there's no "right" to push to. */}
+        <div className="flex w-full flex-wrap items-center gap-3 sm:ml-auto sm:w-auto">
           <TermSelect />
           {isViewingPast && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-secondary/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -432,6 +440,7 @@ export default function PaymentHistory() {
         <DataTable
           fill
           fixedLayout
+          rowDividerClassName="border-line"
           columns={columns}
           rows={rows}
           rowKey={(r) => r.id}
@@ -453,7 +462,7 @@ export default function PaymentHistory() {
       {/* Stacked cards for phones and tablets — same data, laid out so
           nothing needs to be squeezed into a column too narrow for it. */}
       <div className="overflow-hidden rounded-xl border border-line bg-card lg:hidden">
-        <div className="divide-y divide-line/40">
+        <div className="divide-y divide-line">
           {awaitingRows ? (
             Array.from({ length: SKELETON_ROWS }, (_, i) => <PaymentCardSkeleton key={`skeleton-${i}`} />)
           ) : error ? (
