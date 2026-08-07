@@ -242,18 +242,29 @@ export async function logoutAllSessions(): Promise<void> {
   window.location.href = redirect ?? "/";
 }
 
-/** Fired after a module is marked viewed, so AdminSidebar's badge (a separate
+/** Fired when a module is marked viewed, so AdminSidebar's badge (a separate
     component, polling on its own timer) can zero out immediately instead of
-    waiting for its next poll. */
+    waiting for its next poll. Carries which module, so the listener can
+    patch that one count in place rather than paying for a fresh /counts
+    round trip just to learn the number it already knows is now 0. */
 export const MODULE_VIEWED_EVENT = "icpep:module-viewed";
+export type ModuleViewedDetail = { module: "members" | "payments" | "users" | "activity" };
 
 /** "I just opened this module" — zeroes the signed-in officer's sidebar badge
-    for it (see ModuleView on the backend). Errors are swallowed: failing to
-    record a view is not worth surfacing to whoever just opened a list. */
+    for it (see ModuleView on the backend).
+
+    The event fires immediately, before the write below is even sent, rather
+    than after it resolves: the badge is reflecting "I just opened this", not
+    confirmed server state, so there is nothing worth waiting on a round trip
+    for. The write still happens right after, so the server's own count
+    agrees by the next poll — and errors from it are swallowed, same as
+    before, since a missed write just means the badge reappears at the next
+    poll rather than something worth surfacing to whoever just opened a
+    list. */
 export async function markModuleViewed(module: "members" | "payments" | "users" | "activity"): Promise<void> {
+  window.dispatchEvent(new CustomEvent<ModuleViewedDetail>(MODULE_VIEWED_EVENT, { detail: { module } }));
   try {
     await apiSend<{ ok: true }>("POST", `/me/views/${module}`);
-    window.dispatchEvent(new Event(MODULE_VIEWED_EVENT));
   } catch {
     // Best-effort — see above.
   }
