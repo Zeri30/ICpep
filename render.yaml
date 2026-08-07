@@ -13,21 +13,19 @@
 # written — verify against the current reference before relying on it:
 # https://render.com/docs/blueprint-spec
 #
-# `runtime`/`env` below assumes the backend is deployed as a native PHP
-# service. If the web service instead runs from a Dockerfile, change this
-# job to `runtime: docker` and point `dockerfilePath`/`dockerContext` at the
-# same Dockerfile so the cron job's PHP version and extensions match the
-# app it's maintaining.
+# Render has no native PHP runtime for services — `backend/Dockerfile` is
+# what actually runs the app, and this cron job reuses the same image so its
+# PHP version/extensions never drift from the web service it's maintaining.
 
 services:
   - type: cron
     name: icpep-scheduler
-    runtime: php
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
     region: singapore
     plan: starter
-    rootDir: backend
     schedule: "* * * * *"
-    buildCommand: composer install --no-dev --optimize-autoloader
     # Laravel decides what's actually due to run (see routes/console.php) —
     # this fires every minute, but remember-tokens:prune and
     # activity-log:prune themselves only execute once a day.
