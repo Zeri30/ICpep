@@ -143,7 +143,7 @@ class MemberController extends Controller
         $data = $request->validate([
             'surname' => ['required', 'string', 'max:100'],
             'givenName' => ['required', 'string', 'max:100'],
-            'middleInitial' => ['nullable', 'string', 'max:1'],
+            'middleInitial' => ['nullable', 'string', 'max:2'],
             'studentId' => [
                 'required', 'string', 'digits:10',
                 // Scoped to this member's own term, same as the public form's
