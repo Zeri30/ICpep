@@ -941,10 +941,30 @@ function ReadOnlyDetails({ event }: { event: ScheduledEvent }) {
  * Always rendered, `pending` included. Unlike the badge in the list, there is
  * room here to say "not checked in" and to explain that it is not the same
  * thing as absent.
+ *
+ * Not rendered at all for the Programming Team: that account runs the system
+ * rather than holding a seat on the org chart, so it has no attendance to
+ * report — see Event::recordAbsentees() and AttendanceController on the
+ * backend, which keep it off the roster and the auto-absent sweep the same
+ * way.
  */
 function MyAttendance({ event }: { event: ScheduledEvent }) {
+  const { officer } = useAdmin();
   const { status, statusLabel, methodLabel, checkedInLabel, canCheckIn } = event.myAttendance;
   const [checkInOpen, setCheckInOpen] = useState(false);
+
+  if (officer.role === "programming_team") return null;
+
+  // The check-in offer is only ever useful while the event is actually
+  // happening today: not before it starts, not once its end time has passed,
+  // and not on a past or future date — belt-and-suspenders alongside the
+  // server's own `acceptsAttendance`/`canCheckIn` (which also closes it off
+  // once the event is marked done, even mid-day). `event.date`/`endTime` are
+  // already in the organization's timezone, so building a plain local Date
+  // from them reads the same wall-clock time a person at the event would.
+  const eventEndClock = event.endTime ?? event.time;
+  const eventEndsAt = new Date(`${event.date}T${eventEndClock}:00`);
+  const withinCheckInWindow = event.timing === "today" && new Date() <= eventEndsAt;
 
   const tone =
     status === "present"
@@ -960,7 +980,7 @@ function MyAttendance({ event }: { event: ScheduledEvent }) {
       ? [checkedInLabel && `Recorded at ${checkedInLabel}`, methodLabel].filter(Boolean).join(" · ")
       : status === "absent"
         ? "You didn't attend this event. If that's wrong, ask the Secretary to correct it on the roster."
-        : event.acceptsAttendance
+        : event.acceptsAttendance && withinCheckInWindow
           ? "Scan the event QR, or check in with the code."
           : "No attendance was recorded for you at this event.";
 
@@ -975,7 +995,7 @@ function MyAttendance({ event }: { event: ScheduledEvent }) {
 
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{explanation}</p>
 
-      {canCheckIn && (
+      {canCheckIn && withinCheckInWindow && (
         // No token here — the QR token is withheld from every role but the
         // secretariat, and rightly so. The code path needs nothing but the six
         // characters read out at the event, so that is what this offers —

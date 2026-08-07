@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\AttendanceMethod;
 use App\Enums\AttendanceStatus;
 use App\Enums\EventStatus;
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EventAttendanceResource;
 use App\Models\ActivityLog;
@@ -110,6 +111,14 @@ class AttendanceController extends Controller
 
         $officer = $request->user();
 
+        // The Programming Team's account runs the system, not a seat on the
+        // org chart — it carries no attendance, on this event or any other.
+        if ($officer->role === UserRole::ProgrammingTeam) {
+            throw ValidationException::withMessages([
+                'token' => 'Programming Team accounts are not tracked for attendance.',
+            ]);
+        }
+
         [$event, $method] = isset($data['token']) && $data['token'] !== ''
             ? [Event::byQrToken($data['token']), AttendanceMethod::Qr]
             : [$this->eventFromCode($request, (string) $data['code']), AttendanceMethod::Code];
@@ -184,6 +193,10 @@ class AttendanceController extends Controller
 
         $officers = User::query()
             ->where('is_active', true)
+            // The Programming Team's account runs the system, not a seat on
+            // the org chart — it carries no attendance and has no place on a
+            // roster of who did or didn't show up.
+            ->where('role', '!=', UserRole::ProgrammingTeam->value)
             ->with([
                 'attendance' => fn ($query) => $query->where('event_id', $event->id)->with('recorder'),
             ])

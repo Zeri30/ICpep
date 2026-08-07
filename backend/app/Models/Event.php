@@ -6,6 +6,7 @@ use App\Enums\AttendanceMethod;
 use App\Enums\AttendanceStatus;
 use App\Enums\EventStatus;
 use App\Enums\Permission;
+use App\Enums\UserRole;
 use App\Http\Controllers\Api\Admin\AttendanceController;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -580,6 +581,10 @@ class Event extends Model
     {
         $missing = User::query()
             ->where('is_active', true)
+            // The Programming Team holds the account that runs the system
+            // itself, not a seat on the org chart — attendance isn't tracked
+            // for it at all, so it never gets swept in as absent.
+            ->where('role', '!=', UserRole::ProgrammingTeam->value)
             ->whereNotIn('id', $this->attendance()->select('user_id'))
             ->pluck('id');
 
