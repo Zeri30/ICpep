@@ -172,7 +172,13 @@ class AttendanceController extends Controller
         // cancelled event is left alone: nothing took place, so nobody missed
         // it, the same rule EventController::status() applies when Done is
         // set by hand.
-        if ($event->attendanceLocked() && $event->status !== EventStatus::Cancelled) {
+        //
+        // This endpoint is polled every few seconds while the roster modal is
+        // open, so once an event is locked, absenteesFinalized() lets every
+        // poll after the first skip straight past recordAbsentees()'s query
+        // instead of re-running it for a result that hasn't changed — see
+        // both methods on Event for the invalidation/TTL that keeps this safe.
+        if ($event->attendanceLocked() && $event->status !== EventStatus::Cancelled && ! $event->absenteesFinalized()) {
             $event->recordAbsentees();
         }
 

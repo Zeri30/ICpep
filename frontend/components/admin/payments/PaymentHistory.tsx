@@ -8,6 +8,7 @@ import { CheckCircle2, History, PencilLine, Search, XCircle } from "lucide-react
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
+import ExportMenu from "@/components/admin/ui/ExportMenu";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
 import { apiGet, markModuleViewed, useAdminResource } from "@/lib/adminApi";
@@ -15,6 +16,7 @@ import { useTerms } from "@/components/admin/MembershipTermProvider";
 import TermSelect from "@/components/admin/TermSelect";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Paginated, PaymentRow } from "@/lib/adminTypes";
+import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 /**
  * How many placeholder rows to draw while the first page is in flight.
@@ -112,6 +114,15 @@ export default function PaymentHistory() {
     return p.toString();
   }, [qs]);
 
+  // Same filters/search as the table, minus pagination — an export always
+  // covers every matching transaction, not just the page currently on
+  // screen. See MembersList.tsx for the same pattern.
+  const exportQueryString = useMemo(() => {
+    const p = new URLSearchParams(qs);
+    p.delete("page");
+    return p.toString();
+  }, [qs]);
+
   // Which semester the rows in `data` were fetched for — same reset-on-change
   // pattern as MembersList, so a term switch never shows the previous term's
   // ledger under the new term's heading while the new page is in flight.
@@ -139,7 +150,9 @@ export default function PaymentHistory() {
    * `changesQs`, `page` and `mutate`) kept fresh below, so the interval
    * itself is set up once per term rather than needing to restart on every
    * filter/page change — restarting would reset the `since` checkpoint to
-   * "now" and risk a change landing in the gap being missed.
+   * "now" and risk a change landing in the gap being missed. Paused while
+   * the tab is hidden and caught back up on becoming visible again — see
+   * useVisibilityInterval.
    */
   const pollRef = useRef<(since: string) => Promise<string>>(async (since) => since);
   useEffect(() => {
@@ -178,15 +191,15 @@ export default function PaymentHistory() {
     };
   });
 
+  const sinceRef = useRef(new Date().toISOString());
   useEffect(() => {
     if (!termId) return;
-
-    let since = new Date().toISOString();
-    const id = setInterval(async () => {
-      since = await pollRef.current(since);
-    }, 10_000);
-    return () => clearInterval(id);
+    sinceRef.current = new Date().toISOString();
   }, [termId]);
+
+  useVisibilityInterval(async () => {
+    sinceRef.current = await pollRef.current(sinceRef.current);
+  }, termId ? 10_000 : null);
 
   const amountCell = (v: number) => {
     if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;
@@ -257,16 +270,37 @@ export default function PaymentHistory() {
       render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span>,
       skeleton: <Bar w="w-40" />,
     },
-    { key: "actor", header: "By", width: "12%", render: (r) => <span className="text-secondary-foreground">{r.actor ?? "System"}</span>, skeleton: <Bar w="w-24" /> },
+    {
+      key: "actor",
+      header: "By",
+      width: "12%",
+      render: (r) => (
+        <div className="leading-tight">
+          <p className="whitespace-nowrap font-medium text-foreground">{r.actorName ?? r.actor ?? "System"}</p>
+          {r.actorRoleLabel && <p className="text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
+        </div>
+      ),
+      // Two lines, because the cell has two — name over role.
+      skeleton: (
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-24" />
+          <Bar w="w-16" h="h-3" />
+        </div>
+      ),
+    },
   ];
 
   return (
     // Fills the space below the topbar and scrolls rows internally — see
     // MembersList for the height maths.
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-72px-4rem)] lg:min-h-0">
-      <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
-        {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-black uppercase tracking-wide text-foreground">Payment History</h1>
+          {term && <p className="mt-1 text-sm text-muted-foreground">{term.label}</p>}
+        </div>
+        {/* Open to every role that can see the ledger — reading it is all it takes to export it. */}
+        <ExportMenu base="/api/admin/payments/export" queryString={exportQueryString} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5">

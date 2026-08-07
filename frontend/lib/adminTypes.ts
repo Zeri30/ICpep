@@ -247,7 +247,10 @@ export type PaymentRow = {
   effectiveAt: string | null;
   previousEffectiveAt: string | null;
   recordedAt: string | null;
+  /** The officer's name, falling back to their email for account-less rows. */
+  actorName: string | null;
   actor: string | null;
+  actorRoleLabel: string | null;
   /** Which semester this event belongs to. Null only for rows written before
       terms existed. */
   paymentTerm: { isCurrent: boolean; shortLabel: string } | null;

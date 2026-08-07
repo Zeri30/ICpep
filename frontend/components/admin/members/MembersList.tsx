@@ -17,12 +17,9 @@ import {
   Clock,
   Download,
   Eye,
-  FileSpreadsheet,
-  FileText,
   Loader2,
   MoreVertical,
   Pencil,
-  Printer,
   RotateCcw,
   Trash2,
   Wallet,
@@ -34,6 +31,7 @@ import TermBar from "@/components/admin/members/TermBar";
 import Badge from "@/components/ui/Badge";
 import ConfirmDialog, { type ConfirmTone } from "@/components/admin/ui/ConfirmDialog";
 import DataTable, { type Column, type SortState } from "@/components/admin/ui/DataTable";
+import ExportMenu from "@/components/admin/ui/ExportMenu";
 import Pagination from "@/components/admin/ui/Pagination";
 import MembersFilters, { EMPTY_FILTERS, type MemberFilters } from "@/components/admin/members/MembersFilters";
 import EditMemberModal from "@/components/admin/members/EditMemberModal";
@@ -43,6 +41,8 @@ import { Bar, Circle, PaginationSkeleton, Pill } from "@/components/admin/ui/Ske
 import { apiGet, apiSend, markModuleViewed } from "@/lib/adminApi";
 import { formatDateTime } from "@/lib/adminFormat";
 import type { Member, Paginated } from "@/lib/adminTypes";
+import { useOutsideClick } from "@/lib/useOutsideClick";
+import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 /** The six bulk payment verbs — see MemberController::bulk()'s PAYMENT_ACTIONS. */
 type PaymentAction =
@@ -452,25 +452,30 @@ export default function MembersList() {
    * and patch just those rows in — through the exact same applyPaymentUpdate
    * a bulk action's own response already goes through — so a payment another
    * officer records elsewhere shows up here without a manual refresh, without
-   * ever refetching the whole page.
+   * ever refetching the whole page. Paused while the tab is hidden and caught
+   * back up on becoming visible again — see useVisibilityInterval.
    *
    * `sinceRef` is a cursor, not state: it moves forward on every poll (using
    * the checkpoint the server hands back, not the client's own clock) and
    * doesn't need to trigger a re-render. `applyRef` holds the latest
-   * `applyPaymentUpdate` (which closes over `filters` and `mutate`) so the
-   * interval below can be set up once per term and still always call the
-   * current version, rather than needing to restart on every filter change.
+   * `applyPaymentUpdate` (which closes over `filters` and `mutate`), and
+   * `pollRef` the latest poll tick itself (which closes over `termId` and
+   * `sinceRef`) — useVisibilityInterval is called once, unconditionally, with
+   * a stable wrapper that always calls through to whichever closure is
+   * current, rather than needing to restart on every term/filter change.
    */
   const applyRef = useRef(applyPaymentUpdate);
   useEffect(() => {
     applyRef.current = applyPaymentUpdate;
   });
 
+  const sinceRef = useRef(new Date().toISOString());
+  const pollRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     if (!termId) return;
 
-    const sinceRef = { current: new Date().toISOString() };
-    const poll = async () => {
+    sinceRef.current = new Date().toISOString();
+    pollRef.current = async () => {
       try {
         const qs = new URLSearchParams({ term: String(termId), since: sinceRef.current });
         const { updated, since } = await apiGet<{ updated: BulkPaymentUpdate[]; since: string }>(
@@ -484,10 +489,11 @@ export default function MembersList() {
         // skipped over.
       }
     };
-
-    const id = setInterval(poll, 10_000);
-    return () => clearInterval(id);
   }, [termId]);
+
+  useVisibilityInterval(() => {
+    pollRef.current();
+  }, termId ? 10_000 : null);
 
   async function confirmAction() {
     if (!confirm) return;
@@ -703,7 +709,7 @@ export default function MembersList() {
           ) : null}
         </div>
         {/* Open to every role — reading the list is all it takes to export it. */}
-        <ExportMenu queryString={exportQueryString} />
+        <ExportMenu base="/api/admin/members/export" queryString={exportQueryString} />
       </div>
 
       {/* Filters and the bulk actions share one row: the selection controls
@@ -839,49 +845,6 @@ export default function MembersList() {
   );
 }
 
-/** Export the current filtered/searched list as CSV, Excel, or a printable PDF. */
-function ExportMenu({ queryString }: { queryString: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open]);
-
-  const base = "/api/admin/members/export";
-  const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
-
-  return (
-    <div ref={ref} className="relative w-full sm:w-auto">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-secondary/60 px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:w-auto"
-      >
-        <Download size={16} /> Export / Print
-        <ChevronDown size={14} className={open ? "rotate-180 transition-transform" : "transition-transform"} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-11 z-20 w-52 overflow-hidden rounded-lg border border-line bg-card py-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] sm:left-auto sm:right-0">
-          <a href={`${base}/csv?${queryString}`} className={item} onClick={() => setOpen(false)}>
-            <FileText size={15} /> Export as CSV
-          </a>
-          <a href={`${base}/excel?${queryString}`} className={item} onClick={() => setOpen(false)}>
-            <FileSpreadsheet size={15} /> Export as Excel
-          </a>
-          <a href={`${base}/pdf?${queryString}`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
-            <Printer size={15} /> Print as PDF
-          </a>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function BulkBtn({ children, onClick, tone }: { children: React.ReactNode; onClick: () => void; tone?: "danger" }) {
   return (
     <button
@@ -903,14 +866,7 @@ function BulkPaymentMenu({ onAction }: { onAction: (action: PaymentAction) => vo
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useOutsideClick(ref, () => setOpen(false), open);
 
   const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
   const heading = "px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground";
@@ -979,14 +935,7 @@ function PaymentActionsMenu({
   pending: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open, onClose]);
+  useOutsideClick(ref, onClose, open);
 
   const item =
     "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-secondary-foreground";
@@ -1082,14 +1031,7 @@ function RowMenu({
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [open, onClose]);
+  useOutsideClick(ref, onClose, open);
 
   const item = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-secondary-foreground transition-colors hover:bg-white/5 hover:text-foreground";
 

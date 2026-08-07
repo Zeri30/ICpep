@@ -5,6 +5,7 @@
 
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useAdmin } from "@/components/admin/AdminProvider";
 import DataTable, { type Column } from "@/components/admin/ui/DataTable";
 import Pagination from "@/components/admin/ui/Pagination";
 import { Bar, PaginationSkeleton, Pill } from "@/components/admin/ui/Skeleton";
@@ -59,7 +60,6 @@ const ACTION_CLS: Record<string, string> = {
   login: "border-line bg-white/5 text-secondary-foreground",
   logout: "border-line bg-white/5 text-secondary-foreground",
   login_failed: "border-amber-accent/30 bg-amber-accent/10 text-amber-accent",
-  remember_token_reused: "border-red-500/30 bg-red-500/10 text-red-400",
   // User Management.
   user_created: "border-green-500/30 bg-green-500/10 text-green-400",
   user_activated: "border-green-500/30 bg-green-500/10 text-green-400",
@@ -77,6 +77,15 @@ function ActionBadge({ action }: { action: string }) {
 }
 
 export default function ActivityLog() {
+  // Sign-in/out, failed sign-ins, password resets, and account
+  // activation/deactivation/deletion are system/internal activity — the
+  // backend already excludes them from every role but the Programming Team
+  // (see ActivityLog::PROGRAMMING_TEAM_ONLY_ACTIONS), so their filter options
+  // are hidden the same way rather than left offering a filter that always
+  // comes back empty.
+  const { officer } = useAdmin();
+  const isProgrammingTeam = officer.role === "programming_team";
+
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [action, setAction] = useState("");
@@ -173,18 +182,19 @@ export default function ActivityLog() {
           <optgroup label="User management">
             <option value="user_created">User created</option>
             <option value="user_updated">User edited</option>
-            <option value="user_activated">User activated</option>
-            <option value="user_deactivated">User deactivated</option>
-            <option value="user_deleted">User deleted</option>
-            <option value="password_reset">Password reset</option>
+            {isProgrammingTeam && <option value="user_activated">User activated</option>}
+            {isProgrammingTeam && <option value="user_deactivated">User deactivated</option>}
+            {isProgrammingTeam && <option value="user_deleted">User deleted</option>}
+            {isProgrammingTeam && <option value="password_reset">Password reset</option>}
             <option value="users_logged_out_all">Logged out all admins</option>
           </optgroup>
-          <optgroup label="Sign-in">
-            <option value="login">Login</option>
-            <option value="logout">Logout</option>
-            <option value="login_failed">Failed login</option>
-            <option value="remember_token_reused">Remember-me cookie reused</option>
-          </optgroup>
+          {isProgrammingTeam && (
+            <optgroup label="Sign-in">
+              <option value="login">Login</option>
+              <option value="logout">Logout</option>
+              <option value="login_failed">Failed login</option>
+            </optgroup>
+          )}
         </select>
 
         <div className="mx-1 hidden h-6 w-px bg-line sm:block" />

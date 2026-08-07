@@ -7,6 +7,7 @@ import Logo from "@/components/ui/Logo";
 import SignInModal from "@/components/ui/SignInModal";
 import { NAV_LINKS } from "@/lib/data";
 import { useActiveSection } from "@/lib/useActiveSection";
+import { useOutsideClick } from "@/lib/useOutsideClick";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
 
 const SECTION_IDS = NAV_LINKS.map((l) => l.id);
@@ -20,21 +21,7 @@ export default function Navbar() {
   const joinRef = useRef<HTMLDivElement>(null);
 
   // Close the Join Us dropdown on outside click or Escape.
-  useEffect(() => {
-    if (!joinOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (!joinRef.current?.contains(e.target as Node)) setJoinOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setJoinOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [joinOpen]);
+  useOutsideClick(joinRef, () => setJoinOpen(false), joinOpen, { closeOnEscape: true });
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);

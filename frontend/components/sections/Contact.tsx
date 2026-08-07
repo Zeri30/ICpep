@@ -33,11 +33,11 @@ export default function Contact() {
                     <span className="grid place-items-center w-12 h-12 shrink-0 rounded-lg bg-primary/10 text-primary-glow border border-primary/20">
                       <item.icon size={22} />
                     </span>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-head font-semibold uppercase tracking-widest text-muted-foreground mb-1">
                         {item.label}
                       </p>
-                      <p className="text-foreground font-medium leading-snug">{item.value}</p>
+                      <p className="text-foreground font-medium leading-snug wrap-anywhere">{item.value}</p>
                     </div>
                   </div>
                 );

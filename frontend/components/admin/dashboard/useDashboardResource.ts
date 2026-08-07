@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet } from "@/lib/adminApi";
+import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 /**
  * A short-lived, in-memory cache of `/dashboard` responses, keyed by the full
@@ -131,39 +132,12 @@ export function useDashboardResource<T>(path: string | null, opts: { pollMs?: nu
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    if (!pollMs) return;
+  }, [load]);
 
-    // Paused while the tab is in the background — a dashboard nobody is
-    // looking at gains nothing from a 10s poll, it just spends the officer's
-    // battery/data. Caught back up with an immediate load (not just a timer
-    // restart) the moment it's visible again, since the figures may already
-    // be stale by however long it was hidden.
-    let id: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (id === null) id = setInterval(load, pollMs);
-    };
-    const stop = () => {
-      if (id !== null) {
-        clearInterval(id);
-        id = null;
-      }
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        start();
-        load();
-      } else {
-        stop();
-      }
-    };
-
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [load, pollMs]);
+  // Recurring refetch (when asked), paused while the tab is in the
+  // background — a dashboard nobody is looking at gains nothing from a 10s
+  // poll, it just spends the officer's battery/data. See useVisibilityInterval.
+  useVisibilityInterval(load, pollMs);
 
   return { data, error, loading, refresh: load };
 }

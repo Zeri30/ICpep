@@ -79,7 +79,7 @@ export default function UpcomingEvents() {
   }, [data, today]);
 
   return (
-    <section className="rounded-xl border border-line bg-card p-5">
+    <section className="flex h-full flex-col rounded-xl border border-line bg-card p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-display text-lg font-bold uppercase tracking-wide text-foreground">
           Schedule

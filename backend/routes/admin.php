@@ -64,6 +64,9 @@ Route::middleware(['auth.session', EnsureAdmin::class, EnforceIdleTimeout::class
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
         // Polled by PaymentHistory.tsx for real-time sync — see PaymentController::changes.
         Route::get('/payments/changes', [PaymentController::class, 'changes'])->name('payments.changes');
+        Route::get('/payments/export/csv', [PaymentController::class, 'exportCsv'])->name('payments.export.csv');
+        Route::get('/payments/export/excel', [PaymentController::class, 'exportExcel'])->name('payments.export.excel');
+        Route::get('/payments/export/pdf', [PaymentController::class, 'exportPdf'])->name('payments.export.pdf');
         Route::post('/me/views/payments', [MeController::class, 'viewedPayments'])->name('me.views.payments');
     });
 

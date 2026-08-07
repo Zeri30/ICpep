@@ -43,6 +43,14 @@ class MemberController extends Controller
         'createdAt' => 'created_at',
     ];
 
+    /**
+     * Ids a single bulk() request may carry. The selection this is built from
+     * is always what an officer manually ticked in the table — nowhere near
+     * this many in practice — so the limit exists only to bound how long the
+     * transaction below can hold its row locks, not to constrain real use.
+     */
+    private const MAX_BULK_IDS = 500;
+
     /* ------------------------------------------------------------------ read */
 
     /**
@@ -302,7 +310,7 @@ class MemberController extends Controller
     public function bulk(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
+            'ids' => ['required', 'array', 'min:1', 'max:'.self::MAX_BULK_IDS],
             'ids.*' => ['integer'],
             'action' => ['required', Rule::in([...self::PAYMENT_ACTIONS, 'delete', 'restore'])],
         ]);
@@ -416,6 +424,8 @@ class MemberController extends Controller
                 'effective_at' => $effectiveAt,
                 'previous_effective_at' => $previous,
                 'actor' => $user?->email,
+                'actor_name' => $user?->name,
+                'actor_role' => $user?->role?->value,
                 'member_name' => $member->full_name,
                 'section' => $member->section,
                 'year_level' => $member->year_level,
@@ -431,7 +441,17 @@ class MemberController extends Controller
         }
 
         PaymentTransaction::insert($transactions);
-        PaymentTransaction::bumpCacheVersion();
+
+        // insert() writes every row in one query but — unlike ->create() —
+        // doesn't fire the `created` event, so nothing bumped the cache
+        // version yet. Bump once per distinct term actually touched (almost
+        // always just one, since a bulk action's members come from one
+        // Members List page) rather than every term's, to match the
+        // per-term cache scoping in PaymentTransaction::bumpCacheVersion().
+        collect($transactions)
+            ->pluck('membership_term_id')
+            ->unique()
+            ->each(fn (?int $termId) => PaymentTransaction::bumpCacheVersion($termId));
 
         return $updated;
     }
@@ -501,7 +521,13 @@ class MemberController extends Controller
 
         if ($transactions !== []) {
             PaymentTransaction::insert($transactions);
-            PaymentTransaction::bumpCacheVersion();
+
+            // Same reasoning as bulkSetPayment(): insert() needs its own
+            // explicit, per-term-touched cache bump.
+            collect($transactions)
+                ->pluck('membership_term_id')
+                ->unique()
+                ->each(fn (?int $termId) => PaymentTransaction::bumpCacheVersion($termId));
         }
 
         return $members->map(fn (Application $member): array => $this->paymentSnapshot($member))->values()->all();

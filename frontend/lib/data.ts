@@ -51,13 +51,13 @@ export const STATS: {
 /* ---------------------------------------------------------------------------
    About
 --------------------------------------------------------------------------- */
-export const OBJECTIVES = [
-  "Develop the technical and soft skills of Computer Engineering students through hands-on workshops, trainings, and mentorship.",
-  "Build a strong, supportive community where members collaborate, share knowledge, and grow together.",
-  "Represent BulSU Meneses Campus in regional and national competitions, hackathons, and ICPEP events.",
-  "Prepare members for professional practice through industry talks, certifications, and career readiness programs.",
-  "Serve the wider community through technology-driven outreach and volunteer initiatives.",
-];
+export const OBJECTIVES_TEXT =
+  "We, the bona fide Computer Engineering students of Bulacan State University Meneses Campus, in our fervent " +
+  "desire to establish a genuine student organization that will unite the engineering students, promote and protect " +
+  "their personal welfare, foster closer and active relationships among students and other sectors of the organization, " +
+  "and prepare the students to become constructive and effective future educators in order to instill national " +
+  "consciousness for the advancement of the students under the benign guidance of God, do ordain and promulgate " +
+  "this constitution.";
 
 export const BENEFITS: { icon: LucideIcon; title: string; desc: string }[] = [
   {

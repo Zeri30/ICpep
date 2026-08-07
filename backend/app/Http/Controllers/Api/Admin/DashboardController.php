@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -26,6 +27,18 @@ use Illuminate\Support\Facades\Gate;
  */
 class DashboardController extends Controller
 {
+    /**
+     * How long the underlying numbers (headlineAggregates, membersByClass,
+     * registrationsOverTime) are cached before a request re-queries them.
+     * Short on purpose: this is the app's most-visited page, opened and
+     * re-opened all day, and the figures only need to be "close enough" —
+     * unlike Payment History's list, nobody is reading these three widgets
+     * row-by-row against the ledger, so a brief lag between a payment
+     * landing and the dashboard reflecting it is an acceptable trade for
+     * not re-running the same aggregates on every visit.
+     */
+    private const CACHE_TTL_SECONDS = 45;
+
     public function index(Request $request): JsonResponse
     {
         // Money figures (revenue and the payment summary) are only returned to
@@ -38,19 +51,45 @@ class DashboardController extends Controller
         $canRevenue = Gate::allows('finance.revenue');
         $term = MembershipTerm::resolve($request->query('term'));
 
-        // One row of conditional aggregates covers stats() and (when the role
-        // may see it) paymentSummary() together — 7 separate count() queries
-        // collapse into this single round trip.
-        $headline = $this->headlineAggregates($term);
+        // Cached, but only the raw numbers — never this permission check or
+        // the response shape it produces. That's deliberate: caching the
+        // gated response would risk one officer's request serving a
+        // different officer's revenue visibility for the next ~45 seconds.
+        // Instead every request evaluates $canRevenue and builds stats()/
+        // paymentSummary() itself, live, whether the underlying data came
+        // from cache or not — so permissions are exactly as fresh as they
+        // are without this cache.
+        [$headline, $membersByClass, $registrationsOverTime] = $this->cachedData($term);
 
         return response()->json([
             'stats' => $this->stats($canRevenue, $headline),
             'paymentSummary' => $canRevenue ? $this->paymentSummary($headline) : null,
-            'membersByClass' => $this->membersByClass($term),
-            'registrationsOverTime' => $this->registrationsOverTime($term),
+            'membersByClass' => $membersByClass,
+            'registrationsOverTime' => $registrationsOverTime,
             'canViewRevenue' => $canRevenue,
             'term' => $term ? ['id' => $term->id, 'label' => $term->label, 'isCurrent' => $term->is_current] : null,
         ]);
+    }
+
+    /**
+     * The three query results index() needs, one round trip on a cache miss
+     * and zero on a hit — scoped per term, since that's the only thing any
+     * of the three vary by. All plain arrays of scalars (no Eloquent models),
+     * so they cache cleanly on every driver this app uses.
+     *
+     * @return array{0: array<string, int>, 1: array<string, mixed>, 2: array<string, mixed>}
+     */
+    private function cachedData(?MembershipTerm $term): array
+    {
+        return Cache::remember(
+            'dashboard.data.'.($term?->id ?? 'all'),
+            now()->addSeconds(self::CACHE_TTL_SECONDS),
+            fn (): array => [
+                $this->headlineAggregates($term),
+                $this->membersByClass($term),
+                $this->registrationsOverTime($term),
+            ],
+        );
     }
 
     /**
@@ -83,18 +122,46 @@ class DashboardController extends Controller
             $users->where('created_at', '>', $since);
         }
 
-        // Not scoped to the term — the log itself isn't either.
-        $activity = ActivityLog::query();
+        // Not scoped to the term — the log itself isn't either. Excludes
+        // whatever this officer's Activity Log itself hides (see
+        // ActivityController), so the sidebar badge never advertises "new"
+        // rows the module then doesn't actually show them.
+        $activity = ActivityLog::query()->whereNotIn('action', ActivityLog::hiddenActionsFor($request->user()));
         if ($since = $lastViewed->get('activity')) {
             $activity->where('created_at', '>', $since);
         }
 
-        return response()->json([
-            'members' => $members->count(),
-            'payments' => $payments->count(),
-            'users' => $users->count(),
-            'activity' => $activity->count(),
-        ]);
+        return response()->json($this->countsInOneRoundTrip($members, $payments, $users, $activity));
+    }
+
+    /**
+     * Four badge counts, one query: each filtered builder becomes a scalar
+     * `(select count(*) from ...)` subquery of a single tableless SELECT,
+     * rather than four separate COUNT round trips against the remote
+     * pooler — this endpoint backs the sidebar badges, so it's plausibly
+     * one of the most frequently hit routes in the admin.
+     *
+     * @param  Builder<Application>  $members
+     * @param  Builder<PaymentTransaction>  $payments
+     * @param  Builder<User>  $users
+     * @param  Builder<ActivityLog>  $activity
+     * @return array{members:int,payments:int,users:int,activity:int}
+     */
+    private function countsInOneRoundTrip(Builder $members, Builder $payments, Builder $users, Builder $activity): array
+    {
+        $row = DB::query()
+            ->selectSub($members->toBase()->select(DB::raw('count(*)')), 'members')
+            ->selectSub($payments->toBase()->select(DB::raw('count(*)')), 'payments')
+            ->selectSub($users->toBase()->select(DB::raw('count(*)')), 'users')
+            ->selectSub($activity->toBase()->select(DB::raw('count(*)')), 'activity')
+            ->first();
+
+        return [
+            'members' => (int) $row->members,
+            'payments' => (int) $row->payments,
+            'users' => (int) $row->users,
+            'activity' => (int) $row->activity,
+        ];
     }
 
     /**

@@ -13,6 +13,26 @@ return [
     | framework. This connection is utilized if another isn't explicitly
     | specified when running a cache operation inside the application.
     |
+    | This app runs CACHE_STORE=file (see .env) and leans on it for more than
+    | request-scoped memoization: MembershipTerm::current()/resolve(),
+    | RolePermission's permission matrix, RegistrationSetting, Payment
+    | History's list cache, and DashboardController's headline figures are
+    | all `Cache::remember`d and invalidated on write. That's correct only
+    | when every process serving requests shares one cache — a local file
+    | cache is per-instance, so on more than one app server/container an
+    | admin's change (revoking a permission, closing registration, activating
+    | a term) would clear the cache only on the instance that handled that
+    | request, leaving every other instance serving stale values from its own
+    | disk indefinitely (several of the above use `rememberForever`, so
+    | there's no TTL to eventually correct it either).
+    |
+    | No action needed while this deploys as a single instance, which is the
+    | only way it's deployed today (see SETUP.md — no Dockerfile, no
+    | render.yaml web service, no multi-instance config exists in this repo).
+    | If that ever changes, switch this to a shared store first — "database"
+    | (already the framework default above, and the `cache` table migration
+    | is already present) or "redis" — before scaling past one instance.
+    |
     */
 
     'default' => env('CACHE_STORE', 'database'),

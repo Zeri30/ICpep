@@ -44,6 +44,19 @@ class AppServiceProvider extends ServiceProvider
         // Submitting the form is the one write in this group and the one
         // with a real cost (two file uploads, a database row) behind it, so
         // it gets the tightest limit.
+        //
+        // Deliberately just this one per-minute window, not a second,
+        // longer-window cap (a per-day ceiling, say) layered on top the way
+        // AdminAuthController layers its login limiters: this app's
+        // applicants are students, routinely applying from a shared campus
+        // or school-lab IP behind one NAT address, plausibly in a burst
+        // during an orientation event. A tight daily cap would risk turning
+        // real students away over a shared IP, which is a worse outcome
+        // than the one this defends against — a script staying under 5/min
+        // can still only manage a few hundred uploads an hour, bounded
+        // enough already for what a school org's registration form needs
+        // to withstand. Revisit only if sustained per-IP abuse is actually
+        // observed, not preemptively.
         RateLimiter::for('applications', fn (Request $request): Limit => Limit::perMinute(5)->by($request->ip()));
 
         // registration-status and officers are cheap, page-load-driven reads.

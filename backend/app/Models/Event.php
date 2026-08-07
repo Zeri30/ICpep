@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -520,6 +521,13 @@ class Event extends Model
      * favour of a sheet of paper, so this is a first-class action rather than a
      * repair hatch — which is why it is stamped {@see AttendanceMethod::Override}
      * and carries who made it.
+     *
+     * Two officers correcting the same record at the same instant can both
+     * read firstOrNew() as "no row yet" before either has saved, same as
+     * {@see self::checkIn()} — the unique index on (event_id, user_id) is
+     * what actually stops the duplicate; the catch below just keeps the
+     * request that lost the race from surfacing that as a server error
+     * instead of the row the winner already wrote.
      */
     public function setAttendance(User $officer, AttendanceStatus $status, User $by): EventAttendance
     {
@@ -534,7 +542,13 @@ class Event extends Model
                 ? ($record->checked_in_at ?? now())
                 : null,
             'recorded_by' => $by->id,
-        ])->save();
+        ]);
+
+        try {
+            $record->save();
+        } catch (UniqueConstraintViolationException) {
+            return $this->attendance()->where('user_id', $officer->id)->firstOrFail();
+        }
 
         return $record;
     }
@@ -553,35 +567,72 @@ class Event extends Model
      * The written rows carry no method, which is what marks them as nobody's
      * decision and lets {@see self::reopenAttendance()} take them back.
      *
+     * Runs the accounted-for/missing comparison as one query (a NOT IN
+     * subquery) rather than two separate round trips — this is called from
+     * both the Done-transition and every poll of an already-locked event's
+     * roster (see {@see AttendanceController::index()}), so the round-trip
+     * count is worth keeping to a minimum even though the row counts
+     * involved are small.
+     *
      * @return int how many absences were recorded
      */
     public function recordAbsentees(): int
     {
-        $accountedFor = $this->attendance()->pluck('user_id');
-
         $missing = User::query()
             ->where('is_active', true)
-            ->whereNotIn('id', $accountedFor)
+            ->whereNotIn('id', $this->attendance()->select('user_id'))
             ->pluck('id');
 
-        if ($missing->isEmpty()) {
-            return 0;
+        if ($missing->isNotEmpty()) {
+            $now = now();
+
+            $this->attendance()->insert($missing->map(fn (int $id): array => [
+                'event_id' => $this->id,
+                'user_id' => $id,
+                'status' => AttendanceStatus::Absent->value,
+                'method' => null,
+                'checked_in_at' => null,
+                'recorded_by' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all());
         }
 
-        $now = now();
-
-        $this->attendance()->insert($missing->map(fn (int $id): array => [
-            'event_id' => $this->id,
-            'user_id' => $id,
-            'status' => AttendanceStatus::Absent->value,
-            'method' => null,
-            'checked_in_at' => null,
-            'recorded_by' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ])->all());
+        // Whether or not there was anyone left to record, every active
+        // officer is accounted for as of right now — cached so the next few
+        // minutes of AttendanceController::index() polls (every ~10s while
+        // the roster modal is open) can skip this check entirely rather than
+        // repeat it on every request. See absenteesFinalized().
+        Cache::put($this->absenteesFinalizedCacheKey(), true, now()->addMinutes(5));
 
         return $missing->count();
+    }
+
+    /**
+     * Whether every active officer is already known to be accounted for
+     * (present, absent, or hand-corrected) for this event, so
+     * {@see AttendanceController::index()} can skip re-running
+     * {@see self::recordAbsentees()}'s check on every poll once there is
+     * nothing left for it to do.
+     *
+     * A cache hit, not a stored column: correctness doesn't depend on this
+     * being right forever, only on recordAbsentees() re-running eventually,
+     * which the short TTL guarantees on its own. {@see self::reopenAttendance()}
+     * also forgets this explicitly, so un-finalizing an event is reflected on
+     * the very next poll rather than waiting out the TTL. The one gap the
+     * TTL alone bounds: an officer account activated after this event was
+     * already finalized won't be swept in as absent until the cache lapses
+     * (at most 5 minutes) — the roster still shows them as pending in the
+     * meantime, just not yet auto-marked absent.
+     */
+    public function absenteesFinalized(): bool
+    {
+        return (bool) Cache::get($this->absenteesFinalizedCacheKey());
+    }
+
+    private function absenteesFinalizedCacheKey(): string
+    {
+        return "events.{$this->id}.absentees_finalized";
     }
 
     /**
@@ -597,10 +648,20 @@ class Event extends Model
      */
     public function reopenAttendance(): int
     {
-        return $this->attendance()
+        $withdrawn = $this->attendance()
             ->where('status', AttendanceStatus::Absent)
             ->whereNull('method')
             ->delete();
+
+        // The officers those rows covered are unaccounted-for again — forget
+        // the finalized flag so the next poll re-runs recordAbsentees()'s
+        // check immediately rather than waiting out its TTL. See
+        // absenteesFinalized().
+        if ($withdrawn > 0) {
+            Cache::forget($this->absenteesFinalizedCacheKey());
+        }
+
+        return $withdrawn;
     }
 
     /* -------------------------------------------------------------- share */

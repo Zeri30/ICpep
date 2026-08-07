@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -40,10 +41,32 @@ class MembershipTerm extends Model
      */
     private const CURRENT_CACHE_KEY = 'membership_term.current';
 
+    /**
+     * Cache key prefix for {@see self::resolve()}'s explicit-id lookups —
+     * the other half of "the term an admin request is asking about", read on
+     * every Members/Dashboard/Payments/Activity request that names a term
+     * (e.g. every non-default Payment History page). Terms are edited a
+     * handful of times a year, so this is invalidated the same blunt way as
+     * CURRENT_CACHE_KEY: any save/delete on any term forgets it, rather than
+     * tracking which id changed.
+     */
+    private const TERM_CACHE_KEY_PREFIX = 'membership_term.byid.';
+
     protected static function booted(): void
     {
-        static::saved(fn () => Cache::forget(self::CURRENT_CACHE_KEY));
-        static::deleted(fn () => Cache::forget(self::CURRENT_CACHE_KEY));
+        static::saved(function (self $term): void {
+            Cache::forget(self::CURRENT_CACHE_KEY);
+            Cache::forget(self::termCacheKey($term->id));
+        });
+        static::deleted(function (self $term): void {
+            Cache::forget(self::CURRENT_CACHE_KEY);
+            Cache::forget(self::termCacheKey($term->id));
+        });
+    }
+
+    private static function termCacheKey(int $id): string
+    {
+        return self::TERM_CACHE_KEY_PREFIX.$id;
     }
 
     protected $fillable = [
@@ -89,7 +112,16 @@ class MembershipTerm extends Model
      */
     public static function resolve(int|string|null $id): ?self
     {
-        return ($id ? static::find($id) : null) ?? static::current();
+        if (! $id) {
+            return static::current();
+        }
+
+        $term = Cache::rememberForever(
+            self::termCacheKey((int) $id),
+            static fn (): ?self => static::find($id),
+        );
+
+        return $term ?? static::current();
     }
 
     /**
@@ -97,17 +129,45 @@ class MembershipTerm extends Model
      *
      * Demotion and promotion happen in a single transaction so there is never a
      * moment with two current terms (which would make the destination of an
-     * in-flight application ambiguous) or zero.
+     * in-flight application ambiguous) or zero. That transaction makes one
+     * activation atomic, but not two *concurrent* activations of two
+     * *different* terms safe from each other — see the migration that adds
+     * membership_terms_one_current_unique for exactly how that gap could
+     * otherwise let both end up current at once. This is what actually
+     * closes it: the unique index turns the losing request's promote
+     * statement into a constraint violation instead of a silent second
+     * "current" row, and the catch below resolves that the same way
+     * Event::checkIn() resolves its own concurrent-write race — by retrying
+     * once the winner has already committed, rather than surfacing a
+     * database error to the admin who did nothing wrong except click at the
+     * same moment as someone else.
      */
     public function makeCurrent(): void
     {
-        DB::transaction(function (): void {
-            static::where('is_current', true)
-                ->whereKeyNot($this->getKey())
-                ->update(['is_current' => false]);
+        $this->attemptMakeCurrent();
+    }
 
-            $this->forceFill(['is_current' => true])->save();
-        });
+    private function attemptMakeCurrent(int $attempt = 1): void
+    {
+        try {
+            DB::transaction(function (): void {
+                static::where('is_current', true)
+                    ->whereKeyNot($this->getKey())
+                    ->update(['is_current' => false]);
+
+                $this->forceFill(['is_current' => true])->save();
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // Lost the race: another activation's promote committed between
+            // our demote statement and our own promote statement. Retried
+            // once — by now there is nothing left to race against, so this
+            // resolves cleanly rather than needing the admin to try again.
+            if ($attempt >= 2) {
+                throw $e;
+            }
+
+            $this->attemptMakeCurrent($attempt + 1);
+        }
     }
 
     /**

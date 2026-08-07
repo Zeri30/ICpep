@@ -507,6 +507,77 @@ class AdminApiTest extends TestCase
         $this->actingAs($treasurer)->getJson('/api/admin/payments')->assertOk()->assertJsonCount(2, 'data');
     }
 
+    public function test_payments_export_csv_respects_filters(): void
+    {
+        config(['icpep.membership_fee_1' => 50]);
+        $this->makeApplication(['email' => 'a@example.com', 'year_level' => '3rd Year', 'section' => 'Section A'])->update(['paid_at' => now()]);
+        $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year', 'section' => 'Section A'])->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->get('/api/admin/payments/export/csv?class=3A')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
+
+        $this->assertSame(
+            ['Member', 'Section', 'Year Level', 'Event', 'Batch', 'Amount', 'Semester', 'Recorded At', 'Recorded By'],
+            $rows[0],
+        );
+        $this->assertCount(2, $rows); // header + the one 3A transaction — the 4A one is excluded.
+        $this->assertSame('Paid', $rows[1][3]);
+        $this->assertSame('Payment 1', $rows[1][4]);
+        $this->assertSame('50.00', $rows[1][5]);
+    }
+
+    /**
+     * A member name of "=cmd|..." reaching the CSV unescaped would run as a
+     * formula the moment an officer opens it in Excel/Sheets — same
+     * formula-injection guard as MemberController's export, since
+     * `member_name` traces back to the same free-text public form field.
+     */
+    public function test_payments_export_csv_escapes_a_formula_leading_member_name(): void
+    {
+        $this->makeApplication(['surname' => '=cmd|\'/C calc\'!A0', 'given_name' => 'Juan'])->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->get('/api/admin/payments/export/csv')
+            ->assertOk();
+
+        $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
+
+        $this->assertStringStartsWith("'=", $rows[1][0]);
+    }
+
+    public function test_payments_export_excel_returns_xlsx_file(): void
+    {
+        $this->makeApplication()->update(['paid_at' => now()]);
+
+        $this->actingAs($this->treasurer())
+            ->get('/api/admin/payments/export/excel')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->assertHeader('content-disposition');
+    }
+
+    public function test_payments_export_pdf_includes_applied_filters(): void
+    {
+        $this->makeApplication()->update(['paid_at' => now()]);
+
+        $response = $this->actingAs($this->treasurer())
+            ->get('/api/admin/payments/export/pdf?action=paid&search=Dela')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        // dompdf's stream() writes the PDF body straight to the response content.
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+    }
+
+    public function test_payments_export_requires_authentication(): void
+    {
+        $this->get('/api/admin/payments/export/csv')->assertUnauthorized();
+    }
+
     /**
      * Backs Payment History's real-time poll: an officer's tab asks "anything
      * new since my last check?" and patches just those rows in rather than

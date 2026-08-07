@@ -50,4 +50,19 @@ return [
     | whether anyone is actually there.
     */
     'idle_timeout_minutes' => (int) env('ADMIN_IDLE_TIMEOUT_MINUTES', 360),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Activity Log retention
+    |--------------------------------------------------------------------------
+    | Days a row is kept before the scheduled prune (see
+    | App\Console\Commands\PruneActivityLogs, run daily in routes/console.php)
+    | deletes it. The Activity Log is an audit trail rather than session-like
+    | data, so this defaults far longer than REMEMBER_ME_DURATION_DAYS — two
+    | years, long enough to span several membership terms — not because
+    | anything has measured a problem yet, but because the table is written to
+    | on nearly every admin action across every module and would otherwise
+    | grow forever.
+    */
+    'activity_log_retention_days' => (int) env('ACTIVITY_LOG_RETENTION_DAYS', 730),
 ];

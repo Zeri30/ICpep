@@ -1,37 +1,74 @@
 "use client";
 
-/* Opened from AccountMenu's "Manage sessions" item. The two buttons are real
-   (MeController::logoutOtherSessions / logoutAllSessions), but there is still
-   no endpoint to list an account's actual active sessions, so the devices
-   below stay placeholders shaped like what that endpoint will eventually
-   return. */
+/* Opened from AccountMenu's "Manage sessions" item. The backend has no
+   endpoint to list an account's individual devices/browsers — only the two
+   bulk actions below (MeController::logoutOtherSessions /
+   logoutAllSessions) — so this stays a two-choice panel rather than a device
+   list with per-row controls. */
 
 import { AnimatePresence, motion } from "motion/react";
-import { Laptop, Loader2, LogOut, Smartphone, X } from "lucide-react";
+import { Laptop, LogOut, Loader2, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import { ApiError, logoutAllSessions, logoutOtherSessions } from "@/lib/adminApi";
 
-const PLACEHOLDER_SESSIONS = [
-  {
-    id: 1,
-    device: "This device",
-    detail: "Chrome on Windows",
-    location: "Manila, Philippines",
-    lastActive: "Active now",
-    current: true,
-  },
-  {
-    id: 2,
-    device: "iPhone",
-    detail: "Safari on iOS",
-    location: "Quezon City, Philippines",
-    lastActive: "2 hours ago",
-    current: false,
-  },
-] as const;
+/** One of the two sign-out actions, styled as a self-explaining option card
+    rather than a bare button — each states what it does and who it leaves
+    signed in before the officer commits to it. */
+function SessionAction({
+  icon,
+  title,
+  description,
+  buttonLabel,
+  tone,
+  busy,
+  disabled,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  buttonLabel: string;
+  tone: "neutral" | "danger";
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-lg border p-4 ${tone === "danger" ? "border-red-500/25 bg-red-500/4" : "border-line"}`}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={`grid size-9 shrink-0 place-items-center rounded-full ${
+            tone === "danger" ? "bg-red-500/10 text-red-400" : "bg-secondary text-secondary-foreground"
+          }`}
+        >
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={`mt-3.5 flex w-full items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-70 ${
+          tone === "danger"
+            ? "bg-red-600 text-white hover:bg-red-500"
+            : "border border-line text-foreground hover:border-primary/50 hover:bg-secondary/50"
+        }`}
+      >
+        {busy ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+        {buttonLabel}
+      </button>
+    </div>
+  );
+}
 
 export default function ManageSessionsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { officer, notify } = useAdmin();
@@ -94,9 +131,9 @@ export default function ManageSessionsModal({ open, onClose }: { open: boolean; 
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={() => !busy && onClose()}
-            className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-110 bg-black/70 backdrop-blur-sm"
           />
-          <div className="fixed inset-0 z-[120] overflow-y-auto p-4">
+          <div className="fixed inset-0 z-120 overflow-y-auto p-4">
             <div className="flex min-h-full items-center justify-center">
               <motion.div
                 role="dialog"
@@ -108,23 +145,12 @@ export default function ManageSessionsModal({ open, onClose }: { open: boolean; 
                 transition={{ duration: 0.3, ease: easeOutExpo }}
                 className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-[0_24px_70px_rgba(0,0,0,0.7)]"
               >
-                <div className="flex items-center justify-between gap-4">
-                  <h2
-                    id="sessions-modal-title"
-                    className="font-display text-sm font-bold uppercase tracking-widest text-primary"
-                  >
-                    Manage sessions
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    disabled={!!busy}
-                    aria-label="Close"
-                    className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
+                <h2
+                  id="sessions-modal-title"
+                  className="font-display text-sm font-bold uppercase tracking-widest text-primary"
+                >
+                  Manage sessions
+                </h2>
 
                 <div className="mt-4 flex items-center gap-3 rounded-lg border border-line bg-secondary/30 px-3.5 py-3">
                   <div className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-bold uppercase tracking-wide text-primary">
@@ -135,61 +161,43 @@ export default function ManageSessionsModal({ open, onClose }: { open: boolean; 
                     <div className="truncate text-xs text-muted-foreground">{officer.roleLabel ?? "Officer"}</div>
                   </div>
                 </div>
-                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                  These are the devices currently signed in to this account. If you don&apos;t recognize one,
-                  log it out below for security.
+
+                <p className="mt-3.5 text-xs leading-relaxed text-muted-foreground">
+                  If you've signed in on a device you no longer recognize or no longer have, use one of the
+                  options below to end that access.
                 </p>
 
-                <div className="mt-4 space-y-2">
-                  {PLACEHOLDER_SESSIONS.map((s) => {
-                    const Icon = s.detail.includes("iOS") || s.detail.includes("Android") ? Smartphone : Laptop;
-                    return (
-                      <div
-                        key={s.id}
-                        className="flex items-center gap-3 rounded-lg border border-line px-3 py-2.5"
-                      >
-                        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground">
-                          <Icon size={16} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-foreground">{s.device}</span>
-                            {s.current && (
-                              <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                                This device
-                              </span>
-                            )}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {s.detail} · {s.location}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-xs text-muted-foreground">{s.lastActive}</div>
-                      </div>
-                    );
-                  })}
+                <div className="mt-4 space-y-3">
+                  <SessionAction
+                    icon={<Laptop size={16} />}
+                    title="Log out other sessions"
+                    description="Signs this account out on every other device and browser. This device stays signed in."
+                    buttonLabel="Log out other sessions"
+                    tone="neutral"
+                    busy={busy === "others"}
+                    disabled={!!busy}
+                    onClick={handleLogoutOthers}
+                  />
+                  <SessionAction
+                    icon={<ShieldAlert size={16} />}
+                    title="Log out all sessions"
+                    description="Signs this account out everywhere, including this device — you'll need to sign in again."
+                    buttonLabel="Log out all sessions"
+                    tone="danger"
+                    busy={busy === "all"}
+                    disabled={!!busy}
+                    onClick={handleLogoutAll}
+                  />
                 </div>
 
-                <div className="mt-5 space-y-2">
-                  <button
-                    type="button"
-                    onClick={handleLogoutOthers}
-                    disabled={!!busy}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-line px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/50 disabled:opacity-70"
-                  >
-                    {busy === "others" ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
-                    Log out other sessions
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLogoutAll}
-                    disabled={!!busy}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-red-500 disabled:opacity-70"
-                  >
-                    {busy === "all" ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
-                    Log out all sessions
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={!!busy}
+                  className="mt-4 w-full rounded-lg border border-line px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-70"
+                >
+                  Cancel
+                </button>
               </motion.div>
             </div>
           </div>

@@ -71,23 +71,28 @@ class UserManagementTest extends TestCase
             // The form captures the parts; the displayed name is composed from
             // them, with the middle initial upper-cased and punctuated.
             ->assertJsonPath('data.name', 'Jane S. Officer')
-            ->assertJsonPath('data.isActive', true)
-            // Handed back once, so whoever created the account can pass it on.
-            // Always lowercase, independent of the name's own display case.
-            ->assertJsonPath('generatedPassword', 'jane.officer.s');
+            ->assertJsonPath('data.isActive', true);
+
+        // Handed back once, so whoever created the account can pass it on —
+        // a random string, not derived from the officer's name (see
+        // UserController::generateDefaultPassword).
+        $generated = $response->json('generatedPassword');
+        $this->assertIsString($generated);
+        $this->assertSame(16, strlen($generated));
+        $this->assertNotSame('jane.officer.s', mb_strtolower($generated));
 
         $user = User::where('email', 'jane@example.com')->first();
         $this->assertNotNull($user);
         $this->assertSame('Jane', $user->first_name);
         $this->assertSame('Officer', $user->last_name);
         $this->assertTrue($user->must_change_password);
-        $this->assertTrue(Hash::check($response->json('generatedPassword'), $user->password));
+        $this->assertTrue(Hash::check($generated, $user->password));
         $this->assertDatabaseHas('activity_logs', ['action' => 'user_created']);
     }
 
     public function test_create_composes_the_name_without_a_middle_initial(): void
     {
-        $this->actingAs($this->manager())
+        $response = $this->actingAs($this->manager())
             ->postJson('/api/admin/users', [
                 'first_name' => 'Jane',
                 'last_name' => 'Officer',
@@ -95,9 +100,11 @@ class UserManagementTest extends TestCase
                 'role' => 'secretary',
             ])
             ->assertCreated()
-            ->assertJsonPath('data.name', 'Jane Officer')
-            // No middle initial in the name, none in the generated password.
-            ->assertJsonPath('generatedPassword', 'jane.officer');
+            ->assertJsonPath('data.name', 'Jane Officer');
+
+        // The generated password doesn't depend on the name parts at all,
+        // middle initial included — it's random either way.
+        $this->assertSame(16, strlen($response->json('generatedPassword')));
     }
 
     public function test_create_requires_the_name_parts_and_rejects_a_duplicate_email(): void
@@ -236,13 +243,17 @@ class UserManagementTest extends TestCase
 
         $response = $this->actingAs($this->manager())
             ->postJson("/api/admin/users/{$target->id}/reset-password")
-            ->assertOk()
-            // Generated the same way account creation does — lowercase, spaces
-            // collapsed — and handed back once so it can be passed along.
-            ->assertJsonPath('generatedPassword', 'jane.officer.s');
+            ->assertOk();
+
+        // Generated the same random way account creation does, not derived
+        // from the account's name — and handed back once so it can be
+        // passed along.
+        $generated = $response->json('generatedPassword');
+        $this->assertIsString($generated);
+        $this->assertSame(16, strlen($generated));
 
         $fresh = $target->fresh();
-        $this->assertTrue(Hash::check('jane.officer.s', $fresh->password));
+        $this->assertTrue(Hash::check($generated, $fresh->password));
         // Put back into the same first-login state a newly created account
         // starts in.
         $this->assertTrue($fresh->must_change_password);
@@ -283,10 +294,11 @@ class UserManagementTest extends TestCase
             'password_reset_at' => now()->subDays(7)->subMinute(),
         ]);
 
-        $this->actingAs($this->manager())
+        $response = $this->actingAs($this->manager())
             ->postJson("/api/admin/users/{$target->id}/reset-password")
-            ->assertOk()
-            ->assertJsonPath('generatedPassword', 'jane.officer.s');
+            ->assertOk();
+
+        $this->assertSame(16, strlen($response->json('generatedPassword')));
     }
 
     /* --------------------------------------------------------------- destroy */

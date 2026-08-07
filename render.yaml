@@ -1,0 +1,38 @@
+# Render Blueprint fragment for the scheduler cron job — see SETUP.md's
+# "Wiring up the scheduler" section for context and manual (dashboard) setup
+# steps.
+#
+# This is NOT a complete deployment blueprint: it defines only the cron job
+# that runs Laravel's scheduler, not the backend web service or the frontend.
+# If you already deploy the backend on Render, merge the `services` entry
+# below into your existing render.yaml rather than deploying this file
+# standalone, and point `envVars` at whatever Environment Group (or literal
+# values) the web service already uses so the two never drift out of sync.
+#
+# Field names here reflect Render's Blueprint spec at the time this was
+# written — verify against the current reference before relying on it:
+# https://render.com/docs/blueprint-spec
+#
+# `runtime`/`env` below assumes the backend is deployed as a native PHP
+# service. If the web service instead runs from a Dockerfile, change this
+# job to `runtime: docker` and point `dockerfilePath`/`dockerContext` at the
+# same Dockerfile so the cron job's PHP version and extensions match the
+# app it's maintaining.
+
+services:
+  - type: cron
+    name: icpep-scheduler
+    runtime: php
+    region: singapore
+    plan: starter
+    rootDir: backend
+    schedule: "* * * * *"
+    buildCommand: composer install --no-dev --optimize-autoloader
+    # Laravel decides what's actually due to run (see routes/console.php) —
+    # this fires every minute, but remember-tokens:prune and
+    # activity-log:prune themselves only execute once a day.
+    startCommand: php artisan schedule:run
+    envVars:
+      # Reuse the backend web service's environment group so DB/Supabase
+      # credentials are defined once, not duplicated here.
+      - fromGroup: icpep-backend

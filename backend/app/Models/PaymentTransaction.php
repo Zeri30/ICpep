@@ -33,6 +33,8 @@ class PaymentTransaction extends Model
         'effective_at',
         'previous_effective_at',
         'actor',
+        'actor_name',
+        'actor_role',
         'member_name',
         'section',
         'year_level',
@@ -46,11 +48,21 @@ class PaymentTransaction extends Model
 
     /**
      * Generation counter for Payment History's list cache (see
-     * PaymentController::index) — every cached page/filter combination is
-     * keyed against this, so bumping it once invalidates all of them at
-     * once instead of enumerating which cached keys a given write affects.
+     * PaymentController::index), one per term rather than one global
+     * counter: PaymentController::filtered() scopes almost every request to
+     * a single term (forTerm()), so nearly every cached page belongs to
+     * exactly one term. Keying the version per term means a payment written
+     * against term A only evicts term A's cached pages — term B's cached
+     * pages, which a write to A never changed, are left alone instead of
+     * being thrown away too.
+     *
+     * The `null` slot is the version for the untermed view (no `term` filter
+     * applied, spanning every term at once — see PaymentController::filtered
+     * when $term is null). Because that view's rows can come from any term,
+     * a write to any single term has to bump this slot too, on top of its
+     * own — see bumpCacheVersion().
      */
-    private const CACHE_VERSION_KEY = 'payment_transactions.cache_version';
+    private const CACHE_VERSION_KEY_PREFIX = 'payment_transactions.cache_version.';
 
     protected static function booted(): void
     {
@@ -58,17 +70,30 @@ class PaymentTransaction extends Model
         // ->create()). Bulk writes go around Eloquent events entirely — see
         // MemberController::bulkSetPayment/bulkSetBothPayments, which call
         // bumpCacheVersion() themselves right after their bulk insert.
-        static::created(fn () => self::bumpCacheVersion());
+        static::created(fn (self $transaction) => self::bumpCacheVersion($transaction->membership_term_id));
     }
 
-    public static function cacheVersion(): int
+    public static function cacheVersion(?int $termId): int
     {
-        return (int) Cache::get(self::CACHE_VERSION_KEY, 0);
+        return (int) Cache::get(self::cacheVersionKey($termId), 0);
     }
 
-    public static function bumpCacheVersion(): void
+    public static function bumpCacheVersion(?int $termId): void
     {
-        Cache::forever(self::CACHE_VERSION_KEY, self::cacheVersion() + 1);
+        Cache::forever(self::cacheVersionKey($termId), self::cacheVersion($termId) + 1);
+
+        // A row written under a specific term also changes what the
+        // untermed ("all terms") view would show, so that view's version
+        // has to move too — only skipped when $termId is already null,
+        // i.e. the write itself already bumped this exact slot above.
+        if ($termId !== null) {
+            Cache::forever(self::cacheVersionKey(null), self::cacheVersion(null) + 1);
+        }
+    }
+
+    private static function cacheVersionKey(?int $termId): string
+    {
+        return self::CACHE_VERSION_KEY_PREFIX.($termId ?? 'all');
     }
 
     public function application(): BelongsTo

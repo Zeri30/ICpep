@@ -5,6 +5,8 @@ import {
   Calendar,
   CalendarDays,
   GraduationCap,
+  HandCoins,
+  type LucideIcon,
   Users,
 } from "lucide-react";
 import { useAdmin } from "@/components/admin/AdminProvider";
@@ -17,20 +19,38 @@ import { useTerms } from "@/components/admin/MembershipTermProvider";
 import { useDashboardResource } from "@/components/admin/dashboard/useDashboardResource";
 import type { DashboardData } from "@/lib/adminTypes";
 
-/** One StatCard, in placeholder form — label, icon, value and description
-    bars sized to what StatCard actually renders, so the tile is exactly as
-    tall before the figures arrive as after. */
-function StatCardSkeleton() {
+/* Mission Control layout: every figure, permission check, fetch, and poll
+   below is identical to the previous dashboard — only where and how large
+   each one renders has changed.
+
+   The two numbers that most say "where does the chapter stand right now"
+   (total membership, payment status) anchor the top of the page as
+   oversized hero tiles. The schedule sits beside them as a tall column
+   spanning both hero rows, so it reads as a live feed of what's next and
+   what still needs an outcome recorded, not a footer widget scrolled past to
+   reach — it already fetches and loads independently of the stats below
+   (see UpcomingEvents), so it renders in that same spot regardless of
+   whether the rest of this page is still loading. Everything with less
+   time pressure — the 3rd/4th year split, the payment ticker, the trend
+   charts — steps down in size and further down the page the less
+   operationally urgent it is. */
+
+/** One hero or supporting StatCard, in placeholder form, matching whichever
+    size the real tile will render at so nothing shifts when it arrives. */
+function StatCardSkeleton({ size = "md" }: { size?: "md" | "lg" }) {
+  const lg = size === "lg";
   return (
-    <div className="relative overflow-hidden rounded-xl border border-line bg-card p-5">
+    <div
+      className={`relative flex h-full flex-col overflow-hidden rounded-xl border border-line bg-card ${lg ? "p-6" : "p-5"}`}
+    >
       <div className="flex items-start justify-between gap-3">
-        <Bar w="w-20" h="h-3" />
-        <span className="skeleton block size-9 shrink-0 rounded-lg" />
+        <Bar w={lg ? "w-28" : "w-20"} h="h-3" />
+        <span className={`skeleton block shrink-0 rounded-lg ${lg ? "size-11" : "size-9"}`} />
       </div>
-      <div className="mt-3">
-        <Bar w="w-16" h="h-8" />
+      <div className={lg ? "mt-4" : "mt-3"}>
+        <Bar w={lg ? "w-32" : "w-16"} h={lg ? "h-10" : "h-8"} />
       </div>
-      <div className="mt-1.5">
+      <div className="mt-auto pt-1.5">
         <Bar w="w-32" h="h-3" />
       </div>
     </div>
@@ -41,6 +61,20 @@ function StatCardSkeleton() {
     own default, so the panel doesn't grow when the real chart replaces it. */
 function ChartSkeleton() {
   return <div className="skeleton h-55 w-full rounded-lg" />;
+}
+
+/** One line of the payment ticker, in placeholder form. */
+function TickerRowSkeleton() {
+  return (
+    <div className="flex items-center gap-3 py-2.5">
+      <span className="skeleton block size-8 shrink-0 rounded-lg" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <Bar w="w-24" h="h-3" />
+        <Bar w="w-36" h="h-3" />
+      </div>
+      <Bar w="w-16" h="h-5" />
+    </div>
+  );
 }
 
 function Panel({
@@ -60,6 +94,41 @@ function Panel({
       </div>
       <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+/** One row of the payment ticker — a feed line (icon, label + context, the
+    figure) rather than its own tile, so three numbers that are really trend
+    context for the hero tiles above read as a compact log, not three more
+    things competing for the same attention. */
+function TickerRow({
+  icon: Icon,
+  label,
+  value,
+  description,
+  active,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  description: string;
+  active: boolean;
+}) {
+  const accent = active ? "#22c55e" : "#3b82f6";
+  return (
+    <div className="flex items-center gap-3 py-2.5">
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg"
+        style={{ background: `${accent}1f`, color: accent }}
+      >
+        <Icon size={14} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="truncate text-xs text-muted-foreground/80">{description}</p>
+      </div>
+      <span className="shrink-0 font-display text-lg font-bold tabular-nums text-foreground">{value}</span>
+    </div>
   );
 }
 
@@ -121,39 +190,31 @@ export default function Dashboard() {
 
       {error && !data && <p className="py-4 text-sm text-red-400">{error}</p>}
 
-      {awaitingData ? (
-        <>
-          {/* Headline stats. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }, (_, i) => <StatCardSkeleton key={i} />)}
-          </div>
+      {/* Hero row — the headline KPIs, the year-level breakdown beneath them,
+          and the live schedule feed spanning both. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12">
+        <div className="sm:col-span-1 xl:col-span-4">
+          {awaitingData ? (
+            <StatCardSkeleton size="lg" />
+          ) : data && stats ? (
+            <StatCard
+              size="lg"
+              label="Members"
+              value={stats.members}
+              description="registered members"
+              icon={Users}
+              tone="primary"
+            />
+          ) : null}
+        </div>
 
-          {/* Payment summary — only drawn for roles that will actually see it. */}
-          {canViewRevenue && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {Array.from({ length: 3 }, (_, i) => <StatCardSkeleton key={i} />)}
-            </div>
-          )}
-
-          {/* Charts */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Panel title="Members by year & section" description="Live headcount per class (3A / 3B / 4A / 4B).">
-              <ChartSkeleton />
-            </Panel>
-            <Panel title="Registrations over time" description="New members per month (last 6 months).">
-              <ChartSkeleton />
-            </Panel>
-          </div>
-        </>
-      ) : data && stats ? (
-        <>
-          {/* Headline stats. The revenue tile is finance-only. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Members" value={stats.members} description="registered members" icon={Users} tone="primary" />
-            <StatCard label="3rd Year" value={stats.thirdYear} description="members" icon={GraduationCap} tone="info" />
-            <StatCard label="4th Year" value={stats.fourthYear} description="members" icon={GraduationCap} tone="info" />
-            {canViewRevenue && stats.revenue !== null ? (
+        <div className="sm:col-span-1 xl:col-span-4">
+          {awaitingData ? (
+            <StatCardSkeleton size="lg" />
+          ) : data && stats ? (
+            canViewRevenue && stats.revenue !== null ? (
               <StatCard
+                size="lg"
                 label="Revenue collected"
                 value={money(stats.revenue)}
                 description={revenueDesc}
@@ -161,37 +222,111 @@ export default function Dashboard() {
                 tone={stats.unpaid > 0 ? "warning" : "success"}
               />
             ) : (
-              <StatCard label="Paid members" value={stats.paid} description={`${stats.unpaid} unpaid`} icon={Users} tone={stats.unpaid > 0 ? "warning" : "success"} />
+              <StatCard
+                size="lg"
+                label="Paid members"
+                value={stats.paid}
+                description={`${stats.unpaid} unpaid`}
+                icon={HandCoins}
+                tone={stats.unpaid > 0 ? "warning" : "success"}
+              />
+            )
+          ) : null}
+        </div>
+
+        {/* Always on screen regardless of the stats fetch above — it fetches
+            its own /events resource and manages its own loading state, so
+            gating it on the dashboard stats would make it wait on a request
+            it has nothing to do with. Spanning both hero rows on xl+ is what
+            gives it "live feed" weight instead of a footer afterthought. */}
+        <div className="sm:col-span-2 xl:col-span-4 xl:row-span-2">
+          <UpcomingEvents />
+        </div>
+
+        <div className="sm:col-span-1 xl:col-span-4">
+          {awaitingData ? (
+            <StatCardSkeleton />
+          ) : data && stats ? (
+            <StatCard label="3rd Year" value={stats.thirdYear} description="members" icon={GraduationCap} tone="info" />
+          ) : null}
+        </div>
+        <div className="sm:col-span-1 xl:col-span-4">
+          {awaitingData ? (
+            <StatCardSkeleton />
+          ) : data && stats ? (
+            <StatCard label="4th Year" value={stats.fourthYear} description="members" icon={GraduationCap} tone="info" />
+          ) : null}
+        </div>
+      </div>
+
+      {/* Payment ticker — finance roles only, a compact feed of recent
+          collections rather than three more full-size tiles: it's trend
+          context for the revenue hero above, not a headline of its own. */}
+      {canViewRevenue && (awaitingData || (data && stats && data.paymentSummary)) && (
+        <section className="rounded-xl border border-line bg-card p-5">
+          <div className="flex items-center justify-between gap-2 border-b border-line/70 pb-3">
+            <h2 className="font-display text-lg font-bold uppercase tracking-wide text-foreground">
+              Recent collections
+            </h2>
+            {!awaitingData && (
+              <span className="text-[11px] text-muted-foreground">Updates automatically</span>
             )}
           </div>
-
-          {/* Payment summary — finance roles only. */}
-          {canViewRevenue && data.paymentSummary && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatCard label="Collected today" value={money(data.paymentSummary.today.amount)} description={`${data.paymentSummary.today.members} members · ${data.paymentSummary.today.label}`} icon={Banknote} tone={data.paymentSummary.today.members > 0 ? "success" : "info"} />
-              <StatCard label="This week" value={money(data.paymentSummary.week.amount)} description={`${data.paymentSummary.week.members} members · ${data.paymentSummary.week.label}`} icon={CalendarDays} tone={data.paymentSummary.week.members > 0 ? "success" : "info"} />
-              <StatCard label="This month" value={money(data.paymentSummary.month.amount)} description={`${data.paymentSummary.month.members} members · ${data.paymentSummary.month.label}`} icon={Calendar} tone={data.paymentSummary.month.members > 0 ? "success" : "info"} />
-            </div>
-          )}
-
-          {/* Charts */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Panel title="Members by year & section" description="Live headcount per class (3A / 3B / 4A / 4B).">
-              <BarChart labels={data.membersByClass.labels} data={data.membersByClass.data} />
-            </Panel>
-            <Panel title="Registrations over time" description="New members per month (last 6 months).">
-              <LineChart labels={data.registrationsOverTime.labels} data={data.registrationsOverTime.data} />
-            </Panel>
+          <div className="mt-1 divide-y divide-line/40">
+            {awaitingData ? (
+              Array.from({ length: 3 }, (_, i) => <TickerRowSkeleton key={i} />)
+            ) : data && stats && data.paymentSummary ? (
+              <>
+                <TickerRow
+                  icon={Banknote}
+                  label="Collected today"
+                  value={money(data.paymentSummary.today.amount)}
+                  description={`${data.paymentSummary.today.members} members · ${data.paymentSummary.today.label}`}
+                  active={data.paymentSummary.today.members > 0}
+                />
+                <TickerRow
+                  icon={CalendarDays}
+                  label="This week"
+                  value={money(data.paymentSummary.week.amount)}
+                  description={`${data.paymentSummary.week.members} members · ${data.paymentSummary.week.label}`}
+                  active={data.paymentSummary.week.members > 0}
+                />
+                <TickerRow
+                  icon={Calendar}
+                  label="This month"
+                  value={money(data.paymentSummary.month.amount)}
+                  description={`${data.paymentSummary.month.members} members · ${data.paymentSummary.month.label}`}
+                  active={data.paymentSummary.month.members > 0}
+                />
+              </>
+            ) : null}
           </div>
-        </>
-      ) : null}
+        </section>
+      )}
 
-      {/* Schedules widget — same shared component every role sees. Rendered
-          unconditionally rather than behind the dashboard fetch above: it
-          fetches its own, unrelated `/events` resource and manages its own
-          loading state, so gating it on the dashboard stats made it wait on
-          a request it has nothing to do with. */}
-      <UpcomingEvents />
+      {/* Charts — the slowest-moving figures on the page, and the least
+          time-critical, so they anchor the bottom as reference detail. Like
+          the original, absent entirely (not just empty) once loading has
+          settled with nothing to show — the error message above already
+          covers that case, so there's no empty panel shell under it. */}
+      {(awaitingData || (data && stats)) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Panel title="Members by year & section" description="Live headcount per class (3A / 3B / 4A / 4B).">
+            {awaitingData ? (
+              <ChartSkeleton />
+            ) : data && stats ? (
+              <BarChart labels={data.membersByClass.labels} data={data.membersByClass.data} />
+            ) : null}
+          </Panel>
+          <Panel title="Registrations over time" description="New members per month (last 6 months).">
+            {awaitingData ? (
+              <ChartSkeleton />
+            ) : data && stats ? (
+              <LineChart labels={data.registrationsOverTime.labels} data={data.registrationsOverTime.data} />
+            ) : null}
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }

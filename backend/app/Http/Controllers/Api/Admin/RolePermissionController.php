@@ -21,14 +21,19 @@ use Illuminate\Validation\Rule;
  * mark members paid. The row is only the entry point, which is why the panel
  * states the role it is editing and how many accounts hold it.
  *
- * Scope is deliberately narrow to begin with — paid/unpaid is the only movable
- * ability (see {@see Permission::isEditable()}); the others are returned so the
- * panel can show the full picture as fixed rows. Anything sent for a fixed
- * ability is ignored rather than rejected.
+ * Every ability is editable (see {@see Permission::isEditable()}) — there is
+ * no fixed subset shown read-only, and `isEditable()`'s `false` branch is
+ * dead code today, kept only so an ability added later starts locked until
+ * someone deliberately opts it in.
  *
  * Reachable only by roles that may manage users (the `permission:users.manage`
- * middleware on the route group), and since that ability is fixed, this module
- * cannot be used to hand itself out.
+ * middleware on the route group) — which means a holder of that ability *can*
+ * use this module to grant it to another role, `users.manage` included; there
+ * is no separate tier above it that this panel keeps out of reach. What this
+ * module refuses is narrower and different: a change that would strip account
+ * management from the officer making it, or leave no active account holding
+ * it anywhere — see {@see self::refuseLockout()}. That guards against locking
+ * everyone out, not against handing the ability out in the first place.
  */
 class RolePermissionController extends Controller
 {

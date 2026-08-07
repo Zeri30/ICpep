@@ -13,12 +13,12 @@ class ActivityLogTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function entry(string $when): ActivityLog
+    private function entry(string $when, string $action = 'updated'): ActivityLog
     {
         $log = ActivityLog::create([
             'actor' => 'officer@example.test',
             'actor_name' => 'Officer',
-            'action' => 'updated',
+            'action' => $action,
             'description' => 'Did a thing',
         ]);
         // created_at isn't mass-assignable (not in $fillable) — set directly so
@@ -103,5 +103,85 @@ class ActivityLogTest extends TestCase
         $this->actingAs($anyActiveOfficer)
             ->postJson('/api/admin/me/views/activity')
             ->assertOk();
+    }
+
+    /* ------------------------------------------------ role-restricted actions */
+
+    /**
+     * Sign-in/out, failed sign-ins, password resets, and account
+     * activation/deactivation/deletion are still written for every role (see
+     * UserManagementTest and AdminApiTest for the write side) — only reading
+     * them back through the Activity Log is restricted to the Programming
+     * Team. See ActivityLog::PROGRAMMING_TEAM_ONLY_ACTIONS.
+     */
+    public function test_system_actions_are_hidden_from_every_role_but_the_programming_team(): void
+    {
+        foreach (ActivityLog::PROGRAMMING_TEAM_ONLY_ACTIONS as $action) {
+            $this->entry(now()->toDateTimeString(), $action);
+        }
+        $this->entry(now()->toDateTimeString(), 'updated');
+
+        $notProgrammingTeam = User::factory()->create(); // default role: BOD
+
+        $this->actingAs($notProgrammingTeam)
+            ->getJson('/api/admin/activity')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.action', 'updated');
+
+        // The dropdown filter can't be used to bypass the restriction either.
+        foreach (ActivityLog::PROGRAMMING_TEAM_ONLY_ACTIONS as $action) {
+            $this->actingAs($notProgrammingTeam)
+                ->getJson("/api/admin/activity?action={$action}")
+                ->assertOk()
+                ->assertJsonCount(0, 'data');
+        }
+    }
+
+    public function test_system_actions_are_visible_to_the_programming_team(): void
+    {
+        foreach (ActivityLog::PROGRAMMING_TEAM_ONLY_ACTIONS as $action) {
+            $this->entry(now()->toDateTimeString(), $action);
+        }
+
+        $this->actingAs(User::factory()->programmingTeam()->create())
+            ->getJson('/api/admin/activity')
+            ->assertOk()
+            ->assertJsonCount(count(ActivityLog::PROGRAMMING_TEAM_ONLY_ACTIONS), 'data');
+    }
+
+    /**
+     * A "remember me" cookie being rotated or revoked is an internal
+     * implementation detail (see RememberMeService) — unlike the
+     * Programming-Team-only actions above, no role ever sees it in the log,
+     * the Programming Team included.
+     */
+    public function test_remember_token_reused_is_hidden_from_every_role(): void
+    {
+        $this->entry(now()->toDateTimeString(), 'remember_token_reused');
+        $this->entry(now()->toDateTimeString(), 'updated');
+
+        foreach ([User::factory()->create(), User::factory()->programmingTeam()->create()] as $officer) {
+            $this->actingAs($officer)
+                ->getJson('/api/admin/activity')
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.action', 'updated');
+        }
+    }
+
+    /** The sidebar's unread badge must agree with what the log itself shows —
+        otherwise it would advertise "new activity" a role can't actually see. */
+    public function test_the_unread_badge_does_not_count_hidden_actions(): void
+    {
+        $notProgrammingTeam = User::factory()->create(); // default role: BOD
+
+        $this->entry(now()->toDateTimeString(), 'login');
+        $this->entry(now()->toDateTimeString(), 'remember_token_reused');
+        $this->entry(now()->toDateTimeString(), 'updated');
+
+        $this->actingAs($notProgrammingTeam)
+            ->getJson('/api/admin/counts')
+            ->assertJsonPath('activity', 1);
     }
 }

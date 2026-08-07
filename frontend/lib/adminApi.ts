@@ -9,6 +9,7 @@
    gone, so we bounce to the landing page. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVisibilityInterval } from "@/lib/useVisibilityInterval";
 
 const API_BASE = "/api/admin";
 
@@ -322,14 +323,18 @@ export function useAdminResource<T>(
   }, [path]);
 
   useEffect(() => {
-    // Fetch on mount and, when asked, poll — syncing UI with the API (the kind
-    // of external-system subscription effects are for).
+    // Fetch on mount — syncing UI with the API (the kind of external-system
+    // subscription effects are for). Unconditional regardless of `pollMs`:
+    // useVisibilityInterval below only fires on its own timer (plus when the
+    // tab regains visibility), not on setup, so the very first load still
+    // needs to happen here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    if (!pollMs) return;
-    const id = setInterval(load, pollMs);
-    return () => clearInterval(id);
-  }, [load, pollMs]);
+  }, [load]);
+
+  // Recurring refetch (when asked), paused while the tab is in the
+  // background — see useVisibilityInterval.
+  useVisibilityInterval(load, pollMs);
 
   /**
    * Patches `data` in place from an updater, rather than re-fetching — for a
