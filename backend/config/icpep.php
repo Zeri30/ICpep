@@ -65,4 +65,19 @@ return [
     | grow forever.
     */
     'activity_log_retention_days' => (int) env('ACTIVITY_LOG_RETENTION_DAYS', 730),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scheduler ping token
+    |--------------------------------------------------------------------------
+    | Render's free tier has no crontab of its own to fire `schedule:run`
+    | every minute — see App\Http\Controllers\SchedulerController — so an
+    | external service (cron-job.org) calls POST /api/scheduler/run once a
+    | day instead, and this is the shared secret that call has to present.
+    | Empty by default so the endpoint refuses every request (404) until a
+    | long random value is set here. Generate one with, e.g.,
+    | `php artisan tinker --execute="echo Str::random(40);"` and set it as
+    | SCHEDULER_TOKEN in .env (and on Render) — never checked into git.
+    */
+    'scheduler_token' => env('SCHEDULER_TOKEN', ''),
 ];
