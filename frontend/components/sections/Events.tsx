@@ -23,7 +23,7 @@ function FeaturedEvent() {
         <div className="absolute inset-0 pat-grid opacity-40 pointer-events-none" />
         <div className="relative grid lg:grid-cols-2 gap-8 p-7 md:p-12">
           <div className="flex flex-col justify-center">
-            <Badge tone="red" className="self-start mb-5 pulse-ring">
+            <Badge tone="red" className="self-start mb-5">
               <Zap size={12} /> Featured Event
             </Badge>
             <h3 className="font-display font-black text-3xl md:text-4xl uppercase leading-tight">
@@ -53,7 +53,7 @@ function FeaturedEvent() {
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12),transparent_65%)]" />
               <div className="absolute inset-0 grid place-items-center">
                 <div className="text-center">
-                  <span className="mx-auto grid place-items-center w-20 h-20 rounded-full bg-primary text-white shadow-glow-lg group-hover:scale-110 transition-transform duration-300 pulse-ring">
+                  <span className="mx-auto grid place-items-center w-20 h-20 rounded-full bg-primary text-white shadow-glow-lg group-hover:scale-110 transition-transform duration-300">
                     <Play size={30} className="ml-1" fill="currentColor" />
                   </span>
                   <p className="mt-5 font-head font-semibold uppercase tracking-[0.3em] text-xs text-secondary-foreground">
