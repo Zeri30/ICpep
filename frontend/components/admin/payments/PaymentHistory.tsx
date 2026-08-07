@@ -54,6 +54,93 @@ function EventBadge({ action, paymentTerm }: { action: PaymentRow["action"]; pay
   );
 }
 
+function amountCell(money: (v: number) => string, v: number) {
+  if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;
+  if (v < 0) return <span className="font-semibold text-red-400">−{money(Math.abs(v))}</span>;
+  return <span className="text-muted-foreground">—</span>;
+}
+
+/**
+ * Below `lg` the table's fixed-percentage columns (sized for a wide desktop
+ * row) don't leave enough room for real content — "By"'s 12% is well under
+ * what a name needs, and since `table-fixed` cells don't clip overflow by
+ * default, the text bleeds sideways into neighbouring columns instead of
+ * wrapping. A stacked card carries the same fields without forcing them into
+ * a column that's narrower than their content, and reads better on a phone
+ * than a horizontally-scrolling ledger row would anyway.
+ */
+function PaymentCard({ row, money }: { row: PaymentRow; money: (v: number) => string }) {
+  return (
+    <div className="space-y-2.5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium text-foreground">{row.memberName}</p>
+          {row.section && <p className="text-xs text-muted-foreground">{row.section}</p>}
+        </div>
+        <div className="shrink-0">{amountCell(money, row.amount)}</div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <EventBadge action={row.action} paymentTerm={row.paymentTerm} />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{KIND_LABEL[row.kind]}</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <p className="text-muted-foreground">Year Level</p>
+          <p className="mt-0.5 text-secondary-foreground">{row.yearLevel ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Recorded</p>
+          <p className="mt-0.5 text-secondary-foreground">{formatDateTime(row.recordedAt)}</p>
+        </div>
+      </div>
+
+      <div className="border-t border-line/40 pt-2 text-xs">
+        <p className="text-muted-foreground">By</p>
+        <p className="mt-0.5 font-medium text-foreground">
+          {row.actorName ?? row.actor ?? "System"}
+          {row.actorRoleLabel && <span className="ml-1 font-normal text-muted-foreground">· {row.actorRoleLabel}</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors PaymentCard's shape field-for-field, so nothing resizes when the
+    real card swaps in. */
+function PaymentCardSkeleton() {
+  return (
+    <div className="space-y-2.5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-32" />
+          <Bar w="w-16" h="h-3" />
+        </div>
+        <Bar w="w-16" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Pill w="w-24" />
+        <Bar w="w-14" h="h-3" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Bar w="w-10" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Bar w="w-28" />
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5 border-t border-line/40 pt-2">
+        <Bar w="w-8" h="h-3" />
+        <Bar w="w-24" />
+      </div>
+    </div>
+  );
+}
+
 export default function PaymentHistory() {
   const { meta, money } = useAdmin();
   const { selected: term, initialTermId, isViewingPast } = useTerms();
@@ -201,17 +288,14 @@ export default function PaymentHistory() {
     sinceRef.current = await pollRef.current(sinceRef.current);
   }, termId ? 10_000 : null);
 
-  const amountCell = (v: number) => {
-    if (v > 0) return <span className="font-semibold text-green-400">+{money(v)}</span>;
-    if (v < 0) return <span className="font-semibold text-red-400">−{money(Math.abs(v))}</span>;
-    return <span className="text-muted-foreground">—</span>;
-  };
+  const emptyHeading = "No payments recorded yet";
+  const emptyDescription = "Marking a member as paid in the Members List records it here.";
 
   const columns: Column<PaymentRow>[] = [
     {
       key: "member",
       header: "Member",
-      width: "24%",
+      width: "22%",
       render: (r) => (
         <div>
           <p className="font-medium text-foreground">{r.memberName}</p>
@@ -248,36 +332,38 @@ export default function PaymentHistory() {
     {
       key: "amount",
       header: "Amount",
-      width: "16%",
+      width: "10%",
       // Left-aligned like every other column, so the fixed-width layout's
       // default padding gives every column boundary the same visual gap —
       // right-aligning just this one pushed its short text away from its
       // neighbors on one side and left a wide gap on the other.
-      render: (r) => amountCell(r.amount),
+      render: (r) => amountCell(money, r.amount),
       skeleton: <Bar w="w-16" />,
     },
     {
       key: "yearLevel",
       header: "Year Level",
-      width: "16%",
-      render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{r.yearLevel ?? "—"}</span>,
+      width: "10%",
+      render: (r) => <span className="truncate block text-secondary-foreground">{r.yearLevel ?? "—"}</span>,
       skeleton: <Bar w="w-12" />,
     },
     {
       key: "recorded",
       header: "Recorded",
-      width: "18%",
-      render: (r) => <span className="whitespace-nowrap text-secondary-foreground">{formatDateTime(r.recordedAt)}</span>,
+      width: "21%",
+      render: (r) => <span className="truncate block text-secondary-foreground">{formatDateTime(r.recordedAt)}</span>,
       skeleton: <Bar w="w-40" />,
     },
     {
       key: "actor",
       header: "By",
-      width: "12%",
+      width: "23%",
       render: (r) => (
         <div className="leading-tight">
-          <p className="whitespace-nowrap font-medium text-foreground">{r.actorName ?? r.actor ?? "System"}</p>
-          {r.actorRoleLabel && <p className="text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
+          <p className="truncate font-medium text-foreground" title={r.actorName ?? r.actor ?? "System"}>
+            {r.actorName ?? r.actor ?? "System"}
+          </p>
+          {r.actorRoleLabel && <p className="truncate text-[11px] text-muted-foreground">{r.actorRoleLabel}</p>}
         </div>
       ),
       // Two lines, because the cell has two — name over role.
@@ -337,25 +423,56 @@ export default function PaymentHistory() {
         </div>
       </div>
 
-      <DataTable
-        fill
-        fixedLayout
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        loading={awaitingRows}
-        skeletonRows={SKELETON_ROWS}
-        error={error}
-        emptyHeading="No payments recorded yet"
-        emptyDescription="Marking a member as paid in the Members List records it here."
-        footer={
-          awaitingRows ? (
-            <PaginationSkeleton />
-          ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
-          ) : null
-        }
-      />
+      {/* The fixed-width table needs a wide row to lay its columns out
+          without crowding — see PaymentCard's rationale above. Below `lg`,
+          `hidden` drops it (and `lg:contents` at that breakpoint keeps this
+          wrapper out of the flex layout, so DataTable's own `fill` sizing
+          still targets the real flex parent below it). */}
+      <div className="hidden lg:contents">
+        <DataTable
+          fill
+          fixedLayout
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          loading={awaitingRows}
+          skeletonRows={SKELETON_ROWS}
+          error={error}
+          emptyHeading={emptyHeading}
+          emptyDescription={emptyDescription}
+          footer={
+            awaitingRows ? (
+              <PaginationSkeleton />
+            ) : data ? (
+              <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+            ) : null
+          }
+        />
+      </div>
+
+      {/* Stacked cards for phones and tablets — same data, laid out so
+          nothing needs to be squeezed into a column too narrow for it. */}
+      <div className="overflow-hidden rounded-xl border border-line bg-card lg:hidden">
+        <div className="divide-y divide-line/40">
+          {awaitingRows ? (
+            Array.from({ length: SKELETON_ROWS }, (_, i) => <PaymentCardSkeleton key={`skeleton-${i}`} />)
+          ) : error ? (
+            <div className="py-12 text-center text-sm text-red-400">{error}</div>
+          ) : rows.length === 0 ? (
+            <div className="py-14 text-center">
+              <p className="font-display text-lg font-bold uppercase tracking-wide text-foreground">{emptyHeading}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{emptyDescription}</p>
+            </div>
+          ) : (
+            rows.map((r) => <PaymentCard key={r.id} row={r} money={money} />)
+          )}
+        </div>
+        {awaitingRows ? (
+          <PaginationSkeleton />
+        ) : data ? (
+          <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+        ) : null}
+      </div>
     </div>
   );
 }

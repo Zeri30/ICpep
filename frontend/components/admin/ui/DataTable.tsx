@@ -96,8 +96,15 @@ export default function DataTable<T>({
   const alignClass = (a?: string) =>
     a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left";
 
+  // `table-fixed` pins each column to its declared width, but a cell's own
+  // overflow stays visible by default — `white-space: nowrap` content longer
+  // than that width paints past the cell edge and over whatever column comes
+  // next, rather than being clipped by it. `overflow-hidden` makes the
+  // fixed width the actual boundary, matching what the percentages already
+  // implied. Auto-layout tables don't opt in: there the browser is sizing
+  // columns off their content in the first place, so nothing overflows.
   const cellClass = (col: Column<T>) =>
-    `px-4 py-3 align-middle ${alignClass(col.align)} ${col.className ?? ""}`;
+    `px-4 py-3 align-middle ${alignClass(col.align)} ${fixedLayout ? "overflow-hidden" : ""} ${col.className ?? ""}`;
 
   // Placeholder rows replace the spinner rather than joining it — two loading
   // indicators for one fetch is one too many.
