@@ -7,7 +7,7 @@ import { CalendarDays, Clock, LayoutDashboard, ShieldCheck, Users, Wallet } from
 import Logo from "@/components/ui/Logo";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import SignOutButton from "@/components/admin/layout/SignOutModal";
-import { MODULE_VIEWED_EVENT, useAdminResource } from "@/lib/adminApi";
+import { MODULE_VIEWED_EVENT, useAdminResource, type ModuleViewedDetail } from "@/lib/adminApi";
 import { formatBadgeCount } from "@/lib/adminFormat";
 import { useTerms } from "@/components/admin/MembershipTermProvider";
 
@@ -46,18 +46,25 @@ export default function AdminSidebar({
   const { selected: term } = useTerms();
   // Unread nav counts — records created since this officer last opened each
   // module (DashboardController::counts), not the module's total row count.
-  const { data: counts, refresh: refreshCounts } = useAdminResource<Counts>(
+  const { data: counts, mutate: mutateCounts } = useAdminResource<Counts>(
     `/counts${term ? `?term=${term.id}` : ""}`,
     { pollMs: 30000 },
   );
 
   // A module page marks itself viewed on mount (see markModuleViewed) and
-  // fires this event, so its badge zeroes out immediately instead of sitting
-  // stale until the next 30s poll.
+  // fires this event immediately (it doesn't wait on the write). Patching
+  // the one count locally — rather than issuing a fresh GET /counts and
+  // waiting on that too — is what makes the badge disappear the instant the
+  // module opens instead of after a second round trip; the next 30s poll
+  // still reconciles it against the server's own count regardless.
   useEffect(() => {
-    window.addEventListener(MODULE_VIEWED_EVENT, refreshCounts);
-    return () => window.removeEventListener(MODULE_VIEWED_EVENT, refreshCounts);
-  }, [refreshCounts]);
+    const onViewed = (e: Event) => {
+      const { module } = (e as CustomEvent<ModuleViewedDetail>).detail;
+      mutateCounts((prev) => (prev ? { ...prev, [module]: 0 } : prev));
+    };
+    window.addEventListener(MODULE_VIEWED_EVENT, onViewed);
+    return () => window.removeEventListener(MODULE_VIEWED_EVENT, onViewed);
+  }, [mutateCounts]);
 
   // Only show modules the officer's role can reach; the backend enforces the
   // same rule regardless, so hidden modules are also inaccessible by URL.
