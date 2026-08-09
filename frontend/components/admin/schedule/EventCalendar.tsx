@@ -340,11 +340,12 @@ export default function EventCalendar() {
           <button
             type="button"
             onClick={() => openDay(defaultNewDate())}
-            // Sized to the schedule panel it sits above — 22rem to match the
-            // grid's second column below, full width where that column is. The
-            // two right edges lining up exactly reads as deliberate; nearly
-            // lining up reads as a mistake.
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent lg:w-[22rem]"
+            // Sized to the schedule panel it sits above, full width where that
+            // column is. The two right edges lining up exactly reads as
+            // deliberate; nearly lining up reads as a mistake — so this tracks
+            // the panel's own two breakpoints: 19rem on a smaller desktop,
+            // widening to 22rem once there's room to spare (see the grid below).
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent lg:w-76 xl:w-88"
           >
             <CalendarPlus size={16} /> New event
           </button>
@@ -357,7 +358,13 @@ export default function EventCalendar() {
         </p>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      {/* The list column holds its text comfortably at 19rem, so it's the
+          calendar that gives up the width a smaller desktop is short on — a
+          fixed 22rem there would otherwise squeeze the seven-day grid into a
+          sliver right at the breakpoint where the two-column layout kicks in.
+          xl+ (1280px, roughly a standard monitor) restores the original
+          proportions, where there's room for both to breathe. */}
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-3 xl:grid-cols-[minmax(0,1fr)_22rem] xl:gap-4">
         <section className="flex min-h-0 flex-col rounded-xl border border-line bg-card">
           <MonthHeader
             year={cursor.year}
@@ -549,7 +556,7 @@ function HeaderSelect({
         aria-label={label}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="cursor-pointer appearance-none bg-transparent py-1 pl-2.5 pr-7 font-display text-lg font-black uppercase tracking-wide text-foreground outline-none"
+        className="cursor-pointer appearance-none bg-transparent py-1 pl-2 pr-6 font-display text-sm font-black uppercase tracking-wide text-foreground outline-none sm:pl-2.5 sm:pr-7 sm:text-lg lg:pr-6 lg:text-base xl:pr-7 xl:text-lg"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value} className="bg-card font-sans text-sm normal-case">
@@ -561,7 +568,7 @@ function HeaderSelect({
         size={15}
         aria-hidden
         strokeWidth={2.5}
-        className="pointer-events-none absolute right-2 text-primary"
+        className="pointer-events-none absolute right-1.5 text-primary sm:right-2 lg:right-1.5 xl:right-2"
       />
     </span>
   );
@@ -633,7 +640,7 @@ function DayCell({
         onSelect();
         onCreate();
       }}
-      className={`group flex min-h-24 flex-col gap-1 border-b border-r border-line/40 p-1.5 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/60 ${
+      className={`group flex min-h-24 flex-col gap-1 border-b border-r border-line/40 p-1.5 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/60 lg:p-1 xl:p-1.5 ${
         inMonth ? "" : "bg-background/40"
       } ${isSelected ? "bg-primary/5" : "hover:bg-secondary/30"} ${canCreate ? "cursor-pointer" : ""}`}
     >
