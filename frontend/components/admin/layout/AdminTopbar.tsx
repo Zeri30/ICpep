@@ -21,11 +21,11 @@ export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
       </button>
 
       <div className="ml-auto flex items-center gap-4">
-        {/* Mobile only, in the corner sign-out used to sit in — see
-            AdminSidebar for where sign-out went instead. Not for the
-            Programming Team: that account runs the system rather than
-            holding a seat on the org chart, so it has no attendance to scan
-            in — the endpoint refuses it the same way (see
+        {/* Every screen size, not just mobile — this is the only quick way to
+            reach the scanner outside of an event's own "Status & QR" tab.
+            Not for the Programming Team: that account runs the system rather
+            than holding a seat on the org chart, so it has no attendance to
+            scan in — the endpoint refuses it the same way (see
             AttendanceController::store()). */}
         {officer.role !== "programming_team" && (
           <button
@@ -33,7 +33,7 @@ export default function AdminTopbar({ onMenu }: { onMenu: () => void }) {
             onClick={() => setScannerOpen(true)}
             aria-label="Scan attendance QR"
             title="Scan attendance QR"
-            className="grid size-10 place-items-center rounded-md border border-primary/50 text-primary transition-colors hover:bg-primary/10 sm:hidden"
+            className="grid size-10 place-items-center rounded-md border border-primary/50 text-primary transition-colors hover:bg-primary/10"
           >
             <QrCode size={18} />
           </button>

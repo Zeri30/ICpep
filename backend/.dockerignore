@@ -1,0 +1,23 @@
+# Never bake real secrets or local state into the image — Render injects the
+# real env vars at runtime instead (see the Dockerfile's final CMD).
+.env
+.env.*
+!.env.example
+
+vendor/
+node_modules/
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+!storage/logs/.gitignore
+!storage/framework/cache/.gitignore
+!storage/framework/sessions/.gitignore
+!storage/framework/views/.gitignore
+
+database/database.sqlite
+
+.git
+.gitignore
+tests/
+.phpunit.result.cache

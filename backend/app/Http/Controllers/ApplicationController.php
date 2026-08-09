@@ -75,7 +75,7 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'surname'        => ['required', 'string', 'max:100'],
             'givenName'      => ['required', 'string', 'max:100'],
-            'middleInitial'  => ['nullable', 'string', 'max:1'],
+            'middleInitial'  => ['nullable', 'string', 'max:2'],
             'studentId'      => ['required', 'string', 'digits:10'],
             'yearLevel'      => ['required', 'string', 'max:50'],
             'section'        => ['required', 'string', 'max:50'],

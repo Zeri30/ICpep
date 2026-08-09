@@ -23,7 +23,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
   CalendarPlus,
-  CircleQuestionMark,
   Clock,
   Loader2,
   PencilLine,
@@ -62,63 +61,6 @@ const labelText =
   "font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground";
 
 const labelCls = `mb-1.5 block ${labelText}`;
-
-/** The same label as a row, so a hint icon can sit beside the words. */
-const labelRowCls = `mb-1.5 flex items-center gap-1.5 ${labelText}`;
-
-/**
- * Who an event's announcement goes out to.
- *
- * ⚠ Nothing is sent yet: this is not in the save payload and the API does not
- * accept it. The field is here so the shape of the decision is settled before
- * the mail goes out — an announcement that reaches the wrong list is not
- * something to discover after building the sending half. Both boxes are
- * independent and may be left unticked, which is what an event nobody is
- * emailed about looks like.
- */
-const AUDIENCES = [
-  { value: "officers", label: "Officers" },
-  { value: "members", label: "Members" },
-] as const;
-
-type Audience = (typeof AUDIENCES)[number]["value"];
-
-/**
- * The little (?) beside a label.
- *
- * Shown on hover *and* on focus, so the explanation is not pointer-only — the
- * icon is a real button for that reason, and `type="button"` so it cannot
- * submit the form it sits inside. The same words are its `aria-label`, which is
- * what a screen reader announces; the panel is the sighted half of one message
- * rather than a second one.
- *
- * Anchored to the icon's left edge and drawn downwards. Centred would put half
- * the panel past the left of the form, where the dialog's scroll container
- * would cut it off. Narrower than it has room to be on a wide screen, too:
- * on the single-column mobile layout the icon sits well inside the card
- * rather than flush with its edge, and a wider panel ran past the card's own
- * right edge — clipped by the same scroll container, and silently turning
- * `overflow-y-auto` into a horizontal scrollbar for the whole form.
- */
-function FieldHint({ text }: { text: string }) {
-  return (
-    <span className="group relative inline-flex">
-      <button
-        type="button"
-        aria-label={text}
-        className="text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
-      >
-        <CircleQuestionMark size={13} />
-      </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-0 top-full z-10 mt-1.5 w-44 rounded-lg border border-line bg-background px-2.5 py-2 text-[11px] font-normal normal-case leading-relaxed tracking-normal text-secondary-foreground opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        {text}
-      </span>
-    </span>
-  );
-}
 
 /** The event's own details, as the form sends them — everything but its outcome. */
 type EventFields = {
@@ -218,15 +160,6 @@ function EventDialog({
   const [time, setTime] = useState(event?.time ?? "17:00");
   const [endTime, setEndTime] = useState(event?.endTime ?? "19:00");
   const [description, setDescription] = useState(event?.description ?? "");
-
-  // Starts empty on every open, since there is nowhere to have stored it yet.
-  // See AUDIENCES — this is deliberately not part of the save.
-  const [audience, setAudience] = useState<Audience[]>([]);
-
-  const toggleAudience = (value: Audience) =>
-    setAudience((current) =>
-      current.includes(value) ? current.filter((a) => a !== value) : [...current, value],
-    );
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -542,42 +475,6 @@ function EventDialog({
                       <Clock size={12} /> Times are {meta.timezone.replace("_", " ")}, and an
                       event runs within one day.
                     </p>
-
-                    <div>
-                      {/* A group label rather than a <label>, since it names two
-                          checkboxes rather than one control. */}
-                      <span className={labelRowCls} id="event-attendees-label">
-                        Attendees
-                        <FieldHint text="Who gets an email announcement about this event." />
-                      </span>
-                      <div
-                        role="group"
-                        aria-labelledby="event-attendees-label"
-                        className="grid grid-cols-2 gap-2"
-                      >
-                        {AUDIENCES.map((a) => {
-                          const checked = audience.includes(a.value);
-                          return (
-                            <label
-                              key={a.value}
-                              className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2.5 text-sm transition-colors ${
-                                checked
-                                  ? "border-primary/50 bg-primary/10 text-foreground"
-                                  : "border-line bg-secondary/40 text-secondary-foreground hover:border-primary/30"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleAudience(a.value)}
-                                className="size-4 accent-primary"
-                              />
-                              {a.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
 
                     <div>
                       <div className="mb-1.5 flex items-baseline justify-between gap-2">

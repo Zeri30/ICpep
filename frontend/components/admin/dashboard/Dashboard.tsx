@@ -43,10 +43,7 @@ function StatCardSkeleton({ size = "md" }: { size?: "md" | "lg" }) {
     <div
       className={`relative flex h-full flex-col overflow-hidden rounded-xl border border-line bg-card ${lg ? "p-6" : "p-5"}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <Bar w={lg ? "w-28" : "w-20"} h="h-3" />
-        <span className={`skeleton block shrink-0 rounded-lg ${lg ? "size-11" : "size-9"}`} />
-      </div>
+      <Bar w={lg ? "w-28" : "w-20"} h="h-3" />
       <div className={lg ? "mt-4" : "mt-3"}>
         <Bar w={lg ? "w-32" : "w-16"} h={lg ? "h-10" : "h-8"} />
       </div>
