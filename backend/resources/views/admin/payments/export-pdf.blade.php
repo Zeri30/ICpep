@@ -118,7 +118,7 @@
                     <td>{{ $kindLabels[$row->kind] ?? $row->kind }}</td>
                     <td class="amount">{{ number_format((float) $row->amount, 2) }}</td>
                     <td>{{ $row->membershipTerm?->label ?? '—' }}</td>
-                    <td>{{ optional($row->created_at)->format('M j, Y g:i A') }}</td>
+                    <td>{{ $row->created_at?->clone()->setTimezone('Asia/Manila')->format('M j, Y g:i A') }}</td>
                     <td>
                         @php($actorName = $row->actor_name ?: $row->actor)
                         @if ($actorName)
