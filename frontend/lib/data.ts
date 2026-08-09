@@ -414,7 +414,7 @@ export const CONTACT = {
   facebookUrl: "https://www.facebook.com/ICPEP.SEBulSUMC",
   email: "icpep.se.menesescampus@gmail.com",
   emailComposeUrl: "https://mail.google.com/mail/?view=cm&fs=1&to=icpep.se.menesescampus@gmail.com",
-  location: "Bulacan State University – Meneses Campus, Guiguinto, Bulacan",
+  location: "Triple Junction Subdivision (TJS) Matungao, Bulakan, Bulacan",
   mapEmbed:
     "https://www.google.com/maps?q=Bulacan+State+University+Meneses+Campus+Guiguinto+Bulacan&output=embed",
 };
