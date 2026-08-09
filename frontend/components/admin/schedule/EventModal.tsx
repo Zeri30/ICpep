@@ -327,7 +327,16 @@ function EventDialog({
         onClick={() => !saving && onClose()}
         className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm"
       />
-      <div className="fixed inset-0 z-[120] overflow-y-auto p-4">
+      {/* Never scrolls as a whole, at any screen size — the dialog below is
+          already capped at max-h-[calc(100dvh-2rem)], exactly matching this
+          wrapper's own padding, and handles its own internal overflow (the
+          form fields, the tabs) through the scrolling middle section it
+          already has. This wrapper scrolling too was only ever a fallback
+          for that arithmetic missing by a pixel on some browsers — which
+          doesn't make the dialog visibly taller, it just leaves an empty
+          scrollbar with nothing beyond the dialog's own edge worth scrolling
+          to. `overflow-hidden` removes that outer scrollbar outright. */}
+      <div className="fixed inset-0 z-[120] overflow-hidden p-4">
         <div className="flex min-h-full items-center justify-center">
           <motion.form
             onSubmit={submit}
@@ -339,8 +348,14 @@ function EventDialog({
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.3, ease: easeOutExpo }}
             // Capped at the viewport height with only the middle scrolling, so
-            // Save is always reachable without hunting for it.
-            className={`flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-line bg-card shadow-[0_24px_70px_rgba(0,0,0,0.7)] ${
+            // Save is always reachable without hunting for it. `overflow-hidden`
+            // makes that cap a hard clip rather than a suggestion — without it,
+            // anything inside that ends up a pixel taller than the cap (a
+            // rounding difference, a height measured a render late) spills past
+            // this box's own border into the page behind it, which is what
+            // turns the whole viewport scrollable instead of just this dialog's
+            // own middle section.
+            className={`flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-line bg-card shadow-[0_24px_70px_rgba(0,0,0,0.7)] ${
               twoColumn ? "max-w-3xl" : "max-w-lg"
             }`}
           >
@@ -381,7 +396,7 @@ function EventDialog({
             </div>
 
             {/* -------------------------------------------------------- body */}
-            <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6">
               {readOnly && current ? (
                 <ReadOnlyDetails event={current} />
               ) : (
