@@ -37,10 +37,17 @@
     table.members thead { display: table-header-group; }
     table.members tr { page-break-inside: avoid; }
     table.members th, table.members td {
-        border: 1px solid #ddd; padding: 5px 6px; text-align: left; font-size: 9.5px;
+        border: 1px solid #ddd; padding: 5px 6px; text-align: left; font-size: 9.5px; vertical-align: middle;
     }
     table.members th { background: #b91c1c; color: #fff; text-transform: uppercase; font-size: 8.5px; }
     table.members tbody tr:nth-child(even) { background: #f9f9f9; }
+    table.members td.status-paid { color: #15803d; font-weight: bold; }
+    table.members td.status-unpaid { color: #b91c1c; font-weight: bold; }
+    /* Sized to sit inside the row's own height (padding + the 9.5px text)
+       rather than stretching it — a signature here is a small confirmation
+       mark, not an illustration. */
+    table.members td.signature img { height: 14px; width: auto; max-width: 90px; }
+    table.members td.signature .none { color: #999; }
 
     .total { margin-top: 10px; font-size: 10.5px; font-weight: bold; text-align: right; }
 
@@ -91,44 +98,46 @@
     </table>
 @endif
 
-@if ($members->isEmpty())
+@if ($rows->isEmpty())
     <p class="empty">No members match the current filters.</p>
 @else
     <table class="members">
         <thead>
             <tr>
                 <th>#</th>
-                <th>Student ID</th>
-                <th>Full Name</th>
-                <th>Year Level</th>
+                <th>Name</th>
                 <th>Section</th>
-                <th>Phone</th>
-                <th>Email</th>
-                <th>Payment 1</th>
-                <th>Payment 2</th>
-                <th>Registered</th>
+                <th>Year Level</th>
+                <th>Status</th>
+                <th>Balance</th>
+                <th>Semester</th>
+                <th>E-Signature</th>
             </tr>
         </thead>
         <tbody>
-            @foreach ($members as $i => $member)
+            @foreach ($rows as $row)
                 <tr>
-                    <td>{{ $i + 1 }}</td>
-                    <td>{{ $member->student_id }}</td>
-                    <td>{{ $member->full_name }}</td>
-                    <td>{{ $member->year_level }}</td>
-                    <td>{{ $member->section }}</td>
-                    <td>{{ $member->phone }}</td>
-                    <td>{{ $member->email }}</td>
-                    <td>{{ $member->is_paid ? 'Paid' : 'Unpaid' }}</td>
-                    <td>{{ $member->is_payment2_paid ? 'Paid' : 'Unpaid' }}</td>
-                    <td>{{ optional($member->created_at)->format('M j, Y') }}</td>
+                    <td>{{ $row['number'] }}</td>
+                    <td>{{ $row['name'] }}</td>
+                    <td>{{ $row['section'] }}</td>
+                    <td>{{ $row['yearLevel'] }}</td>
+                    <td class="{{ $row['status'] === 'Paid' ? 'status-paid' : 'status-unpaid' }}">{{ $row['status'] }}</td>
+                    <td>{{ number_format($row['balance'], 2) }}</td>
+                    <td>{{ $row['semester'] }}</td>
+                    <td class="signature">
+                        @if ($row['signature'])
+                            <img src="{{ $row['signature'] }}" alt="Signature">
+                        @else
+                            <span class="none">&mdash;</span>
+                        @endif
+                    </td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 @endif
 
-<div class="total">Total members: {{ $members->count() }}</div>
+<div class="total">Total members: {{ $rows->count() }}</div>
 
 <div class="signatures">
     <table>

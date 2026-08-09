@@ -326,14 +326,19 @@ class AdminApiTest extends TestCase
         $rows = array_map('str_getcsv', array_filter(explode("\n", trim($response->streamedContent()))));
 
         $this->assertSame(
-            [
-                'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email',
-                'Payment 1 Status', 'Payment 1 Paid At', 'Payment 2 Status', 'Payment 2 Paid At', 'Registered At',
-            ],
+            ['No.', 'Name', 'Section', 'Year Level', 'Status', 'Balance', 'Semester', 'E-Signature'],
             $rows[0],
         );
         $this->assertCount(2, $rows); // header + the one 3A row — the 3B member is excluded.
-        $this->assertSame('2024-001', $rows[1][0]);
+        // Unpaid on both batches, so Balance is the full ₱75 combined fee —
+        // see statusAndBalance(). Semester is whatever term seeding leaves current.
+        $this->assertSame('1', $rows[1][0]);
+        $this->assertSame('ThreeA, Juan, S.', $rows[1][1]);
+        $this->assertSame('Section A', $rows[1][2]);
+        $this->assertSame('3rd Year', $rows[1][3]);
+        $this->assertSame('Unpaid', $rows[1][4]);
+        $this->assertSame('75.00', $rows[1][5]);
+        $this->assertSame('', $rows[1][7]);
     }
 
     /**

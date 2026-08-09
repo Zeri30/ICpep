@@ -9,6 +9,7 @@ use App\Models\Application;
 use App\Models\MembershipTerm;
 use App\Models\PaymentTransaction;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -636,24 +637,28 @@ class MemberController extends Controller
 
     /* ----------------------------------------------------------------- export */
 
-    /** Column order shared by every export format. */
+    /**
+     * Column order shared by CSV and Excel. The PDF view lays the same eight
+     * out itself (see admin.members.export-pdf) since it also embeds the
+     * signature image in the last one — CSV and Excel get an empty cell
+     * there instead, a signature image being meaningless in either format.
+     */
     private const EXPORT_COLUMNS = [
-        'Student ID', 'Full Name', 'Year Level', 'Section', 'Phone', 'Email',
-        'Payment 1 Status', 'Payment 1 Paid At', 'Payment 2 Status', 'Payment 2 Paid At', 'Registered At',
+        'No.', 'Name', 'Section', 'Year Level', 'Status', 'Balance', 'Semester', 'E-Signature',
     ];
 
     /**
      * Columns exportRow() (and the PDF view) actually read. An export is
      * every filtered row, unpaginated, so trimming this — skipping address,
-     * birthday and both file paths, none of which any export format prints —
-     * matters far more here than on the paginated list: a large roster's
-     * export is otherwise hydrating (and transferring from the DB) full rows
-     * for columns nothing downstream ever looks at.
+     * birthday, contact details and the picture, none of which any export
+     * format prints — matters far more here than on the paginated list: a
+     * large roster's export is otherwise hydrating (and transferring from
+     * the DB) full rows for columns nothing downstream ever looks at.
+     * `signature_path` stays in because the PDF embeds it.
      */
     private const EXPORT_SELECT_COLUMNS = [
         'id', 'membership_term_id', 'surname', 'given_name', 'middle_initial',
-        'student_id', 'year_level', 'section', 'phone', 'email',
-        'paid_at', 'payment2_paid_at', 'created_at',
+        'year_level', 'section', 'paid_at', 'payment2_paid_at', 'signature_path',
     ];
 
     /** Human-readable labels for the Members List's payment filter, e.g. for the PDF header. */
@@ -675,8 +680,8 @@ class MemberController extends Controller
         return response()->streamDownload(function () use ($members): void {
             $out = fopen('php://output', 'w');
             fputcsv($out, self::EXPORT_COLUMNS);
-            foreach ($members as $member) {
-                fputcsv($out, array_map(self::escapeCsvFormula(...), $this->exportRow($member)));
+            foreach ($members as $i => $member) {
+                fputcsv($out, array_map(self::escapeCsvFormula(...), $this->exportRow($member, $i + 1)));
             }
             fclose($out);
         }, $this->exportFilename($request, 'csv'), ['Content-Type' => 'text/csv']);
@@ -717,8 +722,8 @@ class MemberController extends Controller
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
             $writer->addRow(Row::fromValues(self::EXPORT_COLUMNS));
-            foreach ($members as $member) {
-                $writer->addRow(Row::fromValues($this->exportRow($member)));
+            foreach ($members as $i => $member) {
+                $writer->addRow(Row::fromValues($this->exportRow($member, $i + 1)));
             }
             $writer->close();
         }, $this->exportFilename($request, 'xlsx'), [
@@ -726,14 +731,34 @@ class MemberController extends Controller
         ]);
     }
 
-    /** Printable roster: logo, org name, applied filters, table, total, signature blocks. */
+    /**
+     * Printable roster: logo, org name, applied filters, table, total,
+     * bottom sign-off blocks. The only format of the three that shows the
+     * actual e-signature image — see signatureDataUri().
+     */
     public function exportPdf(Request $request): Response
     {
         $term = MembershipTerm::resolve($request->input('term'));
         $members = $this->exportRows($request);
+        $signatureDisk = $this->signatureDisk();
+
+        $rows = $members->values()->map(function (Application $member, int $i) use ($signatureDisk): array {
+            [$status, $balance] = $this->statusAndBalance($member);
+
+            return [
+                'number' => $i + 1,
+                'name' => $member->full_name,
+                'section' => $member->section,
+                'yearLevel' => $member->year_level,
+                'status' => $status,
+                'balance' => $balance,
+                'semester' => $member->membershipTerm?->label ?? '—',
+                'signature' => $this->signatureDataUri($signatureDisk, $member->signature_path),
+            ];
+        });
 
         $pdf = Pdf::loadView('admin.members.export-pdf', [
-            'members' => $members,
+            'rows' => $rows,
             'term' => $term,
             'filters' => $this->filterSummary($request, $term),
             'generatedAt' => now(),
@@ -745,24 +770,98 @@ class MemberController extends Controller
     /** Every member the current filters + search match, in list order — unpaginated. */
     private function exportRows(Request $request): Collection
     {
-        return $this->applySort($this->filtered($request), $request)->select(self::EXPORT_SELECT_COLUMNS)->get();
+        return $this->applySort($this->filtered($request), $request)
+            ->with('membershipTerm')
+            ->select(self::EXPORT_SELECT_COLUMNS)
+            ->get();
+    }
+
+    /**
+     * "Paid" only once both batches are settled — a member who has completed
+     * Payment 1 but not Payment 2 still owes ₱25, so the combined status
+     * reads Unpaid until the balance actually reaches zero. Balance is
+     * whatever's left of the two fees, not a running ledger sum — see
+     * PaymentTransaction's own note on why the ledger and "what's currently
+     * owed" are deliberately kept as two different questions.
+     *
+     * @return array{0: string, 1: float}
+     */
+    private function statusAndBalance(Application $member): array
+    {
+        $balance = ($member->is_paid ? 0.0 : (float) config('icpep.membership_fee_1'))
+            + ($member->is_payment2_paid ? 0.0 : (float) config('icpep.membership_fee_2'));
+
+        return [$balance > 0 ? 'Unpaid' : 'Paid', $balance];
+    }
+
+    /**
+     * A disk pointed at the exact same 'supabase' bucket/credentials as
+     * everywhere else (config/filesystems.php is untouched — this only
+     * builds an on-demand extra client from the same config array), but
+     * with a short connect/read timeout and no SDK-level retries.
+     *
+     * This embed is a best-effort addition to a printable report, not a
+     * critical read: the default S3 client would otherwise retry a slow or
+     * unreachable file with growing backoff, and pay that cost again for
+     * every remaining row of a large roster if the outage isn't per-file
+     * but per-connection. A couple of seconds per row is an acceptable
+     * worst case; the SDK's own default is not. Built once per export and
+     * reused across rows rather than rebuilt per member.
+     */
+    private function signatureDisk(): Filesystem
+    {
+        return Storage::build(array_merge(
+            config('filesystems.disks.supabase'),
+            ['http' => ['connect_timeout' => 2, 'timeout' => 4], 'retries' => 0],
+        ));
+    }
+
+    /**
+     * The member's submitted e-signature, inlined as a base64 data URI —
+     * dompdf renders straight from the string with no network round trip
+     * per row, unlike a signed URL into the private Supabase bucket (which
+     * is also the wrong tool here: a 10-minute link is meaningless on a
+     * printed page). Missing or unreadable files fall back to null rather
+     * than failing the whole export; the view prints an em dash for those.
+     */
+    private function signatureDataUri(Filesystem $disk, ?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        try {
+            $bytes = $disk->get($path);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            default => 'image/png',
+        };
+
+        return 'data:'.$mime.';base64,'.base64_encode($bytes);
     }
 
     /** @return list<string> */
-    private function exportRow(Application $member): array
+    private function exportRow(Application $member, int $number): array
     {
+        [$status, $balance] = $this->statusAndBalance($member);
+
         return [
-            $member->student_id,
+            (string) $number,
             $member->full_name,
-            $member->year_level,
             $member->section,
-            $member->phone,
-            $member->email,
-            $member->is_paid ? 'Paid' : 'Unpaid',
-            optional($member->paid_at)->toDateString() ?? '',
-            $member->is_payment2_paid ? 'Paid' : 'Unpaid',
-            optional($member->payment2_paid_at)->toDateString() ?? '',
-            optional($member->created_at)->toDateString() ?? '',
+            (string) $member->year_level,
+            $status,
+            number_format($balance, 2),
+            $member->membershipTerm?->label ?? '—',
+            // A signature is an image, meaningless in CSV/Excel — the PDF
+            // export is the one that actually embeds it.
+            '',
         ];
     }
 
