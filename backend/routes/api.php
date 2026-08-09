@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\OfficerController;
+use App\Http\Controllers\SchedulerController;
 use App\Http\Controllers\SharedEventController;
 use App\Http\Controllers\UpcomingEventsController;
 use Illuminate\Support\Facades\Route;
@@ -38,3 +39,9 @@ Route::post('/applications', [ApplicationController::class, 'store'])
 Route::get('/events/shared/{token}', [SharedEventController::class, 'show'])
     ->name('events.shared')
     ->middleware('throttle:shared-event');
+
+// The external cron ping standing in for a real crontab — see
+// SchedulerController. POST because it has side effects (deleting rows),
+// even though the only "session" behind it is a shared-secret query token.
+Route::post('/scheduler/run', [SchedulerController::class, 'run'])
+    ->middleware('throttle:scheduler');

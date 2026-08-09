@@ -159,7 +159,14 @@ Neither runs on its own. Laravel's scheduler only does something when `php artis
 
 This fires every minute; Laravel itself decides nothing is due to run except at the times each command specifies (`->daily()` here).
 
-**Render** — Render has no OS-level crontab to edit, so use its **Cron Job** service type instead of (or alongside) the web service:
+**Render, free tier** — Render's **Cron Job** service type (below) needs at least the Starter plan; it's not available on the free web-service tier at all. If you're staying on free, use the external-ping endpoint instead:
+
+1. `POST /api/scheduler/run?token=...` (see `App\Http\Controllers\SchedulerController`) runs `schedule:run` on demand, guarded by a shared-secret token so it can be called by something outside the app with no officer session behind it.
+2. Generate a long random token and set it as `SCHEDULER_TOKEN` in Render's environment variables (e.g. `php artisan tinker --execute="echo Str::random(40);"` on Render's shell). Left unset, the endpoint refuses every request.
+3. Register a free job on [cron-job.org](https://cron-job.org) (or similar): URL `https://<your-render-domain>/api/scheduler/run?token=<that token>`, method `POST`, schedule **daily at 03:00 Asia/Manila** (or **19:00 UTC** if the service only offers UTC).
+4. The time has to match `routes/console.php`'s own `dailyAt('03:00')->timezone(config('icpep.timezone'))` on both commands — `schedule:run` only runs a command when the *current* minute matches its schedule, so a ping several minutes off from that would miss it for the day. Run `php artisan schedule:list` to confirm what's registered and when it's next due.
+
+**Render, paid, or any host with real cron access** — use Render's **Cron Job** service type instead of (or alongside) the web service:
 
 1. Dashboard → **New** → **Cron Job**.
 2. Point it at the same repo/branch as the backend, with **Root Directory** set to `backend`.

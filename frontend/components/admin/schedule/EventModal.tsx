@@ -23,7 +23,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
   CalendarPlus,
-  CircleQuestionMark,
   Clock,
   Loader2,
   PencilLine,
@@ -62,63 +61,6 @@ const labelText =
   "font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground";
 
 const labelCls = `mb-1.5 block ${labelText}`;
-
-/** The same label as a row, so a hint icon can sit beside the words. */
-const labelRowCls = `mb-1.5 flex items-center gap-1.5 ${labelText}`;
-
-/**
- * Who an event's announcement goes out to.
- *
- * ⚠ Nothing is sent yet: this is not in the save payload and the API does not
- * accept it. The field is here so the shape of the decision is settled before
- * the mail goes out — an announcement that reaches the wrong list is not
- * something to discover after building the sending half. Both boxes are
- * independent and may be left unticked, which is what an event nobody is
- * emailed about looks like.
- */
-const AUDIENCES = [
-  { value: "officers", label: "Officers" },
-  { value: "members", label: "Members" },
-] as const;
-
-type Audience = (typeof AUDIENCES)[number]["value"];
-
-/**
- * The little (?) beside a label.
- *
- * Shown on hover *and* on focus, so the explanation is not pointer-only — the
- * icon is a real button for that reason, and `type="button"` so it cannot
- * submit the form it sits inside. The same words are its `aria-label`, which is
- * what a screen reader announces; the panel is the sighted half of one message
- * rather than a second one.
- *
- * Anchored to the icon's left edge and drawn downwards. Centred would put half
- * the panel past the left of the form, where the dialog's scroll container
- * would cut it off. Narrower than it has room to be on a wide screen, too:
- * on the single-column mobile layout the icon sits well inside the card
- * rather than flush with its edge, and a wider panel ran past the card's own
- * right edge — clipped by the same scroll container, and silently turning
- * `overflow-y-auto` into a horizontal scrollbar for the whole form.
- */
-function FieldHint({ text }: { text: string }) {
-  return (
-    <span className="group relative inline-flex">
-      <button
-        type="button"
-        aria-label={text}
-        className="text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
-      >
-        <CircleQuestionMark size={13} />
-      </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-0 top-full z-10 mt-1.5 w-44 rounded-lg border border-line bg-background px-2.5 py-2 text-[11px] font-normal normal-case leading-relaxed tracking-normal text-secondary-foreground opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        {text}
-      </span>
-    </span>
-  );
-}
 
 /** The event's own details, as the form sends them — everything but its outcome. */
 type EventFields = {
@@ -218,15 +160,6 @@ function EventDialog({
   const [time, setTime] = useState(event?.time ?? "17:00");
   const [endTime, setEndTime] = useState(event?.endTime ?? "19:00");
   const [description, setDescription] = useState(event?.description ?? "");
-
-  // Starts empty on every open, since there is nowhere to have stored it yet.
-  // See AUDIENCES — this is deliberately not part of the save.
-  const [audience, setAudience] = useState<Audience[]>([]);
-
-  const toggleAudience = (value: Audience) =>
-    setAudience((current) =>
-      current.includes(value) ? current.filter((a) => a !== value) : [...current, value],
-    );
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -542,42 +475,6 @@ function EventDialog({
                       <Clock size={12} /> Times are {meta.timezone.replace("_", " ")}, and an
                       event runs within one day.
                     </p>
-
-                    <div>
-                      {/* A group label rather than a <label>, since it names two
-                          checkboxes rather than one control. */}
-                      <span className={labelRowCls} id="event-attendees-label">
-                        Attendees
-                        <FieldHint text="Who gets an email announcement about this event." />
-                      </span>
-                      <div
-                        role="group"
-                        aria-labelledby="event-attendees-label"
-                        className="grid grid-cols-2 gap-2"
-                      >
-                        {AUDIENCES.map((a) => {
-                          const checked = audience.includes(a.value);
-                          return (
-                            <label
-                              key={a.value}
-                              className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2.5 text-sm transition-colors ${
-                                checked
-                                  ? "border-primary/50 bg-primary/10 text-foreground"
-                                  : "border-line bg-secondary/40 text-secondary-foreground hover:border-primary/30"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleAudience(a.value)}
-                                className="size-4 accent-primary"
-                              />
-                              {a.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
 
                     <div>
                       <div className="mb-1.5 flex items-baseline justify-between gap-2">
@@ -941,10 +838,30 @@ function ReadOnlyDetails({ event }: { event: ScheduledEvent }) {
  * Always rendered, `pending` included. Unlike the badge in the list, there is
  * room here to say "not checked in" and to explain that it is not the same
  * thing as absent.
+ *
+ * Not rendered at all for the Programming Team: that account runs the system
+ * rather than holding a seat on the org chart, so it has no attendance to
+ * report — see Event::recordAbsentees() and AttendanceController on the
+ * backend, which keep it off the roster and the auto-absent sweep the same
+ * way.
  */
 function MyAttendance({ event }: { event: ScheduledEvent }) {
+  const { officer } = useAdmin();
   const { status, statusLabel, methodLabel, checkedInLabel, canCheckIn } = event.myAttendance;
   const [checkInOpen, setCheckInOpen] = useState(false);
+
+  if (officer.role === "programming_team") return null;
+
+  // The check-in offer is only ever useful while the event is actually
+  // happening today: not before it starts, not once its end time has passed,
+  // and not on a past or future date — belt-and-suspenders alongside the
+  // server's own `acceptsAttendance`/`canCheckIn` (which also closes it off
+  // once the event is marked done, even mid-day). `event.date`/`endTime` are
+  // already in the organization's timezone, so building a plain local Date
+  // from them reads the same wall-clock time a person at the event would.
+  const eventEndClock = event.endTime ?? event.time;
+  const eventEndsAt = new Date(`${event.date}T${eventEndClock}:00`);
+  const withinCheckInWindow = event.timing === "today" && new Date() <= eventEndsAt;
 
   const tone =
     status === "present"
@@ -960,7 +877,7 @@ function MyAttendance({ event }: { event: ScheduledEvent }) {
       ? [checkedInLabel && `Recorded at ${checkedInLabel}`, methodLabel].filter(Boolean).join(" · ")
       : status === "absent"
         ? "You didn't attend this event. If that's wrong, ask the Secretary to correct it on the roster."
-        : event.acceptsAttendance
+        : event.acceptsAttendance && withinCheckInWindow
           ? "Scan the event QR, or check in with the code."
           : "No attendance was recorded for you at this event.";
 
@@ -975,7 +892,7 @@ function MyAttendance({ event }: { event: ScheduledEvent }) {
 
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{explanation}</p>
 
-      {canCheckIn && (
+      {canCheckIn && withinCheckInWindow && (
         // No token here — the QR token is withheld from every role but the
         // secretariat, and rightly so. The code path needs nothing but the six
         // characters read out at the event, so that is what this offers —

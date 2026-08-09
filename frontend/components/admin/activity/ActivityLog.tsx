@@ -171,7 +171,7 @@ export default function ActivityLog() {
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search description or officer…" className={`${selectCls} w-full pl-9 sm:w-64`} />
         </div>
-        <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className={selectCls} aria-label="Action">
+        <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className={`${selectCls} w-full sm:w-auto`} aria-label="Action">
           <option value="">All actions</option>
           <optgroup label="Members">
             <option value="registered">Registered</option>
@@ -199,43 +199,53 @@ export default function ActivityLog() {
 
         <div className="mx-1 hidden h-6 w-px bg-line sm:block" />
 
-        {DATE_PRESETS.map((p) => (
-          <button
-            key={p.label}
-            type="button"
-            onClick={() => applyPreset(p.range())}
-            className={`rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
-              activePreset === p.label
-                ? "border-primary/50 bg-primary/10 text-primary"
-                : "border-line text-secondary-foreground hover:border-primary/50 hover:text-foreground"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
+        {/* Below `sm` the three presets sit in their own equal-width row
+            instead of wrapping one-by-one — same `sm:contents` trick as
+            MembersFilters, scoped to just the buttons that need it. */}
+        <div className="grid w-full grid-cols-3 gap-2 sm:contents">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyPreset(p.range())}
+              className={`rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
+                activePreset === p.label
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-line text-secondary-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
 
-        <input
-          type="date"
-          value={from}
-          max={until || undefined}
-          onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-          aria-label="From date"
-          className={selectCls}
-        />
-        <span className="text-xs text-muted-foreground">to</span>
-        <input
-          type="date"
-          value={until}
-          min={from || undefined}
-          onChange={(e) => { setUntil(e.target.value); setPage(1); }}
-          aria-label="Until date"
-          className={selectCls}
-        />
+        {/* The two date inputs share a row and split the width evenly on
+            mobile, instead of each wrapping onto its own line with "to"
+            stranded between them. */}
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:contents">
+          <input
+            type="date"
+            value={from}
+            max={until || undefined}
+            onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+            aria-label="From date"
+            className={`${selectCls} min-w-0 flex-1 sm:flex-none`}
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <input
+            type="date"
+            value={until}
+            min={from || undefined}
+            onChange={(e) => { setUntil(e.target.value); setPage(1); }}
+            aria-label="Until date"
+            className={`${selectCls} min-w-0 flex-1 sm:flex-none`}
+          />
+        </div>
 
         {(from || until) && (
           <button
             onClick={clearDates}
-            className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-line px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:w-auto sm:justify-start"
           >
             <X size={13} /> Clear dates
           </button>

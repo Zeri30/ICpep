@@ -486,11 +486,15 @@ function MonthHeader({
   onToday: () => void;
 }) {
   const navCls =
-    "grid size-8 place-items-center rounded-md border border-line text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground";
+    "grid size-7 shrink-0 place-items-center rounded-md border border-line text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:size-8";
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line/60 px-3 py-3">
-      <div className="flex flex-wrap items-center gap-1.5">
+    // The date picker, Today, and the arrows are each sized down on a phone
+    // so the full row has a real shot at fitting on one line; `flex-wrap`
+    // stays on as a fallback rather than forcing a stacked layout outright,
+    // so it only breaks onto a second line on the very narrowest screens.
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 px-2 py-2.5 sm:gap-3 sm:px-3 sm:py-3">
+      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
         {/* The selects carry their own labels, but the grid keeps a heading so
             the page's outline still says which month is being read. */}
         <h2 className="sr-only">{monthLabel(year, month)}</h2>
@@ -508,17 +512,17 @@ function MonthHeader({
           options={years.map((y) => ({ value: y, label: String(y) }))}
         />
 
-        {loading && <Loader2 size={14} className="ml-1 animate-spin text-muted-foreground" />}
+        {loading && <Loader2 size={13} className="ml-1 shrink-0 animate-spin text-muted-foreground" />}
       </div>
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={onToday} className="rounded-md border border-line px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <button type="button" onClick={onToday} className="shrink-0 rounded-md border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-secondary-foreground transition-colors hover:border-primary/50 hover:text-foreground sm:px-3 sm:py-1.5 sm:text-[11px]">
           Today
         </button>
         <button type="button" onClick={onPrev} aria-label="Previous month" className={navCls}>
-          <ChevronLeft size={16} />
+          <ChevronLeft size={15} />
         </button>
         <button type="button" onClick={onNext} aria-label="Next month" className={navCls}>
-          <ChevronRight size={16} />
+          <ChevronRight size={15} />
         </button>
       </div>
     </div>
@@ -565,7 +569,7 @@ function HeaderSelect({
         ))}
       </select>
       <ChevronDown
-        size={15}
+        size={13}
         aria-hidden
         strokeWidth={2.5}
         className="pointer-events-none absolute right-1.5 text-primary sm:right-2 lg:right-1.5 xl:right-2"

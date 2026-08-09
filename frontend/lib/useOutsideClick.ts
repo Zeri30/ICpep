@@ -42,7 +42,18 @@ export function useOutsideClick(
     if (!enabled) return;
 
     const onMouseDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onOutsideRef.current();
+      if (!ref.current) return;
+      // A CSS-hidden instance (`display: none` on some ancestor) has no box
+      // to click "outside" of. Without this guard, the responsive lists that
+      // mount both a desktop and a mobile copy of the same row — only one of
+      // which is ever visible — fire this listener on the *hidden* copy for
+      // every click in the *visible* one's completely separate subtree,
+      // closing it (and unmounting its button) before the click it was on
+      // can register. offsetParent is null exactly when an ancestor is
+      // display:none, which is the only way this hook's callers ever hide
+      // one of these duplicates (never visibility:hidden/opacity:0).
+      if (ref.current.offsetParent === null) return;
+      if (!ref.current.contains(e.target as Node)) onOutsideRef.current();
     };
     window.addEventListener("mousedown", onMouseDown);
 

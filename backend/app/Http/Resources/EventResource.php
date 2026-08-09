@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\EventStatus;
+use App\Enums\UserRole;
 use App\Models\Event;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -109,6 +110,12 @@ class EventResource extends JsonResource
      * panel is not offering a way back in even on the same day — see
      * Event::attendanceLocked().
      *
+     * The Programming Team's account runs the system, not a seat on the org
+     * chart, so it is excluded here the same way it is from the roster (see
+     * AttendanceController::index()) and the auto-absent sweep (see
+     * Event::recordAbsentees()) — false unconditionally, regardless of the
+     * checks above.
+     *
      * @return array<string, mixed>
      */
     private function myAttendance(Request $request): array
@@ -116,8 +123,15 @@ class EventResource extends JsonResource
         $officer = $request->user();
         $record = $officer ? $this->attendanceFor($officer) : null;
 
+        // Mirrors recordAbsentees()'s own exclusion: this reading is computed
+        // fresh on every request rather than from a stored row, so the
+        // Programming Team has to be kept out of the "locked and unaccounted
+        // for reads as absent" fallback here too, or their own panel would
+        // call them absent from a meeting nobody ever expected them at.
+        $isProgrammingTeam = $officer?->role === UserRole::ProgrammingTeam;
+
         $status = $record?->status
-            ?? ($this->attendanceLocked() && $this->status !== EventStatus::Cancelled
+            ?? (! $isProgrammingTeam && $this->attendanceLocked() && $this->status !== EventStatus::Cancelled
                 ? AttendanceStatus::Absent
                 : null);
 
@@ -126,7 +140,8 @@ class EventResource extends JsonResource
             'statusLabel' => $status?->label() ?? 'Not checked in',
             'methodLabel' => $record?->method?->label(),
             'checkedInLabel' => $record?->checkedInLabel(),
-            'canCheckIn' => $this->acceptsAttendance()
+            'canCheckIn' => ! $isProgrammingTeam
+                && $this->acceptsAttendance()
                 && ! $this->attendanceLocked()
                 && ! (bool) $record?->isPresent(),
         ];

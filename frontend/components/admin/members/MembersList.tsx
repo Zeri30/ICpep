@@ -743,33 +743,88 @@ export default function MembersList() {
         )}
       </div>
 
-      <DataTable
-        fill
-        columns={columns}
-        rows={rows}
-        rowKey={(m) => m.id}
-        loading={awaitingRows}
-        skeletonRows={SKELETON_ROWS}
-        error={error}
-        sort={sort}
-        onSort={onSort}
-        emptyHeading="No members found"
-        emptyDescription="Try clearing the filters, or wait for new registrations from the public form."
-        // The pager is part of the card's height, so it gets a placeholder too
-        // — otherwise the band appears with the data and shoves the table up.
-        // It also has to give way on a semester switch, or the pager would
-        // still be reporting the previous semester's totals.
-        footer={
-          awaitingRows ? (
-            <PaginationSkeleton />
-          ) : data ? (
-            // Disabled while a page/sort/filter fetch for this same term is in
-            // flight — a click here would otherwise queue a second, overlapping
-            // request whose response can land before or after the first.
-            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
-          ) : null
-        }
-      />
+      {/* The table's columns need real width to lay out without crowding
+          (see DataTable's `min-w-[40rem]`), which below `lg` forces a
+          sideways scroll just to read one row. `lg:contents` keeps this
+          wrapper out of the flex layout at that breakpoint (so DataTable's
+          own `fill` sizing still targets the real flex parent below it). */}
+      <div className="hidden lg:contents">
+        <DataTable
+          fill
+          columns={columns}
+          rows={rows}
+          rowKey={(m) => m.id}
+          loading={awaitingRows}
+          skeletonRows={SKELETON_ROWS}
+          error={error}
+          sort={sort}
+          onSort={onSort}
+          emptyHeading="No members found"
+          emptyDescription="Try clearing the filters, or wait for new registrations from the public form."
+          // The pager is part of the card's height, so it gets a placeholder too
+          // — otherwise the band appears with the data and shoves the table up.
+          // It also has to give way on a semester switch, or the pager would
+          // still be reporting the previous semester's totals.
+          footer={
+            awaitingRows ? (
+              <PaginationSkeleton />
+            ) : data ? (
+              // Disabled while a page/sort/filter fetch for this same term is in
+              // flight — a click here would otherwise queue a second, overlapping
+              // request whose response can land before or after the first.
+              <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+            ) : null
+          }
+        />
+      </div>
+
+      {/* Stacked cards for phones and tablets — same rows, same handlers, laid
+          out top-to-bottom instead of squeezed into a table row nothing this
+          narrow can show without scrolling sideways. */}
+      <div className="overflow-hidden rounded-xl border border-line bg-card lg:hidden">
+        <div className="divide-y divide-line">
+          {awaitingRows ? (
+            Array.from({ length: SKELETON_ROWS }, (_, i) => <MemberCardSkeleton key={`skeleton-${i}`} canSelect={canSelect} />)
+          ) : error ? (
+            <div className="py-12 text-center text-sm text-red-400">{error}</div>
+          ) : rows.length === 0 ? (
+            <div className="py-14 text-center">
+              <p className="font-display text-lg font-bold uppercase tracking-wide text-foreground">No members found</p>
+              <p className="mt-2 text-sm text-muted-foreground">Try clearing the filters, or wait for new registrations from the public form.</p>
+            </div>
+          ) : (
+            rows.map((m) => (
+              <MemberCard
+                key={m.id}
+                member={m}
+                canEdit={canEdit}
+                canPay={canPay}
+                canSelect={canSelect}
+                selected={selected.has(m.id)}
+                onToggleSelect={() => toggleOne(m)}
+                paymentMenuOpen={paymentMenuFor === m.id}
+                onOpenPaymentMenu={() => setPaymentMenuFor(m.id)}
+                onClosePaymentMenu={() => setPaymentMenuFor(null)}
+                onTogglePayment={(batch) => togglePayment(m, batch)}
+                onToggleBothPayments={(target) => toggleBothPayments(m, target)}
+                paymentPending={pendingPayments.has(`${m.id}:1`) || pendingPayments.has(`${m.id}:2`)}
+                rowMenuOpen={menuFor === m.id}
+                onOpenRowMenu={() => setMenuFor(m.id)}
+                onCloseRowMenu={() => setMenuFor(null)}
+                onView={() => setViewing(m.id)}
+                onEdit={() => setEditing(m)}
+                onDelete={() => setConfirm({ kind: "delete", member: m })}
+                onRestore={() => setConfirm({ kind: "restore", member: m })}
+              />
+            ))
+          )}
+        </div>
+        {awaitingRows ? (
+          <PaginationSkeleton />
+        ) : data ? (
+          <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+        ) : null}
+      </div>
 
       {/* Editing stays on the list, so filters, term and page survive a save. */}
       <EditMemberModal
@@ -1063,6 +1118,176 @@ function RowMenu({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Mobile/tablet stand-in for a table row — same fields as the `columns`
+    array above, laid out so nothing needs a horizontal scroll to read. */
+function MemberCard({
+  member,
+  canEdit,
+  canPay,
+  canSelect,
+  selected,
+  onToggleSelect,
+  paymentMenuOpen,
+  onOpenPaymentMenu,
+  onClosePaymentMenu,
+  onTogglePayment,
+  onToggleBothPayments,
+  paymentPending,
+  rowMenuOpen,
+  onOpenRowMenu,
+  onCloseRowMenu,
+  onView,
+  onEdit,
+  onDelete,
+  onRestore,
+}: {
+  member: Member;
+  canEdit: boolean;
+  canPay: boolean;
+  canSelect: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  paymentMenuOpen: boolean;
+  onOpenPaymentMenu: () => void;
+  onClosePaymentMenu: () => void;
+  onTogglePayment: (batch: 1 | 2) => void;
+  onToggleBothPayments: (target: "paid" | "unpaid") => void;
+  paymentPending: boolean;
+  rowMenuOpen: boolean;
+  onOpenRowMenu: () => void;
+  onCloseRowMenu: () => void;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onRestore: () => void;
+}) {
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        {canSelect && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="mt-1 size-4 shrink-0 accent-primary"
+            aria-label={`Select ${member.fullName}`}
+          />
+        )}
+        {member.photoUrl ? (
+          <Image src={member.photoUrl} alt="" width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" unoptimized />
+        ) : (
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-muted-foreground">
+            {member.givenName?.[0]}
+            {member.surname?.[0]}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-foreground">{member.fullName}</p>
+          <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+        </div>
+        <Badge tone="red">{member.classCode}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <p className="text-muted-foreground">Phone</p>
+          <p className="mt-0.5 text-secondary-foreground">{member.phone}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Registered</p>
+          <p className="mt-0.5 text-secondary-foreground">{formatDateTime(member.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Payment 1</p>
+          <div className="mt-1"><PaymentPill paid={member.isPayment1Paid} /></div>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Payment 2</p>
+          <div className="mt-1"><PaymentPill paid={member.isPayment2Paid} /></div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-1 border-t border-line/40 pt-2">
+        {member.deletedAt ? (
+          canEdit && (
+            <button
+              onClick={onRestore}
+              title="Undo delete"
+              className="grid size-8 place-items-center rounded-md text-green-400 transition-colors hover:bg-green-500/10"
+            >
+              <RotateCcw size={16} />
+            </button>
+          )
+        ) : (
+          <>
+            {canPay && (
+              <PaymentActionsMenu
+                open={paymentMenuOpen}
+                onOpen={onOpenPaymentMenu}
+                onClose={onClosePaymentMenu}
+                member={member}
+                onToggle={onTogglePayment}
+                onToggleBoth={onToggleBothPayments}
+                pending={paymentPending}
+              />
+            )}
+            <RowMenu
+              open={rowMenuOpen}
+              onOpen={onOpenRowMenu}
+              onClose={onCloseRowMenu}
+              member={member}
+              canEdit={canEdit}
+              onView={onView}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors MemberCard's shape field-for-field, so nothing resizes when the
+    real card swaps in. */
+function MemberCardSkeleton({ canSelect }: { canSelect: boolean }) {
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        {canSelect && <span className="skeleton mt-1 inline-block size-4 shrink-0 rounded-sm" />}
+        <Circle />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Bar w="w-32" />
+          <Bar w="w-44" h="h-3" />
+        </div>
+        <Pill w="w-12" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-12" h="h-3" />
+          <Bar w="w-20" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Bar w="w-28" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Pill w="w-20" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Pill w="w-20" />
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-1 border-t border-line/40 pt-2">
+        <span className="skeleton inline-block size-8 rounded-md" />
+        <span className="skeleton inline-block size-8 rounded-md" />
+      </div>
     </div>
   );
 }

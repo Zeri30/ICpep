@@ -67,6 +67,11 @@ class AppServiceProvider extends ServiceProvider
         // guessing it, not the only thing standing in the way.
         RateLimiter::for('shared-event', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
 
+        // The scheduler ping (SchedulerController) is called once a day by an
+        // external cron service, never more — this just bounds how fast
+        // someone probing for the right SCHEDULER_TOKEN can guess it.
+        RateLimiter::for('scheduler', fn (Request $request): Limit => Limit::perMinute(6)->by($request->ip()));
+
         // Log admin sign-ins to the activity history, and stamp the account's
         // last-login time (shown in User Management). saveQuietly so the stamp
         // doesn't itself count as an account edit.

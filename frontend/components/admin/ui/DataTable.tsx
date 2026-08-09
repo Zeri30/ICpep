@@ -54,6 +54,7 @@ export default function DataTable<T>({
   footer,
   skeletonRows = 0,
   fixedLayout = false,
+  rowDividerClassName = "border-line/40",
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -92,6 +93,9 @@ export default function DataTable<T>({
    * column.
    */
   fixedLayout?: boolean;
+  /** Row divider color/weight, e.g. "border-line" for a more visible split
+      between rows. Defaults to the subtle divider every other table uses. */
+  rowDividerClassName?: string;
 }) {
   const alignClass = (a?: string) =>
     a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left";
@@ -162,7 +166,7 @@ export default function DataTable<T>({
           <tbody aria-hidden={showSkeleton || undefined}>
             {showSkeleton
               ? Array.from({ length: skeletonRows }, (_, i) => (
-                  <tr key={`skeleton-${i}`} className="border-b border-line/40 last:border-0">
+                  <tr key={`skeleton-${i}`} className={`border-b ${rowDividerClassName} last:border-0`}>
                     {columns.map((col) => (
                       <td key={col.key} className={cellClass(col)}>
                         {/* inline-block, so a bar in a right-aligned column
@@ -175,7 +179,7 @@ export default function DataTable<T>({
               : rows.map((row) => (
                   <tr
                     key={rowKey(row)}
-                    className="border-b border-line/40 transition-colors last:border-0 hover:bg-secondary/30"
+                    className={`border-b ${rowDividerClassName} transition-colors last:border-0 hover:bg-secondary/30`}
                   >
                     {columns.map((col) => (
                       <td key={col.key} className={cellClass(col)}>

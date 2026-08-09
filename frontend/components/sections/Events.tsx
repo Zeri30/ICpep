@@ -5,7 +5,7 @@ import Image from "next/image";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import { ArrowRight, ArrowUpRight, Calendar, MapPin, MousePointer2, Play, Zap } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Calendar, MapPin, MousePointer2, Play } from "lucide-react";
 import { useRef } from "react";
 import Badge from "@/components/ui/Badge";
 import CtaButton from "@/components/ui/CtaButton";
@@ -19,15 +19,14 @@ function FeaturedEvent() {
   return (
     <Reveal>
       <div className="relative rounded-2xl overflow-hidden border border-line bg-card">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/25 via-card to-card pointer-events-none" />
-        <div className="absolute inset-0 pat-grid opacity-40 pointer-events-none" />
+        <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-primary via-primary-glow to-transparent" />
         <div className="relative grid lg:grid-cols-2 gap-8 p-7 md:p-12">
           <div className="flex flex-col justify-center">
-            <Badge tone="red" className="self-start mb-5 pulse-ring">
-              <Zap size={12} /> Featured Event
-            </Badge>
+            <p className="flex items-center gap-2 font-head font-semibold tracking-[0.35em] uppercase text-primary text-xs mb-5">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Featured Event
+            </p>
             <h3 className="font-display font-black text-3xl md:text-4xl uppercase leading-tight">
-              CPE Exhibition and <span className="text-primary text-glow-red">General Convocation 2026</span>
+              CPE Exhibition and <span className="text-primary">General Convocation 2026</span>
             </h3>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <span className="flex items-center gap-2 text-foreground">
@@ -46,14 +45,13 @@ function FeaturedEvent() {
 
           <div className="flex items-center">
             <motion.div
-              whileHover={{ scale: 1.01 }}
               className="relative w-full aspect-video rounded-xl overflow-hidden border border-line bg-gradient-to-br from-secondary via-background to-background cursor-pointer group"
             >
               <div className="absolute inset-0 pat-diag opacity-60" />
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12),transparent_65%)]" />
               <div className="absolute inset-0 grid place-items-center">
                 <div className="text-center">
-                  <span className="mx-auto grid place-items-center w-20 h-20 rounded-full bg-primary text-white shadow-glow-lg group-hover:scale-110 transition-transform duration-300 pulse-ring">
+                  <span className="mx-auto grid place-items-center w-20 h-20 rounded-full bg-primary text-white shadow-glow-lg group-hover:scale-110 transition-transform duration-300">
                     <Play size={30} className="ml-1" fill="currentColor" />
                   </span>
                   <p className="mt-5 font-head font-semibold uppercase tracking-[0.3em] text-xs text-secondary-foreground">

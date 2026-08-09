@@ -328,7 +328,7 @@ export default function Membership() {
                   id="middleInitial"
                   name="middleInitial"
                   type="text"
-                  maxLength={1}
+                  maxLength={2}
                   placeholder="S"
                   className={fieldBase}
                 />

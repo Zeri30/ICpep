@@ -13,9 +13,9 @@ const toneColor: Record<StatTone, string> = {
 
 /**
  * A single KPI tile. `size="lg"` is the Mission Control hero variant — bigger
- * figure, bigger icon, a stronger corner glow — for the one or two numbers
- * that should visually anchor the dashboard; every other tile stays the
- * original compact size so supporting figures don't compete with them.
+ * figure, bigger icon accent — for the one or two numbers that should
+ * visually anchor the dashboard; every other tile stays the original compact
+ * size so supporting figures don't compete with them.
  */
 export default function StatCard({
   label,
@@ -43,29 +43,39 @@ export default function StatCard({
         lg ? "p-6" : "p-5"
       } ${className}`}
     >
-      {/* Ambient corner glow instead of a flat accent bar — echoes the crimson
-          glow used across the site rather than a stock "colored stripe" tile.
-          Stronger and wider on hero tiles, so the glow itself is part of what
-          reads as "more important" at a glance. */}
+      {/* Tone-colored wash, strongest at the right edge and fading out toward
+          the left, so the white icon reads as sitting on top of it. */}
       <div
-        className={`pointer-events-none absolute -right-8 -top-8 rounded-full blur-2xl ${lg ? "size-40" : "size-28"}`}
-        style={{ background: accent, opacity: lg ? 0.22 : 0.16 }}
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-3/4"
+        style={{ background: `linear-gradient(to left, ${accent}3d, transparent)` }}
       />
-      <div className="relative flex items-start justify-between gap-3">
-        <p
-          className={`font-head font-semibold uppercase tracking-widest text-muted-foreground ${
-            lg ? "text-xs" : "text-[11px]"
-          }`}
-        >
-          {label}
-        </p>
-        <span
-          className={`flex shrink-0 items-center justify-center rounded-lg ${lg ? "size-11" : "size-9"}`}
-          style={{ background: `${accent}1f`, color: accent }}
-        >
-          <Icon size={lg ? 20 : 16} />
-        </span>
-      </div>
+
+      {/* Oversized icon on the right, a soft white watermark accent rather
+          than a stock colored-chip icon. */}
+      <Icon
+        aria-hidden
+        strokeWidth={1.25}
+        size={lg ? 148 : 108}
+        style={{
+          color: "#ffffff",
+          opacity: 0.25,
+          position: "absolute",
+          top: "50%",
+          right: lg ? "1rem" : "0.75rem",
+          left: "auto",
+          transform: "translateY(-50%)",
+        }}
+        className="pointer-events-none"
+      />
+
+      <p
+        className={`relative font-head font-semibold uppercase tracking-widest text-muted-foreground ${
+          lg ? "text-xs" : "text-[11px]"
+        }`}
+      >
+        {label}
+      </p>
       <p
         className={`relative font-display font-black tabular-nums text-foreground ${
           lg ? "mt-4 text-4xl sm:text-5xl" : "mt-3 text-3xl"

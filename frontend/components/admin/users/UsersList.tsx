@@ -248,19 +248,23 @@ export default function UsersList() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <UsersFilters value={filters} onChange={changeFilters} />
-        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+        {/* A 2-col grid on mobile instead of a flex row: two `w-full` buttons
+            in a nowrap flex row fight for the same 100% width and get squeezed
+            into an unreadable sliver each, so width is handled by the grid
+            column instead and the flex row only takes over at `sm`+. */}
+        <div className="grid w-full grid-cols-2 gap-2.5 sm:flex sm:w-auto sm:items-center">
           <button
             type="button"
             onClick={() => setConfirm({ kind: "logout-all" })}
             title="Force every other signed-in administrator to sign back in — useful after a permissions or role change"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-red-500/50 hover:text-red-400 sm:w-auto"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:border-red-500/50 hover:text-red-400"
           >
             <LogOut size={16} /> Log out all admins
           </button>
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent sm:w-auto"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent"
           >
             <UserPlus size={16} /> New administrator
           </button>

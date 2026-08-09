@@ -16,15 +16,14 @@ import {
   Check,
   Clock,
   Copy,
-  Download,
   Link2,
   MapPin,
   QrCode,
   ScanLine,
   TriangleAlert,
 } from "lucide-react";
-import { useRef, useState, type ComponentType } from "react";
-import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
+import { useState, type ComponentType } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import Logo from "@/components/ui/Logo";
 
 export type SharedEventData = {
@@ -53,15 +52,6 @@ function splitDate(date: string): { day: string; month: string; year: string } {
     month: local.toLocaleDateString("en-US", { month: "short" }).toUpperCase(),
     year: String(y),
   };
-}
-
-/** An event's title, as a download filename — lowercase, hyphenated, never empty. */
-function slugify(title: string): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "event";
 }
 
 type ActionStatus = "idle" | "done" | "error";
@@ -102,11 +92,9 @@ function ShareActionButton({
 export default function SharedEvent({ event }: { event: SharedEventData }) {
   const { day, month, year } = splitDate(event.date);
   const isToday = event.timing === "today";
-  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [linkStatus, setLinkStatus] = useState<ActionStatus>("idle");
   const [codeStatus, setCodeStatus] = useState<ActionStatus>("idle");
-  const [qrStatus, setQrStatus] = useState<ActionStatus>("idle");
 
   // Each flashes its own button to "done" or "error" for a couple of seconds,
   // then reverts. Clipboard writes can be refused (insecure origin,
@@ -133,20 +121,6 @@ export default function SharedEvent({ event }: { event: SharedEventData }) {
     setTimeout(() => setCodeStatus("idle"), 2500);
   }
 
-  function downloadQr() {
-    try {
-      const canvas = qrCanvasRef.current;
-      if (!canvas) throw new Error("QR canvas not ready");
-      const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/png");
-      link.download = `${slugify(event.title)}-attendance-qr.png`;
-      link.click();
-      setQrStatus("done");
-    } catch {
-      setQrStatus("error");
-    }
-    setTimeout(() => setQrStatus("idle"), 2500);
-  }
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-background">
@@ -155,7 +129,15 @@ export default function SharedEvent({ event }: { event: SharedEventData }) {
       <div className="pointer-events-none absolute inset-0 pat-grid opacity-40" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(220,38,38,0.16),transparent_60%)]" />
 
-      <div className="relative mx-auto flex min-h-dvh max-w-5xl flex-col px-4 py-8 sm:px-6 lg:py-12 2xl:max-w-6xl">
+      {/* One pass, stacked on a phone (tall is fine there — it's read
+          top-to-bottom in one hand) and laid on its side from `lg` up, so a
+          wide screen gets a wide card instead of a narrow column adrift in
+          empty margins. Still stacked through `sm` — that width is enough to
+          read comfortably wider than the phone size, but not enough to split
+          in two without cramping the QR. The two halves are still one
+          bordered box either way — see below for why that's what keeps them
+          in step regardless of description length. */}
+      <div className="relative mx-auto flex min-h-dvh max-w-md flex-col px-4 py-8 sm:max-w-xl sm:px-6 lg:max-w-4xl lg:py-12 2xl:max-w-5xl">
         <header className="flex items-center gap-3">
           <Logo size={40} priority />
           <div className="leading-tight">
@@ -177,180 +159,199 @@ export default function SharedEvent({ event }: { event: SharedEventData }) {
           </span>
         </header>
 
-        {/* `items-center` on this flex wrapper (not the grid inside it) shares
-            leftover vertical space above and below the two cards instead of
-            dumping it all beneath them, which otherwise reads as a lopsided
-            gap before the footer on a tall desktop viewport. */}
-        <div className="mt-8 flex flex-1 items-center lg:mt-10">
-          <div className="grid w-full items-start gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
+        <div className="flex flex-1 items-center">
+          {/* One card, like a boarding pass: event info on one side, the
+              dashed stub-line, how-to-check-in on the other. Capped height
+              on `lg` — a sensible ceiling based on the viewport, not
+              something a long description gets to redefine — and both
+              sides are flex items of the same stretched row, which is what
+              keeps them the same height for free without either one
+              needing to know the other's size. */}
+          <div className="w-full overflow-hidden rounded-2xl border border-line bg-card lg:flex lg:max-h-[min(40rem,82dvh)] lg:items-stretch">
             {/* ------------------------------------------------ what and when */}
-            <section className="relative overflow-hidden rounded-2xl border border-line bg-card p-6 sm:p-8">
-              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary-glow to-transparent" />
+            <div className="relative flex flex-col p-6 sm:p-8 lg:w-[58%]">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary-glow to-transparent lg:inset-y-0 lg:right-auto lg:h-auto lg:w-1 lg:bg-gradient-to-b" />
 
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-head text-[10px] font-semibold uppercase tracking-[0.15em] text-primary">
-                {event.category}
-              </span>
+              {/* Top: identity — fixed size, never what varies between events. */}
+              <div className="shrink-0">
+                <p className="font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Event type
+                </p>
+                <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-head text-[10px] font-semibold uppercase tracking-[0.15em] text-primary">
+                  {event.category}
+                </span>
 
-              <h1 className="mt-4 font-display text-3xl font-black uppercase leading-tight tracking-wide text-foreground sm:text-4xl lg:text-5xl">
-                {event.title}
-              </h1>
+                <p className="mt-5 font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Event title
+                </p>
+                <h1 className="mt-1.5 font-display text-2xl font-black uppercase leading-tight tracking-wide text-foreground sm:text-3xl lg:text-4xl">
+                  {event.title}
+                </h1>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                {/* The date as a tear-off calendar tile — readable across a room
-                    in a way a line of text is not. */}
-                <div className="flex items-stretch overflow-hidden rounded-xl border border-line bg-secondary/40">
-                  <div className="grid place-items-center bg-primary px-4 py-3 text-white">
-                    <span className="font-display text-2xl font-black leading-none">{day}</span>
-                    <span className="mt-0.5 font-head text-[10px] font-bold uppercase tracking-widest">
-                      {month}
-                    </span>
-                  </div>
-                  <div className="flex flex-col justify-center px-4 py-3">
-                    <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                      <CalendarDays size={14} className="text-primary" /> {event.dateLabel}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1.5 text-sm text-secondary-foreground">
-                      <Clock size={14} className="text-primary" /> {event.timeLabel}
-                    </span>
-                    {event.venue && (
-                      <span className="mt-1 flex items-center gap-1.5 text-sm text-secondary-foreground">
-                        <MapPin size={14} className="text-primary" /> {event.venue}
+                <p className="mt-5 font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Schedule
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-3">
+                  {/* The date as a tear-off calendar tile — readable across a room
+                      in a way a line of text is not. */}
+                  <div className="flex items-stretch overflow-hidden rounded-xl border border-line bg-secondary/40">
+                    <div className="grid place-items-center bg-primary px-4 py-3 text-white">
+                      <span className="font-display text-2xl font-black leading-none">{day}</span>
+                      <span className="mt-0.5 font-head text-[10px] font-bold uppercase tracking-widest">
+                        {month}
                       </span>
-                    )}
+                    </div>
+                    <div className="flex flex-col justify-center px-4 py-3">
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                        <CalendarDays size={14} className="text-primary" /> {event.dateLabel}
+                      </span>
+                      <span className="mt-1 flex items-center gap-1.5 text-sm text-secondary-foreground">
+                        <Clock size={14} className="text-primary" /> {event.timeLabel}
+                      </span>
+                      {event.venue && (
+                        <span className="mt-1 flex items-center gap-1.5 text-sm text-secondary-foreground">
+                          <MapPin size={14} className="text-primary" /> {event.venue}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {event.description && (
-                <div className="mt-6 border-t border-line/60 pt-5">
-                  <p className="font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Details
-                  </p>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-secondary-foreground">
-                    {event.description}
-                  </p>
+              {/* Middle: the one field with no natural length limit, so it is
+                  the one thing that grows to take up whatever room is left
+                  and scrolls past that rather than the card growing with it.
+                  A bordered box rather than bare text, so room left over
+                  under a short note reads as "a text box with space in it"
+                  and not as a stray gap in the layout. */}
+              <div className="mt-5 flex min-h-0 flex-col border-t border-line/60 pt-4 lg:mt-6 lg:flex-1 lg:pt-5">
+                <p className="shrink-0 font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Description
+                </p>
+                <div className="mt-2 max-h-40 min-h-16 overflow-y-auto rounded-lg border border-line/60 bg-secondary/20 p-3 pr-2.5 sm:max-h-48 lg:max-h-none lg:min-h-0 lg:flex-1">
+                  {event.description ? (
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-secondary-foreground">
+                      {event.description}
+                    </p>
+                  ) : (
+                    <p className="text-sm italic text-muted-foreground">
+                      No additional details for this event.
+                    </p>
+                  )}
                 </div>
-              )}
+              </div>
 
-              <p className="mt-6 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <MapPin size={12} /> All times {event.timezone.replace("_", " ")} · {year}
-              </p>
-            </section>
+              {/* Bottom: fixed size again, pinned under the description
+                  regardless of how tall or short that box ends up. */}
+              <div className="mt-5 shrink-0 border-t border-line/60 pt-4 lg:mt-6">
+                <p className="font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Additional information
+                </p>
+                <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <MapPin size={12} /> All times {event.timezone.replace("_", " ")} · {year}
+                </p>
+              </div>
+            </div>
+
+            {/* The stub line: a plain dashed rule reads as "tear here" without
+                needing perforation notches that would have to be cut out of
+                whatever happens to be behind the card. Horizontal while the
+                two halves are stacked, vertical once they're side by side —
+                and full-height there for free, since it's an empty flex item
+                in the same stretched row as both halves. */}
+            <div className="border-t border-dashed border-line lg:hidden" />
+            <div className="hidden border-l border-dashed border-line lg:block" />
 
             {/* ----------------------------------------------- how to check in */}
-            <section className="rounded-2xl border border-line bg-card p-6 sm:p-8">
-              <p className="flex items-center gap-1.5 font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                <ScanLine size={13} /> Attendance
-              </p>
+            <div className="flex flex-col bg-secondary/20 p-6 text-center sm:p-8 lg:w-[42%]">
+              {/* This half's content is fixed regardless of the event, so
+                  `justify-center` is what happens to any extra height the row
+                  stretch hands it — split evenly above and below, keeping the
+                  QR visually centred in its column instead of pinned to the
+                  top with dead space beneath it. Every element inside keeps
+                  its own fixed spacing either way: it's the space around the
+                  whole block that flexes, never the gaps within it. */}
+              <div className="flex flex-1 flex-col justify-center">
+                <p className="flex items-center justify-center gap-1.5 font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  <ScanLine size={13} /> Scan to check in
+                </p>
 
-              <div className="mt-5 flex justify-center">
-                {/* White tile, always: a QR inverted onto a dark card is refused
-                    by a good many phone scanners, and this one is meant to be
-                    scanned off a screen held at arm's length. Padding (the
-                    quiet zone) and the tile itself both grow with the
-                    viewport, so it reads just as reliably held up to a
-                    projector screen. */}
-                <div className="rounded-2xl bg-white p-4 shadow-[0_10px_40px_rgba(220,38,38,0.15)] sm:p-5 lg:p-6">
-                  <QRCodeSVG
-                    value={event.qrUrl}
-                    size={256}
-                    level="M"
-                    marginSize={0}
-                    className="h-48 w-48 sm:h-52 sm:w-52 lg:h-60 lg:w-60 2xl:h-72 2xl:w-72"
+                <div className="mt-5 flex justify-center">
+                  {/* White tile, always: a QR inverted onto a dark card is refused
+                      by a good many phone scanners, and this one is meant to be
+                      scanned off a screen held at arm's length. */}
+                  <div className="rounded-2xl bg-white p-4 shadow-[0_10px_40px_rgba(220,38,38,0.15)] sm:p-5 lg:p-6">
+                    <QRCodeSVG
+                      value={event.qrUrl}
+                      size={256}
+                      level="M"
+                      marginSize={0}
+                      className="h-48 w-48 sm:h-52 sm:w-52 2xl:h-64 2xl:w-64"
+                    />
+                  </div>
+                </div>
+
+                <p className="mt-4 text-center text-xs text-secondary-foreground">
+                  <span className="font-semibold text-foreground">Scan</span> the code with your phone
+                  camera
+                </p>
+
+                <div className="my-5 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-line" />
+                  <span className="font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    or
+                  </span>
+                  <span className="h-px flex-1 bg-line" />
+                </div>
+
+                {/* The whole reason this exists: a camera that will not focus, a
+                    denied permission, a cracked lens. */}
+                <p className="text-center text-xs text-secondary-foreground">
+                  Enter this code instead
+                </p>
+                <div className="mt-2 rounded-xl border border-line bg-card px-4 py-4 text-center sm:px-6 sm:py-5">
+                  <p className="font-mono text-3xl font-black tracking-[0.3em] text-foreground sm:text-4xl">
+                    {event.attendanceCode}
+                  </p>
+                </div>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  <ShareActionButton
+                    status={linkStatus}
+                    onClick={copyLink}
+                    icon={Link2}
+                    label="Copy link"
+                    doneLabel="Link copied"
+                    errorLabel="Couldn't copy"
+                  />
+                  <ShareActionButton
+                    status={codeStatus}
+                    onClick={copyCode}
+                    icon={Copy}
+                    label="Copy code"
+                    doneLabel="Code copied"
+                    errorLabel="Couldn't copy"
                   />
                 </div>
-              </div>
 
-              {/* Off-screen but still rendered: qrcode.react draws to this
-                  canvas regardless of its CSS visibility, so a PNG is ready
-                  the moment Download is pressed. A canvas rather than the
-                  visible SVG because only a canvas can hand back pixels via
-                  toDataURL — same value and level, so it's the same code,
-                  just a different render target. A wider margin than the
-                  on-page SVG's because this copy has no white card around it
-                  once it leaves the page. */}
-              <QRCodeCanvas
-                ref={qrCanvasRef}
-                value={event.qrUrl}
-                size={512}
-                level="M"
-                marginSize={4}
-                className="hidden"
-              />
+                {linkStatus === "error" && (
+                  <p className="mt-2 text-center text-[11px] leading-relaxed text-red-400">
+                    Unable to copy automatically. Copy this link manually:{" "}
+                    <span className="break-all font-mono text-foreground">{window.location.href}</span>
+                  </p>
+                )}
+                {codeStatus === "error" && (
+                  <p className="mt-2 text-center text-[11px] leading-relaxed text-red-400">
+                    Unable to copy automatically. Please copy the code above manually.
+                  </p>
+                )}
 
-              <p className="mt-4 text-center text-xs text-secondary-foreground">
-                <span className="font-semibold text-foreground">Scan</span> the code with your phone
-                camera
-              </p>
-
-              <div className="my-5 flex items-center gap-3">
-                <span className="h-px flex-1 bg-line" />
-                <span className="font-head text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  or
-                </span>
-                <span className="h-px flex-1 bg-line" />
-              </div>
-
-              {/* The whole reason this exists: a camera that will not focus, a
-                  denied permission, a cracked lens. */}
-              <p className="text-center text-xs text-secondary-foreground">
-                Enter this code instead
-              </p>
-              <div className="mt-2 rounded-xl border border-line bg-secondary/40 px-4 py-4 text-center sm:px-6 sm:py-5">
-                <p className="font-mono text-3xl font-black tracking-[0.3em] text-foreground sm:text-4xl lg:text-5xl 2xl:text-6xl">
-                  {event.attendanceCode}
+                <p className="mt-5 flex items-start gap-1.5 border-t border-line/60 pt-4 text-left text-[11px] leading-relaxed text-muted-foreground">
+                  <QrCode size={12} className="mt-0.5 shrink-0" />
+                  Both are unique to this event. This page stops working once the
+                  event is marked done or cancelled, or after its day has passed.
                 </p>
               </div>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <ShareActionButton
-                  status={linkStatus}
-                  onClick={copyLink}
-                  icon={Link2}
-                  label="Copy link"
-                  doneLabel="Link copied"
-                  errorLabel="Couldn't copy"
-                />
-                <ShareActionButton
-                  status={codeStatus}
-                  onClick={copyCode}
-                  icon={Copy}
-                  label="Copy code"
-                  doneLabel="Code copied"
-                  errorLabel="Couldn't copy"
-                />
-                <ShareActionButton
-                  status={qrStatus}
-                  onClick={downloadQr}
-                  icon={Download}
-                  label="Download QR"
-                  doneLabel="Downloaded"
-                  errorLabel="Couldn't download"
-                />
-              </div>
-
-              {linkStatus === "error" && (
-                <p className="mt-2 text-center text-[11px] leading-relaxed text-red-400">
-                  Unable to copy automatically. Copy this link manually:{" "}
-                  <span className="break-all font-mono text-foreground">{window.location.href}</span>
-                </p>
-              )}
-              {codeStatus === "error" && (
-                <p className="mt-2 text-center text-[11px] leading-relaxed text-red-400">
-                  Unable to copy automatically. Please copy the code above manually.
-                </p>
-              )}
-              {qrStatus === "error" && (
-                <p className="mt-2 text-center text-[11px] leading-relaxed text-red-400">
-                  Unable to download automatically. Try again, or screenshot the QR above.
-                </p>
-              )}
-
-              <p className="mt-5 flex items-start gap-1.5 border-t border-line/60 pt-4 text-[11px] leading-relaxed text-muted-foreground">
-                <QrCode size={12} className="mt-0.5 shrink-0" />
-                Both are unique to this event. This page stops working once the
-                event is marked done or cancelled, or after its day has passed.
-              </p>
-            </section>
+            </div>
           </div>
         </div>
 
