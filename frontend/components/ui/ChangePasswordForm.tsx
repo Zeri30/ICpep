@@ -119,7 +119,10 @@ export default function ChangePasswordForm({ email }: { email: string }) {
                   aria-label={show ? "Hide password" : "Show password"}
                   className="absolute inset-y-0 right-0 grid place-items-center w-12 text-muted-foreground hover:text-primary-glow transition-colors"
                 >
-                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {/* Reflects the field's current state, not the action the
+                      click performs — open eye while visible, slashed while
+                      hidden. */}
+                  {show ? <Eye size={16} /> : <EyeOff size={16} />}
                 </button>
               </div>
               <ul className="mt-2.5 space-y-1">

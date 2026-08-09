@@ -207,7 +207,11 @@ function SignInDialog({
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   className="absolute inset-y-0 right-0 grid place-items-center w-12 text-muted-foreground hover:text-primary-glow transition-colors"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {/* The icon reflects the field's current state, not the
+                      action the click performs: an open eye while the
+                      password is actually visible, a slashed one while it's
+                      hidden. */}
+                  {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
                 </button>
               </div>
 
