@@ -291,7 +291,7 @@ class UserManagementTest extends TestCase
             'first_name' => 'Jane',
             'middle_initial' => 's',
             'last_name' => 'Officer',
-            'password_reset_at' => now()->subDays(7)->subMinute(),
+            'password_reset_at' => now()->subHour()->subMinute(),
         ]);
 
         $response = $this->actingAs($this->manager())

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Backs the reset-password cooldown: UserController::resetPassword refuses to
- * run again for the same account within 7 days of this timestamp, so an
+ * run again for the same account within an hour of this timestamp, so an
  * account can't be reset back-to-back (accidentally or as harassment) by
  * whoever holds the manage-users permission.
  */
