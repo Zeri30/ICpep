@@ -148,7 +148,7 @@ function CardBack({ o, index }: { o: Officer; index: number }) {
   const accent = accentOf(o);
   return (
     <div
-      className="absolute inset-0 grid place-items-center overflow-hidden rounded-3xl border bg-[#0b0b0b] px-6 text-center"
+      className="absolute inset-0 grid place-items-center overflow-hidden rounded-3xl border bg-[#0b0b0b] px-4 text-center sm:px-6"
       style={{
         backfaceVisibility: "hidden",
         transform: "rotateY(180deg)",
@@ -168,8 +168,15 @@ function CardBack({ o, index }: { o: Officer; index: number }) {
       </span>
 
       <div className="relative">
+        {/* Fixed at `text-2xl` this clipped against the card's own
+            `overflow-hidden` on the smallest cards — some role labels
+            ("Documentation Team Head", "Public Relations Officer") are long
+            enough that even `text-balance`'s two-line wrap couldn't fit them
+            in ~150px of content width. Scales down with the card itself
+            (see its `clamp(200px,54vw,290px)` width) rather than staying
+            fixed across every size. */}
         <p
-          className="text-balance font-display text-2xl font-black uppercase leading-[1.05]"
+          className="text-balance font-display text-lg font-black uppercase leading-[1.05] sm:text-xl lg:text-2xl"
           style={{ color: accent }}
         >
           {o.role}
