@@ -52,6 +52,109 @@ type Confirm =
  */
 const SKELETON_ROWS = 20;
 
+/**
+ * Below `lg` the table's columns need real width to lay out without
+ * crowding, which forces a sideways scroll just to read one row. A stacked
+ * card carries the same fields — same data, nothing added or removed — laid
+ * out top-to-bottom instead. Mirrors MembersList's MemberCard.
+ */
+function UserCard({
+  user,
+  menuOpen,
+  onOpenMenu,
+  onCloseMenu,
+  onEdit,
+  onPrivileges,
+  onToggle,
+  onReset,
+  onDelete,
+}: {
+  user: AdminUser;
+  menuOpen: boolean;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
+  onEdit: () => void;
+  onPrivileges: () => void;
+  onToggle: () => void;
+  onReset: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold uppercase text-muted-foreground">
+          {(user.name || "?").slice(0, 2)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-foreground">
+            {user.name}
+            {user.isSelf && <span className="ml-2 text-[11px] font-normal text-muted-foreground">(you)</span>}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+        </div>
+        <RowMenu
+          open={menuOpen}
+          onOpen={onOpenMenu}
+          onClose={onCloseMenu}
+          user={user}
+          onEdit={onEdit}
+          onPrivileges={onPrivileges}
+          onToggle={onToggle}
+          onReset={onReset}
+          onDelete={onDelete}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <RoleBadge role={user.role} label={user.roleLabel} />
+        <StatusPill active={user.isActive} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <p className="text-muted-foreground">Last Login</p>
+          <p className="mt-0.5 text-secondary-foreground">{formatDateTime(user.lastLoginAt)}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Created</p>
+          <p className="mt-0.5 text-secondary-foreground">{formatDateTime(user.createdAt)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors UserCard's shape field-for-field, so nothing resizes when the
+    real card swaps in. */
+function UserCardSkeleton() {
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        <Circle size="size-9" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Bar w="w-32" />
+          <Bar w="w-40" h="h-3" />
+        </div>
+        <span className="skeleton inline-block size-8 shrink-0 rounded-md" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Pill w="w-24" />
+        <Pill w="w-20" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Bar w="w-28" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Bar w="w-16" h="h-3" />
+          <Bar w="w-28" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ active }: { active: boolean }) {
   return active ? (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-green-400">
@@ -147,7 +250,7 @@ export default function UsersList() {
 
   /**
    * Gate on `resetAvailableAt` before ever opening the confirm dialog — the
-   * account is on the reset-password cooldown (UserController::RESET_COOLDOWN_DAYS)
+   * account is on the reset-password cooldown (UserController::RESET_COOLDOWN_HOURS)
    * until that time, so there's nothing the dialog could do here but fail.
    * The backend enforces the same window regardless, in case this data is
    * stale by the time the click lands.
@@ -271,26 +374,72 @@ export default function UsersList() {
         </div>
       </div>
 
-      <DataTable
-        fill
-        columns={columns}
-        rows={rows}
-        rowKey={(u) => u.id}
-        loading={loading && !data}
-        skeletonRows={SKELETON_ROWS}
-        error={error}
-        sort={sort}
-        onSort={onSort}
-        emptyHeading="No administrators found"
-        emptyDescription="Try clearing the filters, or add a new administrator account."
-        footer={
-          loading && !data ? (
-            <PaginationSkeleton />
-          ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
-          ) : null
-        }
-      />
+      {/* The table's columns need real width to lay out without crowding
+          (see DataTable's `min-w-[40rem]`), which below `lg` forces a
+          sideways scroll just to read one row. `lg:contents` keeps this
+          wrapper out of the flex layout at that breakpoint (so DataTable's
+          own `fill` sizing still targets the real flex parent below it) —
+          same pattern as MembersList/PaymentHistory. */}
+      <div className="hidden lg:contents">
+        <DataTable
+          fill
+          columns={columns}
+          rows={rows}
+          rowKey={(u) => u.id}
+          loading={loading && !data}
+          skeletonRows={SKELETON_ROWS}
+          error={error}
+          sort={sort}
+          onSort={onSort}
+          emptyHeading="No administrators found"
+          emptyDescription="Try clearing the filters, or add a new administrator account."
+          footer={
+            loading && !data ? (
+              <PaginationSkeleton />
+            ) : data ? (
+              <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+            ) : null
+          }
+        />
+      </div>
+
+      {/* Stacked cards for phones and tablets — same rows, same handlers,
+          laid out top-to-bottom instead of squeezed into a table row
+          nothing this narrow can show without scrolling sideways. */}
+      <div className="overflow-hidden rounded-xl border border-line bg-card lg:hidden">
+        <div className="divide-y divide-line">
+          {loading && !data ? (
+            Array.from({ length: SKELETON_ROWS }, (_, i) => <UserCardSkeleton key={`skeleton-${i}`} />)
+          ) : error ? (
+            <div className="py-12 text-center text-sm text-red-400">{error}</div>
+          ) : rows.length === 0 ? (
+            <div className="py-14 text-center">
+              <p className="font-display text-lg font-bold uppercase tracking-wide text-foreground">No administrators found</p>
+              <p className="mt-2 text-sm text-muted-foreground">Try clearing the filters, or add a new administrator account.</p>
+            </div>
+          ) : (
+            rows.map((u) => (
+              <UserCard
+                key={u.id}
+                user={u}
+                menuOpen={menuFor === u.id}
+                onOpenMenu={() => setMenuFor(u.id)}
+                onCloseMenu={() => setMenuFor(null)}
+                onEdit={() => setEditing(u)}
+                onPrivileges={() => setPrivilegesFor(u)}
+                onToggle={() => setConfirm({ kind: "toggle", user: u })}
+                onReset={() => requestReset(u)}
+                onDelete={() => setConfirm({ kind: "delete", user: u })}
+              />
+            ))
+          )}
+        </div>
+        {loading && !data ? (
+          <PaginationSkeleton />
+        ) : data ? (
+          <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+        ) : null}
+      </div>
 
       {/* Confirmations */}
       <ConfirmDialog
