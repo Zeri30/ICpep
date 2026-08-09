@@ -187,7 +187,7 @@ class DashboardController extends Controller
      * than trusting a bare column read — a term with no applications yet
      * would otherwise turn every figure into `null` instead of `0`.
      *
-     * @return array{live:int,paid:int,paid2:int,thirdYear:int,fourthYear:int,paidToday:int,paidWeek:int,paidMonth:int,paid2Today:int,paid2Week:int,paid2Month:int}
+     * @return array{live:int,paid:int,paid2:int,bothPaid:int,thirdYear:int,fourthYear:int,paidToday:int,paidWeek:int,paidMonth:int,paid2Today:int,paid2Week:int,paid2Month:int}
      */
     private function headlineAggregates(?MembershipTerm $term): array
     {
@@ -199,6 +199,10 @@ class DashboardController extends Controller
             ->selectRaw('COUNT(*) as live')
             ->selectRaw('SUM(CASE WHEN paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid')
             ->selectRaw('SUM(CASE WHEN payment2_paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid2')
+            // Both batches settled — what the "Paid members" headline card
+            // shows, distinct from `paid`/`paid2` above (each batch's own
+            // collected count, which `revenue` below still needs separately).
+            ->selectRaw('SUM(CASE WHEN paid_at IS NOT NULL AND payment2_paid_at IS NOT NULL THEN 1 ELSE 0 END) as both_paid')
             ->selectRaw('SUM(CASE WHEN year_level = ? THEN 1 ELSE 0 END) as third_year', ['3rd Year'])
             ->selectRaw('SUM(CASE WHEN year_level = ? THEN 1 ELSE 0 END) as fourth_year', ['4th Year'])
             ->selectRaw('SUM(CASE WHEN paid_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as paid_today', $today)
@@ -213,6 +217,7 @@ class DashboardController extends Controller
             'live' => (int) $row->live,
             'paid' => (int) $row->paid,
             'paid2' => (int) $row->paid2,
+            'bothPaid' => (int) $row->both_paid,
             'thirdYear' => (int) $row->third_year,
             'fourthYear' => (int) $row->fourth_year,
             'paidToday' => (int) $row->paid_today,
@@ -226,10 +231,13 @@ class DashboardController extends Controller
 
     /**
      * Members / 3rd / 4th / revenue — derived from current state, never
-     * accumulated. `paid`/`unpaid` count Payment 1 (the base membership
-     * threshold), not "fully paid" — the smallest change that keeps the
-     * existing headline cards meaningful now that the fee is two batches.
-     * `revenue` sums what both batches have actually collected.
+     * accumulated. `paid`/`unpaid` count members with *both* batches settled
+     * — the membership isn't considered paid on Payment 1 alone. `revenue`
+     * still sums each batch's own collected count (`paid`/`paid2` from the
+     * aggregates, not the `bothPaid` figure this card uses) — someone who's
+     * paid Payment 1 but not Payment 2 has still paid Payment 1, and that
+     * ₱ has to keep showing up in revenue regardless of what the headline
+     * card above calls them.
      */
     private function stats(bool $canRevenue, array $headline): array
     {
@@ -238,13 +246,14 @@ class DashboardController extends Controller
         $live = $headline['live'];
         $paid = $headline['paid'];
         $paid2 = $headline['paid2'];
+        $bothPaid = $headline['bothPaid'];
 
         return [
             'members' => $live,
             'thirdYear' => $headline['thirdYear'],
             'fourthYear' => $headline['fourthYear'],
-            'paid' => $paid,
-            'unpaid' => $live - $paid,
+            'paid' => $bothPaid,
+            'unpaid' => $live - $bothPaid,
             // Peso figures are the chapter's income — null them out for roles
             // that may read the ledger but not the takings.
             'revenue' => $canRevenue ? $paid * $fee1 + $paid2 * $fee2 : null,

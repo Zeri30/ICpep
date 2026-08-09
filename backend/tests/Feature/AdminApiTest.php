@@ -193,19 +193,26 @@ class AdminApiTest extends TestCase
 
         $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now(), 'payment2_paid_at' => now()]);
         $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year']);
+        // Payment 1 only — the case that actually distinguishes "paid" from
+        // "fully paid": this member must not count toward stats.paid, but
+        // their ₱50 still has to show up in revenue.
+        $this->makeApplication(['email' => 'c@example.com', 'year_level' => '3rd Year', 'paid_at' => now()]);
 
         // Revenue is only returned to finance roles.
         $this->actingAs($this->treasurer())
             ->getJson('/api/admin/dashboard')
             ->assertOk()
-            ->assertJsonPath('stats.members', 2)
-            ->assertJsonPath('stats.thirdYear', 1)
+            ->assertJsonPath('stats.members', 3)
+            ->assertJsonPath('stats.thirdYear', 2)
             ->assertJsonPath('stats.fourthYear', 1)
+            // Only the member with both batches settled counts as paid — the
+            // Payment-1-only member is still "unpaid" for this card.
             ->assertJsonPath('stats.paid', 1)
-            // One member fully paid (50+25), one paying nothing yet: 75
-            // collected, 75 still outstanding on the other.
-            ->assertJsonPath('stats.revenue', 75)
-            ->assertJsonPath('stats.pendingRevenue', 75)
+            ->assertJsonPath('stats.unpaid', 2)
+            // Collected: member 1's 50+25, member 3's 50 = 125. Outstanding:
+            // member 2's 75, member 3's remaining 25 = 100.
+            ->assertJsonPath('stats.revenue', 125)
+            ->assertJsonPath('stats.pendingRevenue', 100)
             ->assertJsonCount(4, 'membersByClass.data')
             ->assertJsonCount(6, 'registrationsOverTime.data');
     }
