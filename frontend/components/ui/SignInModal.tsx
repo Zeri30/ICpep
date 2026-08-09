@@ -5,6 +5,7 @@ import { AlertCircle, Eye, EyeOff, Loader2, LogIn, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Logo from "@/components/ui/Logo";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
+import { clearIdleActivityClock } from "@/lib/adminApi";
 
 /* Matches the Membership form's fields so the two read as one system. */
 const fieldBase =
@@ -99,6 +100,13 @@ function SignInDialog({
         setStatus("idle");
         return;
       }
+
+      // A fresh session starts a fresh idle clock — clearing here (rather
+      // than leaving it to IdleLogout's own mount check) means a timestamp
+      // left over from hours ago can never be mistaken for "already idle"
+      // the instant the admin layout mounts. See clearIdleActivityClock's
+      // docblock.
+      clearIdleActivityClock();
 
       // Full navigation, not a router push: the admin is served by Laravel
       // through the proxy, not by Next's router. A caller-supplied destination
