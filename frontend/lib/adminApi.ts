@@ -224,6 +224,14 @@ export async function signOut(): Promise<void> {
   );
   clearIdleActivityClock();
   window.location.href = redirect ?? "/";
+
+  // Setting `.href` starts the navigation but doesn't block on it — without
+  // this, the function returns right away, and whoever awaited it (the
+  // sign-out confirm dialog's `finally { setBusy(false) }`) puts its button
+  // back to its normal, clickable state for the brief moment before the
+  // browser actually finishes unloading this page. Never resolving keeps the
+  // caller's loading state exactly as it was until that unload happens.
+  await new Promise<void>(() => {});
 }
 
 /** "Manage sessions" — sign this account out of every other device, keeping
@@ -240,6 +248,9 @@ export async function logoutAllSessions(): Promise<void> {
   const { redirect } = await apiSend<{ redirect: string }>("POST", "/me/sessions/logout-all");
   clearIdleActivityClock();
   window.location.href = redirect ?? "/";
+
+  // Never resolves once navigation has started — see signOut() for why.
+  await new Promise<void>(() => {});
 }
 
 /** Fired when a module is marked viewed, so AdminSidebar's badge (a separate
