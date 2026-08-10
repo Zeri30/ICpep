@@ -76,6 +76,49 @@ function ActionBadge({ action }: { action: string }) {
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cls}`}>{label}</span>;
 }
 
+/**
+ * Below `lg` the table's columns (Description especially) need real width to
+ * lay out without crowding, which forces a sideways scroll just to read one
+ * row. A stacked card carries the same fields — same data, nothing added or
+ * removed — laid out top-to-bottom instead. Mirrors MembersList's MemberCard.
+ */
+function ActivityCard({ row }: { row: ActivityRow }) {
+  return (
+    <div className="space-y-2.5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <ActionBadge action={row.action} />
+        <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(row.createdAt)}</span>
+      </div>
+      <p className="text-sm text-foreground">{row.description}</p>
+      <div className="border-t border-line/40 pt-2 text-xs">
+        <p className="text-muted-foreground">By</p>
+        <p className="mt-0.5 font-medium text-foreground">
+          {row.actorName ?? row.actor ?? "—"}
+          {row.actorRoleLabel && <span className="ml-1 font-normal text-muted-foreground">· {row.actorRoleLabel}</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors ActivityCard's shape field-for-field, so nothing resizes when the
+    real card swaps in. */
+function ActivityCardSkeleton() {
+  return (
+    <div className="space-y-2.5 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <Pill w="w-24" />
+        <Bar w="w-20" h="h-3" />
+      </div>
+      <Bar w="w-full" />
+      <div className="flex flex-col gap-1.5 border-t border-line/40 pt-2">
+        <Bar w="w-8" h="h-3" />
+        <Bar w="w-32" />
+      </div>
+    </div>
+  );
+}
+
 export default function ActivityLog() {
   // Sign-in/out, failed sign-ins, password resets, and account
   // activation/deactivation/deletion are system/internal activity — the
@@ -252,23 +295,55 @@ export default function ActivityLog() {
         )}
       </div>
 
-      <DataTable
-        fill
-        columns={columns}
-        rows={data?.data ?? []}
-        rowKey={(r) => r.id}
-        loading={loading && !data}
-        skeletonRows={SKELETON_ROWS}
-        error={error}
-        emptyHeading="No activity yet"
-        footer={
-          loading && !data ? (
-            <PaginationSkeleton />
-          ) : data ? (
-            <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
-          ) : null
-        }
-      />
+      {/* The table's columns need real width to lay out without crowding
+          (see DataTable's `min-w-[40rem]`), which below `lg` forces a
+          sideways scroll just to read one row. `lg:contents` keeps this
+          wrapper out of the flex layout at that breakpoint (so DataTable's
+          own `fill` sizing still targets the real flex parent below it) —
+          same pattern as MembersList/PaymentHistory. */}
+      <div className="hidden lg:contents">
+        <DataTable
+          fill
+          columns={columns}
+          rows={data?.data ?? []}
+          rowKey={(r) => r.id}
+          loading={loading && !data}
+          skeletonRows={SKELETON_ROWS}
+          error={error}
+          emptyHeading="No activity yet"
+          footer={
+            loading && !data ? (
+              <PaginationSkeleton />
+            ) : data ? (
+              <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+            ) : null
+          }
+        />
+      </div>
+
+      {/* Stacked cards for phones and tablets — same rows, laid out
+          top-to-bottom instead of squeezed into a table row nothing this
+          narrow can show without scrolling sideways. */}
+      <div className="overflow-hidden rounded-xl border border-line bg-card lg:hidden">
+        <div className="divide-y divide-line">
+          {loading && !data ? (
+            Array.from({ length: SKELETON_ROWS }, (_, i) => <ActivityCardSkeleton key={`skeleton-${i}`} />)
+          ) : error ? (
+            <div className="py-12 text-center text-sm text-red-400">{error}</div>
+          ) : (data?.data ?? []).length === 0 ? (
+            <div className="py-14 text-center">
+              <p className="font-display text-lg font-bold uppercase tracking-wide text-foreground">No activity yet</p>
+            </div>
+          ) : (
+            (data?.data ?? []).map((r) => <ActivityCard key={r.id} row={r} />)
+          )}
+        </div>
+        {loading && !data ? (
+          <PaginationSkeleton />
+        ) : data ? (
+          <Pagination meta={data.meta} onPage={setPage} disabled={fetching} />
+        ) : null}
+      </div>
     </div>
   );
 }

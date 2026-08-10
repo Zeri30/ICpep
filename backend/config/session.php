@@ -30,9 +30,17 @@ return [
     | to expire immediately when the browser is closed then you may
     | indicate that via the expire_on_close configuration option.
     |
+    | Kept >= icpep.idle_timeout_minutes (see config/icpep.php): this is a
+    | sliding expiry renewed only by requests that actually reach the
+    | server, so a shorter value here would silently end a signed-in
+    | admin's session (and drop its 'last_meaningful_activity' clock)
+    | before EnforceIdleTimeout's own 6-hour check ever got a chance to
+    | run — the admin idle timeout is meant to be the thing that decides
+    | that, not an unrelated default.
+    |
     */
 
-    'lifetime' => (int) env('SESSION_LIFETIME', 120),
+    'lifetime' => (int) env('SESSION_LIFETIME', 360),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 

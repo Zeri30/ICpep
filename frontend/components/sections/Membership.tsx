@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Lock, Send, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Lock, Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Reveal from "@/components/ui/Reveal";
 import SectionHeading from "@/components/ui/SectionHeading";
@@ -75,40 +75,33 @@ function SuccessPanel() {
   );
 }
 
-/* Shown when the backend reports an application already exists for this student.
-   A terminal state — there is deliberately no "try again", since re-submitting
-   would only be refused again. */
-function AlreadyAppliedPanel({ message }: { message: string }) {
-  return (
-    <div className="rounded-2xl bg-card border border-amber-500/30 p-8 sm:p-12 text-center shadow-[0_0_40px_rgba(0,0,0,0.4)]">
-      <div className="mx-auto grid place-items-center w-16 h-16 rounded-full bg-amber-500/15 text-amber-400 mb-5">
-        <ShieldCheck size={30} />
-      </div>
-      <h3 className="font-display font-bold text-2xl uppercase tracking-wide">You&apos;ve Already Applied</h3>
-      <p className="mt-3 text-secondary-foreground leading-relaxed max-w-md mx-auto">{message}</p>
-      <p className="mt-5 text-sm text-muted-foreground max-w-md mx-auto">
-        If you believe this is a mistake, please reach out to our officers.
-      </p>
-    </div>
-  );
-}
-
 type Registration = { isOpen: boolean; reason: string | null; periodId: number | null };
 
-/* Remembers, per browser, that an application was submitted for a given
-   membership period. This is a UX convenience so a refresh or the back button
-   keeps showing the confirmation instead of a fresh form — the real duplicate
-   guarantee is the backend (unique index + pre-check), which a cleared marker,
-   another tab, or a direct API call cannot get around. Scoped to the period id
-   so the form reopens for everyone once the next membership period begins. */
-const APPLIED_KEY = "icpep:applied-period";
-/** Stored when a submission is recorded but the period id wasn't known. */
-const APPLIED_UNKNOWN = "applied";
+/** Generic on purpose — never names which field (Student ID/Email/Phone) conflicted. */
+const DEFAULT_DUPLICATE_MESSAGE =
+  "Our records show you have already applied for the current membership period.";
 
-/** The raw marker: a period id as a string, the sentinel above, or null. */
-function readApplied(): string | null {
+/* Remembers, per browser, that this browser already successfully registered
+   for a given membership period. This is a UX convenience so a refresh or
+   the back button keeps showing the confirmation instead of a blank form —
+   the real duplicate guarantee is the backend (unique indexes + pre-check),
+   which a cleared marker, another tab, or a direct API call cannot get
+   around. Scoped to the period id so the form reopens for everyone once the
+   next membership period begins.
+
+   A duplicate rejection is deliberately NOT recorded here: it isn't a
+   registration, and the form should stay open and editable so the visitor
+   can correct whichever field conflicted and try again — see the inline
+   banner in the form below instead of a terminal panel. */
+const APPLIED_KEY = "icpep:applied-period";
+
+function readApplied(): number | "unknown" | null {
   try {
-    return localStorage.getItem(APPLIED_KEY);
+    const raw = localStorage.getItem(APPLIED_KEY);
+    if (raw === null) return null;
+    if (raw === "unknown") return "unknown";
+    const periodId = Number(raw);
+    return Number.isFinite(periodId) ? periodId : null;
   } catch {
     return null;
   }
@@ -116,7 +109,7 @@ function readApplied(): string | null {
 
 function markApplied(periodId: number | null) {
   try {
-    localStorage.setItem(APPLIED_KEY, periodId === null ? APPLIED_UNKNOWN : String(periodId));
+    localStorage.setItem(APPLIED_KEY, periodId === null ? "unknown" : String(periodId));
   } catch {
     /* private mode / storage disabled — backend still guards the duplicate */
   }
@@ -168,12 +161,12 @@ export default function Membership() {
         if (applied !== null) {
           // Clear once the period id is known and doesn't match the stored
           // marker. This also covers a marker recorded while the period id
-          // was unknown (APPLIED_UNKNOWN): once a real period id shows up,
-          // it can't be the same period that was unknown before, so treat it
-          // as stale too — otherwise that device would stay "already
-          // applied" forever. Safe either way since the backend still
-          // enforces the real duplicate check.
-          const staleForNewPeriod = reg.periodId != null && applied !== String(reg.periodId);
+          // was unknown ("unknown"): once a real period id shows up, it can't
+          // be the same period that was unknown before, so treat it as stale
+          // too — otherwise that device would stay "already applied" forever.
+          // Safe either way since the backend still enforces the real
+          // duplicate check.
+          const staleForNewPeriod = reg.periodId != null && applied !== reg.periodId;
           if (staleForNewPeriod) {
             clearApplied();
           } else {
@@ -236,16 +229,15 @@ export default function Membership() {
             setRegistration((r) => ({ isOpen: false, reason: data.reason ?? null, periodId: r?.periodId ?? null }));
             return;
           }
-          // Already applied — an active application exists for this student.
-          // A terminal state: show the notice instead of the form so a refresh
-          // or repeated attempt can't file a second record.
+          // One of Student ID / Email / Phone already belongs to a current
+          // member. Not persisted and not terminal — the form stays up so the
+          // visitor can correct whichever field conflicted and resubmit,
+          // same as any other validation error.
           if (res.status === 409 && data?.duplicate) {
-            markApplied(registration?.periodId ?? null);
             setDuplicateMsg(
-              typeof data.message === "string" && data.message
-                ? data.message
-                : "Our records show you have already applied for the current membership period.",
+              typeof data.message === "string" && data.message ? data.message : DEFAULT_DUPLICATE_MESSAGE,
             );
+            submittingRef.current = false;
             setStatus("duplicate");
             return;
           }
@@ -300,8 +292,6 @@ export default function Membership() {
           <ClosedPanel reason={registration.reason} />
           ) : status === "success" ? (
           <SuccessPanel />
-          ) : status === "duplicate" ? (
-          <AlreadyAppliedPanel message={duplicateMsg} />
           ) : (
           <form
             onSubmit={handleSubmit}
@@ -462,11 +452,12 @@ export default function Membership() {
               </div>
             </div>
 
-            {/* Error banner */}
-            {status === "error" && (
+            {/* Error banner — a duplicate rejection reads the same as any other
+                validation error: fix the offending field(s) and resubmit. */}
+            {(status === "error" || status === "duplicate") && (
               <div className="mt-6 flex items-start gap-2.5 rounded-md border border-primary/40 bg-primary/10 px-4 py-3 text-sm">
                 <AlertCircle size={16} className="text-primary-glow shrink-0 mt-0.5" />
-                <span className="text-foreground/90">{errorMsg}</span>
+                <span className="text-foreground/90">{status === "duplicate" ? duplicateMsg : errorMsg}</span>
               </div>
             )}
 

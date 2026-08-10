@@ -88,12 +88,13 @@ class ApplicationController extends Controller
         ]);
 
         // Duplicate safety net (checked before we upload anything). One active
-        // application per email address, and per student ID, within the current
-        // list: a student who already applied — by accident, a page refresh, the
-        // back button, or a second tab — is turned away with a clear message
-        // rather than filed twice. The email is matched case-insensitively so
-        // "Juan@x" and "juan@x" are the same person.
-        if ($this->alreadyApplied($term->id, $validated['email'], $validated['studentId'])) {
+        // application per email address, per student ID, and per phone number,
+        // within the current list: a student who already applied — by accident,
+        // a page refresh, the back button, or a second tab — is turned away with
+        // a clear message rather than filed twice. The email is matched
+        // case-insensitively so "Juan@x" and "juan@x" are the same person. The
+        // response never says which of the three matched — see duplicateResponse().
+        if ($this->alreadyApplied($term->id, $validated['email'], $validated['studentId'], $validated['phone'])) {
             return $this->duplicateResponse();
         }
 
@@ -146,7 +147,8 @@ class ApplicationController extends Controller
         } catch (QueryException $e) {
             // Two submissions raced past the check above at the same moment; the
             // unique index (applications_term_email_active_unique /
-            // applications_term_student_id_active_unique) is the last line of
+            // applications_term_student_id_active_unique /
+            // applications_term_phone_active_unique) is the last line of
             // defence. 23505 is Postgres' unique-violation SQLSTATE.
             if ($e->getCode() === '23505') {
                 // Only clean up the freshly uploaded files when nothing else
@@ -169,22 +171,26 @@ class ApplicationController extends Controller
         ], 201);
     }
 
-    /** Is there already a live application under this email or student ID in the given list? */
-    private function alreadyApplied(int $termId, string $email, string $studentId): bool
+    /** Is there already a live application under this email, student ID, or phone number in the given list? */
+    private function alreadyApplied(int $termId, string $email, string $studentId, string $phone): bool
     {
         return Application::query()
             ->where('membership_term_id', $termId)
-            ->where(function ($query) use ($email, $studentId): void {
+            ->where(function ($query) use ($email, $studentId, $phone): void {
                 $query->whereRaw('lower(email) = ?', [mb_strtolower(trim($email))])
-                    ->orWhere('student_id', $studentId);
+                    ->orWhere('student_id', $studentId)
+                    ->orWhere('phone', $phone);
             })
             ->exists();
     }
 
+    // Deliberately generic: it never says which of email/student ID/phone
+    // matched, so a submission can't be used to probe which field of a real
+    // member's record it collided with.
     private function duplicateResponse(): JsonResponse
     {
         return response()->json([
-            'message' => 'You have already applied. Our records show a membership application under this email for the current period, so there is nothing more to do.',
+            'message' => 'One or more of the information provided is already registered.',
             'duplicate' => true,
         ], 409);
     }

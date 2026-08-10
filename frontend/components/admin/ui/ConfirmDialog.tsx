@@ -145,15 +145,23 @@ export default function ConfirmDialog({
                     // bulk payment action's "Mark Both Payments as Unpaid")
                     // forced onto one line by nowrap overflowed past the
                     // button and the dialog's edge instead of wrapping.
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto ${toneBtn[tone]}`}
+                    // `relative`, so the spinner below has the button itself
+                    // to centre against.
+                    className={`relative inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto ${toneBtn[tone]}`}
                   >
-                    {/* Fixed-width slot reserved regardless of `busy`, so the
-                        label doesn't shift sideways the moment the spinner
-                        appears. */}
-                    <span className="grid w-3.75 shrink-0 place-items-center">
-                      {busy && <Loader2 size={15} className="animate-spin" />}
-                    </span>
-                    <span>{confirmLabel}</span>
+                    {/* The label stays in place (so the button keeps the exact
+                        width its own text sized it to) and just turns
+                        invisible, rather than being swapped out for the
+                        spinner — swapping content shrinks the button to
+                        whatever the spinner alone needs, which visibly
+                        resizes it the instant it's clicked. The spinner is
+                        centred on the button itself (not the label, which is
+                        invisible but still there) via absolute positioning,
+                        landing in the same spot either way. */}
+                    <span className={busy ? "invisible" : undefined}>{confirmLabel}</span>
+                    {busy && (
+                      <Loader2 size={15} aria-hidden className="absolute inset-0 m-auto animate-spin" />
+                    )}
                   </button>
                   <button
                     onClick={onClose}

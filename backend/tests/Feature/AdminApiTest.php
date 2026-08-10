@@ -39,6 +39,12 @@ class AdminApiTest extends TestCase
      */
     private function makeApplication(array $overrides = []): Application
     {
+        // Phone defaults from the (possibly overridden) email so callers that
+        // already vary email across multiple members in the same term — the
+        // usual way to avoid the term+email unique index — get a distinct
+        // phone for free too, now that phone carries the same constraint.
+        $email = $overrides['email'] ?? 'juan@example.com';
+
         return Application::create(array_merge([
             'membership_term_id' => MembershipTerm::current()?->id,
             'surname' => 'Dela Cruz',
@@ -49,7 +55,7 @@ class AdminApiTest extends TestCase
             'birthday' => '2004-01-01',
             'address' => '123 Rizal St',
             'email' => 'juan@example.com',
-            'phone' => '09123456789',
+            'phone' => '09'.str_pad((string) (crc32($email) % 1_000_000_000), 9, '0', STR_PAD_LEFT),
             'signature_path' => 'signatures/x.png',
             'picture_path' => 'pictures/x.png',
         ], $overrides));
@@ -193,19 +199,26 @@ class AdminApiTest extends TestCase
 
         $this->makeApplication(['year_level' => '3rd Year', 'paid_at' => now(), 'payment2_paid_at' => now()]);
         $this->makeApplication(['email' => 'b@example.com', 'year_level' => '4th Year']);
+        // Payment 1 only — the case that actually distinguishes "paid" from
+        // "fully paid": this member must not count toward stats.paid, but
+        // their ₱50 still has to show up in revenue.
+        $this->makeApplication(['email' => 'c@example.com', 'year_level' => '3rd Year', 'paid_at' => now()]);
 
         // Revenue is only returned to finance roles.
         $this->actingAs($this->treasurer())
             ->getJson('/api/admin/dashboard')
             ->assertOk()
-            ->assertJsonPath('stats.members', 2)
-            ->assertJsonPath('stats.thirdYear', 1)
+            ->assertJsonPath('stats.members', 3)
+            ->assertJsonPath('stats.thirdYear', 2)
             ->assertJsonPath('stats.fourthYear', 1)
+            // Only the member with both batches settled counts as paid — the
+            // Payment-1-only member is still "unpaid" for this card.
             ->assertJsonPath('stats.paid', 1)
-            // One member fully paid (50+25), one paying nothing yet: 75
-            // collected, 75 still outstanding on the other.
-            ->assertJsonPath('stats.revenue', 75)
-            ->assertJsonPath('stats.pendingRevenue', 75)
+            ->assertJsonPath('stats.unpaid', 2)
+            // Collected: member 1's 50+25, member 3's 50 = 125. Outstanding:
+            // member 2's 75, member 3's remaining 25 = 100.
+            ->assertJsonPath('stats.revenue', 125)
+            ->assertJsonPath('stats.pendingRevenue', 100)
             ->assertJsonCount(4, 'membersByClass.data')
             ->assertJsonCount(6, 'registrationsOverTime.data');
     }
@@ -692,6 +705,83 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('data.fullName', 'Reyes, Ana');
 
         $this->assertDatabaseHas('activity_logs', ['action' => 'updated']);
+    }
+
+    /**
+     * Editing a member into another active member's Student ID, email, or
+     * phone must fail validation instead of reaching the database — the
+     * partial unique indexes (applications_term_student_id_active_unique /
+     * _email_active_unique / _phone_active_unique) are only the last line of
+     * defence, not the primary check, so this should never surface as a raw
+     * database error.
+     */
+    public function test_update_rejects_a_duplicate_student_id_within_the_same_term(): void
+    {
+        $this->makeApplication(['email' => 'taken@example.com', 'phone' => '09000000001', 'student_id' => '1111111111']);
+        $editing = $this->makeApplication(['email' => 'editing@example.com', 'phone' => '09000000002', 'student_id' => '2222222222']);
+
+        $this->actingAs($this->admin())
+            ->patchJson("/api/admin/members/{$editing->id}", $this->editPayload($editing, ['studentId' => '1111111111']))
+            ->assertJsonValidationErrors('studentId');
+
+        $this->assertSame('2222222222', $editing->fresh()->student_id);
+    }
+
+    public function test_update_rejects_a_duplicate_email_within_the_same_term_case_insensitively(): void
+    {
+        $this->makeApplication(['email' => 'taken@example.com', 'phone' => '09000000001', 'student_id' => '1111111111']);
+        $editing = $this->makeApplication(['email' => 'editing@example.com', 'phone' => '09000000002', 'student_id' => '2222222222']);
+
+        $this->actingAs($this->admin())
+            ->patchJson("/api/admin/members/{$editing->id}", $this->editPayload($editing, ['email' => 'TAKEN@EXAMPLE.COM']))
+            ->assertJsonValidationErrors('email');
+
+        $this->assertSame('editing@example.com', $editing->fresh()->email);
+    }
+
+    public function test_update_rejects_a_duplicate_phone_within_the_same_term(): void
+    {
+        $this->makeApplication(['email' => 'taken@example.com', 'phone' => '09000000001', 'student_id' => '1111111111']);
+        $editing = $this->makeApplication(['email' => 'editing@example.com', 'phone' => '09000000002', 'student_id' => '2222222222']);
+
+        $this->actingAs($this->admin())
+            ->patchJson("/api/admin/members/{$editing->id}", $this->editPayload($editing, ['phone' => '09000000001']))
+            ->assertJsonValidationErrors('phone');
+
+        $this->assertSame('09000000002', $editing->fresh()->phone);
+    }
+
+    /** Editing into a *soft-deleted* member's details is allowed — the slot is free. */
+    public function test_update_allows_reusing_a_soft_deleted_members_details(): void
+    {
+        $removed = $this->makeApplication(['email' => 'was-taken@example.com', 'phone' => '09000000001', 'student_id' => '1111111111']);
+        $removed->delete();
+        $editing = $this->makeApplication(['email' => 'editing@example.com', 'phone' => '09000000002', 'student_id' => '2222222222']);
+
+        $this->actingAs($this->admin())
+            ->patchJson("/api/admin/members/{$editing->id}", $this->editPayload($editing, [
+                'email' => 'was-taken@example.com', 'phone' => '09000000001', 'studentId' => '1111111111',
+            ]))
+            ->assertOk();
+
+        $this->assertSame('was-taken@example.com', $editing->fresh()->email);
+    }
+
+    /** The full payload update() expects, with one or more fields overridden. */
+    private function editPayload(Application $member, array $overrides = []): array
+    {
+        return array_merge([
+            'surname' => $member->surname,
+            'givenName' => $member->given_name,
+            'middleInitial' => $member->middle_initial,
+            'studentId' => $member->student_id,
+            'yearLevel' => $member->year_level,
+            'section' => $member->section,
+            'birthday' => $member->birthday->toDateString(),
+            'address' => $member->address,
+            'email' => $member->email,
+            'phone' => $member->phone,
+        ], $overrides);
     }
 
     public function test_delete_soft_deletes_and_restore_brings_back(): void

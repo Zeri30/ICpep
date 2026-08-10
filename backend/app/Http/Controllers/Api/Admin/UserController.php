@@ -30,8 +30,8 @@ use Illuminate\Validation\Rule;
  */
 class UserController extends Controller
 {
-    /** Days that must pass between two resets of the same account. */
-    private const RESET_COOLDOWN_DAYS = 7;
+    /** Hours that must pass between two resets of the same account. */
+    private const RESET_COOLDOWN_HOURS = 1;
 
     /** Columns the list may be sorted by, mapped to real DB columns. */
     private const SORTABLE = [
@@ -90,7 +90,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
-            'middle_initial' => ['nullable', 'string', 'max:1'],
+            'middle_initial' => ['nullable', 'string', 'max:2'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', Rule::in(UserRole::values())],
@@ -140,7 +140,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
-            'middle_initial' => ['nullable', 'string', 'max:1'],
+            'middle_initial' => ['nullable', 'string', 'max:2'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(UserRole::values())],
@@ -210,7 +210,7 @@ class UserController extends Controller
      * over safely, where a generated one that must be replaced on first sign-in
      * never needs to stay secret past that moment.
      *
-     * Rate-limited to once every {@see self::RESET_COOLDOWN_DAYS} per account —
+     * Rate-limited to once every {@see self::RESET_COOLDOWN_HOURS} per account —
      * resetting signs the account out everywhere (see below), so back-to-back
      * resets are also a way to repeatedly lock a coworker out.
      */
@@ -352,7 +352,7 @@ class UserController extends Controller
      * When this account's reset-password cooldown ends, or null if it has
      * never been reset (or the cooldown has already passed). Shared by the
      * write path above and the list's `resetAvailableAt` column, so both read
-     * the same 7-day window off the same `password_reset_at` timestamp.
+     * the same 1-hour window off the same `password_reset_at` timestamp.
      */
     public static function resetAvailableAt(User $user): ?\Illuminate\Support\Carbon
     {
@@ -360,7 +360,7 @@ class UserController extends Controller
             return null;
         }
 
-        $availableAt = $user->password_reset_at->copy()->addDays(self::RESET_COOLDOWN_DAYS);
+        $availableAt = $user->password_reset_at->copy()->addHours(self::RESET_COOLDOWN_HOURS);
 
         return $availableAt->isFuture() ? $availableAt : null;
     }

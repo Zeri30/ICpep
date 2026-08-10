@@ -33,7 +33,7 @@ class DashboardCountsTest extends TestCase
             'birthday' => '2005-01-01',
             'address' => '1 Rizal St., Bulacan',
             'email' => 'juan'.fake()->unique()->numberBetween(1, 99999).'@example.test',
-            'phone' => '0917 000 0000',
+            'phone' => '0917'.str_pad((string) fake()->unique()->numberBetween(1, 9999999), 7, '0', STR_PAD_LEFT),
             'signature_path' => 'signatures/x.jpg',
             'picture_path' => 'pictures/x.jpg',
         ], $attributes));

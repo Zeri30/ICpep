@@ -160,8 +160,38 @@ class MemberController extends Controller
             'section' => ['required', Rule::in(Application::SECTIONS)],
             'birthday' => ['required', 'date'],
             'address' => ['required', 'string', 'max:500'],
-            'email' => ['required', 'email', 'max:150'],
-            'phone' => ['required', 'string', 'max:30'],
+            'email' => [
+                'required', 'email', 'max:150',
+                // A closure rather than Rule::unique: matched case-insensitively,
+                // same as the public form's duplicate check
+                // (ApplicationController::alreadyApplied) and the database's own
+                // partial unique index on lower(email). Rule::unique's plain
+                // column comparison is case-sensitive, so a same-address-
+                // different-case duplicate would otherwise slip past validation
+                // and hit that index directly — surfacing as a raw database
+                // error instead of a clean one.
+                function (string $attribute, mixed $value, \Closure $fail) use ($application): void {
+                    $exists = Application::query()
+                        ->where('membership_term_id', $application->membership_term_id)
+                        ->whereRaw('lower(email) = ?', [mb_strtolower(trim($value))])
+                        ->where('id', '!=', $application->id)
+                        ->exists();
+
+                    if ($exists) {
+                        $fail('This email is already used by another member in this list.');
+                    }
+                },
+            ],
+            'phone' => [
+                'required', 'string', 'max:30',
+                // Scoped to this member's own term and excluding soft-deleted
+                // rows, same shape as studentId above — mirrors the database's
+                // applications_term_phone_active_unique index.
+                Rule::unique('applications', 'phone')
+                    ->where(fn ($query) => $query->where('membership_term_id', $application->membership_term_id))
+                    ->whereNull('deleted_at')
+                    ->ignore($application->id),
+            ],
             'paidAt' => ['nullable', 'date'],
             'payment2PaidAt' => ['nullable', 'date'],
         ]);
@@ -199,7 +229,22 @@ class MemberController extends Controller
             $attributes['payment2_paid_at'] = $payment2;
         }
 
-        $application->update($attributes);
+        try {
+            $application->update($attributes);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Two officers saving conflicting edits at the same moment could
+            // still slip past the checks above; the unique indexes
+            // (applications_term_student_id_active_unique /
+            // applications_term_email_active_unique /
+            // applications_term_phone_active_unique) are the last line of
+            // defence. 23505 is Postgres' unique-violation SQLSTATE — see
+            // ApplicationController::store for the same pattern.
+            if ($e->getCode() === '23505') {
+                abort(422, 'One or more of the information provided is already used by another member in this list.');
+            }
+
+            throw $e;
+        }
 
         return (new MemberResource($application->fresh()))->withFiles();
     }

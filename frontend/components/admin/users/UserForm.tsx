@@ -153,8 +153,8 @@ export function AccountFields({ state, boxed = true }: { state: AccountFormState
             <input
               className={inputCls}
               value={form.middleInitial}
-              onChange={(e) => set({ middleInitial: e.target.value.slice(0, 1).toUpperCase() })}
-              maxLength={1}
+              onChange={(e) => set({ middleInitial: e.target.value.slice(0, 2).toUpperCase() })}
+              maxLength={2}
               autoComplete="off"
               placeholder="S"
             />

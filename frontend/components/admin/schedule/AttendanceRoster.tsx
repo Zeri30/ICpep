@@ -93,7 +93,17 @@ export default function AttendanceRoster({ event }: { event: ScheduledEvent }) {
   const locked = data?.attendanceLocked ?? false;
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-lg border border-line bg-secondary/30 p-4">
+    // `flex-1`, not `h-full`: this is a flex item in the Attendees tab's own
+    // column (see EventModal), and `h-full` (a percentage height) depends on
+    // that ancestor's height having already resolved to a definite value —
+    // which it does here, but only via a height set through a JS-measured
+    // inline style one render after mount. `flex-1` sizes this the same
+    // reliable way AttendanceCredentials sizes itself on the Status tab
+    // (see its own `flex-1` class from EventModal), so it always fills
+    // exactly the space available rather than sometimes growing to fit its
+    // own content and pushing the whole modal — and the page along with it
+    // — taller than intended.
+    <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-secondary/30 p-4">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-head text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           <UserCheck size={13} /> Attendees
@@ -142,7 +152,12 @@ export default function AttendanceRoster({ event }: { event: ScheduledEvent }) {
       {error && <p className="mt-3 shrink-0 text-[11px] text-red-400">{error}</p>}
       {saveError && <p className="mt-3 shrink-0 text-[11px] text-red-400">{saveError}</p>}
 
-      <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
+      {/* `overscroll-contain`: once this list hits its own scroll limit, the
+          scroll gesture would otherwise chain into the modal's outer
+          full-viewport overlay — which, being fixed and covering the whole
+          screen, makes the page itself look scrollable the instant a long
+          roster is scrolled to its end. */}
+      <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
         {loading && !data ? (
           <p className="py-4 text-center text-[11px] text-muted-foreground">Loading attendees…</p>
         ) : data?.data.length === 0 ? (

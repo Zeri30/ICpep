@@ -123,13 +123,15 @@ const GENERIC_SESSION_ENDED_MESSAGE =
 
 /** IdleLogout's "last real activity" clock (see that component). Shared by
     every tab *and every login* on this origin, so it has to be cleared
-    whenever a session actually ends — otherwise a timestamp left over from a
-    session that ended hours ago survives into the next, unrelated login and
-    IdleLogout reads it as "already idle", signing the freshly-logged-in
-    officer straight back out. */
+    whenever a session actually ends *and* whenever a new one begins —
+    otherwise a timestamp left over from a session that ended (or simply was
+    active) hours ago survives into the next, unrelated login and IdleLogout
+    reads it as "already idle" the moment it mounts, signing the
+    freshly-logged-in officer straight back out. See SignInModal's onSubmit
+    for the login-side call. */
 export const IDLE_ACTIVITY_STORAGE_KEY = "icpep:admin-last-activity";
 
-function clearIdleActivityClock(): void {
+export function clearIdleActivityClock(): void {
   try {
     window.localStorage.removeItem(IDLE_ACTIVITY_STORAGE_KEY);
   } catch {
@@ -224,6 +226,14 @@ export async function signOut(): Promise<void> {
   );
   clearIdleActivityClock();
   window.location.href = redirect ?? "/";
+
+  // Setting `.href` starts the navigation but doesn't block on it — without
+  // this, the function returns right away, and whoever awaited it (the
+  // sign-out confirm dialog's `finally { setBusy(false) }`) puts its button
+  // back to its normal, clickable state for the brief moment before the
+  // browser actually finishes unloading this page. Never resolving keeps the
+  // caller's loading state exactly as it was until that unload happens.
+  await new Promise<void>(() => {});
 }
 
 /** "Manage sessions" — sign this account out of every other device, keeping
@@ -240,6 +250,9 @@ export async function logoutAllSessions(): Promise<void> {
   const { redirect } = await apiSend<{ redirect: string }>("POST", "/me/sessions/logout-all");
   clearIdleActivityClock();
   window.location.href = redirect ?? "/";
+
+  // Never resolves once navigation has started — see signOut() for why.
+  await new Promise<void>(() => {});
 }
 
 /** Fired when a module is marked viewed, so AdminSidebar's badge (a separate
