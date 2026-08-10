@@ -90,6 +90,23 @@ class UserManagementTest extends TestCase
         $this->assertDatabaseHas('activity_logs', ['action' => 'user_created']);
     }
 
+    /** Matches the public registration form's allowance (see the applications table's own widening migration). */
+    public function test_create_accepts_a_two_character_middle_initial(): void
+    {
+        $this->actingAs($this->manager())
+            ->postJson('/api/admin/users', [
+                'first_name' => 'Jane',
+                'middle_initial' => 'sm',
+                'last_name' => 'Officer',
+                'email' => 'jane@example.com',
+                'role' => 'secretary',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Jane SM. Officer');
+
+        $this->assertSame('SM', User::where('email', 'jane@example.com')->first()->middle_initial);
+    }
+
     public function test_create_composes_the_name_without_a_middle_initial(): void
     {
         $response = $this->actingAs($this->manager())

@@ -90,7 +90,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
-            'middle_initial' => ['nullable', 'string', 'max:1'],
+            'middle_initial' => ['nullable', 'string', 'max:2'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', Rule::in(UserRole::values())],
@@ -140,7 +140,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
-            'middle_initial' => ['nullable', 'string', 'max:1'],
+            'middle_initial' => ['nullable', 'string', 'max:2'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(UserRole::values())],
