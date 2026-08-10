@@ -39,10 +39,11 @@ class MembershipTermTest extends TestCase
     }
 
     /**
-     * The email is derived from the surname rather than fixed, so two different
-     * members can share a list — one applicant may still appear in two lists,
-     * which is what the term+email uniqueness (2026_07_23_000003) allows and
-     * what the tests below rely on.
+     * The email and phone are both derived from the surname rather than fixed,
+     * so two different members can share a list — one applicant may still
+     * appear in two lists, which is what the term-scoped email/student-id/phone
+     * uniqueness (2026_07_23_000003, 2026_08_04_000001, 2026_08_10_000001)
+     * allows and what the tests below rely on.
      */
     private function member(?MembershipTerm $term = null, string $surname = 'Dela Cruz'): Application
     {
@@ -50,7 +51,8 @@ class MembershipTermTest extends TestCase
             'membership_term_id' => $term?->id,
             'surname' => $surname, 'given_name' => 'Juan', 'middle_initial' => 'S',
             'year_level' => '3rd Year', 'section' => 'Section A', 'birthday' => '2004-01-01',
-            'address' => '123 Rizal St', 'email' => Str::slug($surname).'@example.com', 'phone' => '09123456789',
+            'address' => '123 Rizal St', 'email' => Str::slug($surname).'@example.com',
+            'phone' => '09'.str_pad((string) (crc32($surname) % 1_000_000_000), 9, '0', STR_PAD_LEFT),
             'signature_path' => 'signatures/x.png', 'picture_path' => 'pictures/x.png',
         ]);
     }
@@ -464,6 +466,7 @@ class MembershipTermTest extends TestCase
         $second = $this->applicationPayload();
         $second['studentId'] = '9876543210';
         $second['email'] = 'other@example.com';
+        $second['phone'] = '09991234567';
         $second['signature'] = UploadedFile::fake()->image('sig2.png');
         $second['picture'] = UploadedFile::fake()->image('pic2.jpg');
 
@@ -471,6 +474,115 @@ class MembershipTermTest extends TestCase
 
         $paths = Application::pluck('signature_path')->merge(Application::pluck('picture_path'));
         $this->assertSame($paths->count(), $paths->unique()->count());
+    }
+
+    /* ------------------------------------------------------- duplicate registration */
+
+    /**
+     * Student ID, email, and phone are each an independent duplicate trigger
+     * within the current list, and all three collapse to the same generic
+     * 409 — the response never says which field matched (see
+     * ApplicationController::duplicateResponse).
+     */
+    public function test_duplicate_student_id_is_rejected_with_a_generic_message(): void
+    {
+        Storage::fake('supabase');
+
+        $this->postJson('/api/applications', $this->applicationPayload())->assertCreated();
+
+        $second = $this->applicationPayload();
+        $second['email'] = 'someone.else@example.com';
+        $second['phone'] = '09991234567';
+
+        $this->postJson('/api/applications', $second)
+            ->assertStatus(409)
+            ->assertJson([
+                'duplicate' => true,
+                'message' => 'One or more of the information provided is already registered.',
+            ]);
+
+        $this->assertSame(1, Application::count());
+    }
+
+    public function test_duplicate_email_is_rejected_with_a_generic_message(): void
+    {
+        Storage::fake('supabase');
+
+        $this->postJson('/api/applications', $this->applicationPayload())->assertCreated();
+
+        $second = $this->applicationPayload();
+        $second['studentId'] = '9876543210';
+        $second['phone'] = '09991234567';
+
+        $this->postJson('/api/applications', $second)
+            ->assertStatus(409)
+            ->assertJson([
+                'duplicate' => true,
+                'message' => 'One or more of the information provided is already registered.',
+            ]);
+
+        $this->assertSame(1, Application::count());
+    }
+
+    public function test_duplicate_phone_is_rejected_with_a_generic_message(): void
+    {
+        Storage::fake('supabase');
+
+        $this->postJson('/api/applications', $this->applicationPayload())->assertCreated();
+
+        $second = $this->applicationPayload();
+        $second['studentId'] = '9876543210';
+        $second['email'] = 'someone.else@example.com';
+        // phone left at the default, matching the first submission on purpose.
+
+        $this->postJson('/api/applications', $second)
+            ->assertStatus(409)
+            ->assertJson([
+                'duplicate' => true,
+                'message' => 'One or more of the information provided is already registered.',
+            ]);
+
+        $this->assertSame(1, Application::count());
+    }
+
+    /** Rejecting a duplicate must not leave a half-written row or orphaned upload behind. */
+    public function test_a_rejected_duplicate_creates_no_record_and_uploads_no_files(): void
+    {
+        Storage::fake('supabase');
+
+        $this->postJson('/api/applications', $this->applicationPayload())->assertCreated();
+        $uploadedBefore = count(Storage::disk('supabase')->allFiles());
+
+        $second = $this->applicationPayload();
+        $second['email'] = 'someone.else@example.com'; // student ID (and phone) still collide
+
+        $this->postJson('/api/applications', $second)->assertStatus(409);
+
+        $this->assertSame(1, Application::count());
+        $this->assertCount($uploadedBefore, Storage::disk('supabase')->allFiles());
+    }
+
+    /** A removed member's Student ID, email, and phone all free up again for reuse. */
+    public function test_a_soft_deleted_members_details_do_not_block_reregistration(): void
+    {
+        Storage::fake('supabase');
+
+        $current = MembershipTerm::current();
+        $deleted = Application::create([
+            'membership_term_id' => $current->id,
+            'surname' => 'Reyes', 'given_name' => 'Ana', 'middle_initial' => 'M',
+            'student_id' => '1234567890', 'year_level' => '3rd Year', 'section' => 'Section A',
+            'birthday' => '2004-05-05', 'address' => '45 Mabini St',
+            'email' => 'maria@example.com', 'phone' => '09171234567',
+            'signature_path' => 'signatures/x.png', 'picture_path' => 'pictures/x.png',
+        ]);
+        $deleted->delete();
+
+        // Matches the deleted row's student ID, email, and phone all at once.
+        $this->postJson('/api/applications', $this->applicationPayload())->assertCreated();
+
+        $this->assertSame(1, Application::count());
+        $this->assertNotNull($deleted->fresh()->deleted_at);
     }
 
     /** The destination follows the *active* list, not the most recently created. */
