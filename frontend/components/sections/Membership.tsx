@@ -429,8 +429,12 @@ export default function Membership() {
                 />
               </div>
 
-              {/* E-signature — file upload (full width) */}
-              <div className="sm:col-span-2">
+              {/* E-signature — file upload (full width). min-w-0 lets this grid
+                  cell shrink below its content's natural width — without it, a
+                  long uploaded filename (which can't wrap) forces the cell,
+                  the grid, and the page wider instead of the filename below
+                  actually truncating. */}
+              <div className="sm:col-span-2 min-w-0">
                 <FileDropField
                   label="E-Signature"
                   file={signatureFile}
@@ -440,8 +444,9 @@ export default function Membership() {
                 />
               </div>
 
-              {/* Formal picture — file upload (full width) */}
-              <div className="sm:col-span-2">
+              {/* Formal picture — file upload (full width). Same min-w-0 reason
+                  as the e-signature field above. */}
+              <div className="sm:col-span-2 min-w-0">
                 <FileDropField
                   label="Formal Picture"
                   file={pictureFile}
