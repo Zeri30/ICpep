@@ -28,8 +28,9 @@ type OfficerRow = {
  * Empty (not the old hardcoded fallback) while loading or on a failed fetch:
  * showing stale names would defeat the point of no longer hardcoding them.
  */
-function useRoster(): Officer[] {
+function useRoster(): { roster: Officer[]; loading: boolean } {
   const [rows, setRows] = useState<OfficerRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +42,9 @@ function useRoster(): Officer[] {
       })
       .catch(() => {
         if (!cancelled) setRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
 
     return () => {
@@ -52,7 +56,7 @@ function useRoster(): Officer[] {
     const meta = OFFICER_META[r.email];
     return {
       name: r.name,
-      role: r.isAdviser ? "Organization Adviser" : r.roleLabel,
+      role: r.isAdviser ? "Adviser" : r.roleLabel,
       detail: meta?.detail ?? r.roleLabel,
       initials: initialsOf(r.name),
       featured: r.isAdviser,
@@ -63,7 +67,7 @@ function useRoster(): Officer[] {
 
   const adviser = officers.find((o) => o.featured);
   const rest = officers.filter((o) => !o.featured);
-  return adviser ? [adviser, ...rest] : rest;
+  return { roster: adviser ? [adviser, ...rest] : rest, loading };
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -251,7 +255,7 @@ function BoardSlide({
 ──────────────────────────────────────────────────────────────────────── */
 
 export default function Board() {
-  const roster = useRoster();
+  const { roster, loading } = useRoster();
   const n = roster.length;
 
   const [active, setActive] = useState(0);
@@ -388,6 +392,27 @@ export default function Board() {
               } as CSSProperties
             }
           >
+            {/* Nothing renders while `slots` is still empty (roster hasn't
+                arrived yet), and a blank box reads as broken rather than
+                loading — so cover that window explicitly. */}
+            {loading &&
+              (["previous", "current", "next"] as const).map((role) => (
+                <div
+                  key={role}
+                  aria-hidden
+                  className="absolute left-1/2 top-1/2 aspect-4/5 w-(--slide-w) animate-pulse rounded-3xl border border-line/40 bg-white/5"
+                  style={{
+                    transform: `translate3d(calc(-50% + ${ROLE_STYLE[role].tx}), -50%, 0) rotateY(${ROLE_STYLE[role].rotY}) scale(${ROLE_STYLE[role].scale})`,
+                    zIndex: ROLE_STYLE[role].z,
+                  }}
+                />
+              ))}
+            {!loading && n === 0 && (
+              <p className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
+                Couldn&apos;t load the officer roster — try refreshing.
+              </p>
+            )}
+
             {slots.map((slot) => {
               const jump = ROLE_JUMP[slot.role];
               return (
