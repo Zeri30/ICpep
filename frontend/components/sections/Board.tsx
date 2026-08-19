@@ -1,15 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { Hand } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, MoveHorizontal } from "lucide-react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import SectionHeading from "@/components/ui/SectionHeading";
 import { API_URL } from "@/lib/config";
 import { OFFICER_META, initialsOf, type Officer } from "@/lib/data";
-
-gsap.registerPlugin(useGSAP);
 
 const accentOf = (o: Officer) => (o.featured ? "#f59e0b" : "#dc2626");
 
@@ -71,89 +67,102 @@ function useRoster(): Officer[] {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Deck geometry
+   Coverflow deck
 
-   Every card's transform is derived from one continuous `pos` value rather
-   than from an index, so a drag can sit halfway between two cards and the
-   deck still resolves. `delta` returns the *shortest* signed distance around
-   the ring, which is what makes the loop seamless — card 0 sits one step to
-   the right of card 13 without any cloned slides.
+   Exactly five slide slots ever exist (previous2 / previous / current /
+   next / next2). Each holds an officer index rather than being keyed to
+   one, so navigating reassigns roles across the same five DOM nodes and
+   lets CSS transitions animate the move instead of unmounting/remounting
+   cards.
+
+   Stepping shifts every role one position down the line — current becomes
+   previous, next becomes current, next2 becomes next, and so on — so four
+   of the five slots always keep their officer unchanged (they're just
+   relabelled). Only the slot falling off the trailing edge (previous2 when
+   stepping forward, next2 when stepping back) needs a new officer swapped
+   in for its new position on the leading edge, and it's dropped below
+   every other slot's z-index for that one transition so the swap happens
+   out of sight, underneath the slides that are actually moving into view.
 ──────────────────────────────────────────────────────────────────────── */
 
-/** Horizontal gap between neighbours, as a fraction of card width. */
-const GAP = 0.64;
+type Role = "previous2" | "previous" | "current" | "next" | "next2";
+
+interface Slot {
+  slotId: number;
+  role: Role;
+  index: number;
+  z: number;
+}
+
+const ROLE_STYLE: Record<Role, { tx: string; rotY: string; scale: number; z: number }> = {
+  previous2: { tx: "calc(var(--slide-w) * -1.85)", rotY: "58deg", scale: 0.62, z: 10 },
+  previous: { tx: "calc(var(--slide-w) * -1.05)", rotY: "40deg", scale: 0.85, z: 20 },
+  current: { tx: "0px", rotY: "0deg", scale: 1.14, z: 30 },
+  next: { tx: "calc(var(--slide-w) * 1.05)", rotY: "-40deg", scale: 0.85, z: 20 },
+  next2: { tx: "calc(var(--slide-w) * 1.85)", rotY: "-58deg", scale: 0.62, z: 10 },
+};
+
+/** Role each slot moves into when stepping in `dir`; the omitted role on
+    each side is the one recycled onto the opposite edge with new content. */
+const ROLE_SHIFT: Record<1 | -1, Record<Role, Role>> = {
+  1: { previous2: "next2", previous: "previous2", current: "previous", next: "current", next2: "next" },
+  [-1]: { previous2: "previous", previous: "current", current: "next", next: "next2", next2: "previous2" },
+};
+
+/** How many `nav()` steps (and in which direction) bring a given role to
+    the centre — used for click-to-navigate on any peeking card. */
+const ROLE_JUMP: Record<Role, { dir: 1 | -1; steps: number } | null> = {
+  previous2: { dir: -1, steps: 2 },
+  previous: { dir: -1, steps: 1 },
+  current: null,
+  next: { dir: 1, steps: 1 },
+  next2: { dir: 1, steps: 2 },
+};
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Card faces
+   Slide
 ──────────────────────────────────────────────────────────────────────── */
 
-/** Front = the officer's card art, shown whole. The designed photos already
-    carry their own name/role/logo, so nothing is drawn over them; only a bare
-    studio portrait gets a scrim and a name. */
-function CardFront({ o, onPhotoLoad }: { o: Officer; onPhotoLoad?: () => void }) {
-  const accent = accentOf(o);
+/** Front = the officer's card art, shown whole. */
+function CardFront({ officer, accent, isCurrent }: { officer: Officer; accent: string; isCurrent: boolean }) {
   return (
     <div
-      className="absolute inset-0 overflow-hidden rounded-3xl border bg-[#0d0d0d]"
+      className={`absolute inset-0 overflow-hidden rounded-3xl border bg-[#0d0d0d] transition-[filter] duration-700 ${
+        isCurrent ? "brightness-100" : "brightness-[0.55]"
+      }`}
       style={{ backfaceVisibility: "hidden", borderColor: `${accent}40` }}
     >
-      {o.photo ? (
+      {officer.photo ? (
         <Image
-          src={o.photo}
-          alt={o.name}
+          src={officer.photo}
+          alt={officer.name}
           fill
           sizes="(max-width: 640px) 60vw, 300px"
           draggable={false}
-          /* Eager on purpose: the whole deck is one gesture away, and lazy
-             loading would pop portraits in mid-rotation. */
           loading="eager"
           className="select-none object-cover"
-          /* Bare portraits are taller than the 4:5 card, so bias the crop up
-             and keep the face off the cut line. */
-          style={o.plainPortrait ? { objectPosition: "50% 18%" } : undefined}
-          /* A card that finishes decoding after the deck's initial layout
-             pass can sit fully loaded but unpainted — Chromium sometimes
-             fails to composite an <img> that decodes after a 3D-transformed
-             ancestor's layer was first created, and nothing forces a repaint
-             until the deck's transform next changes (e.g. on the first drag
-             or tap). Re-running the deck's own transform pass the moment
-             each photo is ready is that forced repaint, without waiting on
-             the visitor to interact first. */
-          onLoad={onPhotoLoad}
+          style={{
+            transform: "scale(1.18)",
+            objectPosition: officer.plainPortrait ? "50% 18%" : undefined,
+          }}
         />
       ) : (
         <div className="absolute inset-0 grid place-items-center">
           <span className="font-display text-6xl font-black" style={{ color: accent }}>
-            {o.initials}
+            {officer.initials}
           </span>
         </div>
-      )}
-
-      {o.plainPortrait && (
-        <>
-          <div
-            aria-hidden
-            className="absolute inset-x-0 bottom-0 h-2/5 bg-linear-to-t from-black/95 via-black/50 to-transparent"
-          />
-          <h3 className="absolute inset-x-4 bottom-4 font-display text-lg font-black uppercase leading-[0.95] text-white">
-            {o.name}
-          </h3>
-        </>
       )}
     </div>
   );
 }
 
-function CardBack({ o, index }: { o: Officer; index: number }) {
-  const accent = accentOf(o);
+/** Back = role / name / detail, revealed by flipping the current card. */
+function CardBack({ officer, accent, index }: { officer: Officer; accent: string; index: number }) {
   return (
     <div
-      className="absolute inset-0 grid place-items-center overflow-hidden rounded-3xl border bg-[#0b0b0b] px-4 text-center sm:px-6"
-      style={{
-        backfaceVisibility: "hidden",
-        transform: "rotateY(180deg)",
-        borderColor: `${accent}66`,
-      }}
+      className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-3xl border bg-[#0b0b0b] px-4 text-center sm:px-6"
+      style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", borderColor: `${accent}66` }}
     >
       <div
         aria-hidden
@@ -162,29 +171,77 @@ function CardBack({ o, index }: { o: Officer; index: number }) {
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 grid select-none place-items-center font-display text-[9rem] font-black leading-none text-stroke opacity-40"
+        className="pointer-events-none absolute inset-0 grid select-none place-items-center font-display text-7xl font-black leading-none text-stroke opacity-20"
       >
         {String(index + 1).padStart(2, "0")}
       </span>
 
-      <div className="relative">
-        {/* Fixed at `text-2xl` this clipped against the card's own
-            `overflow-hidden` on the smallest cards — some role labels
-            ("Documentation Team Head", "Public Relations Officer") are long
-            enough that even `text-balance`'s two-line wrap couldn't fit them
-            in ~150px of content width. Scales down with the card itself
-            (see its `clamp(200px,54vw,290px)` width) rather than staying
-            fixed across every size. */}
+      <div className="relative w-full">
         <p
-          className="text-balance font-display text-lg font-black uppercase leading-[1.05] sm:text-xl lg:text-2xl"
+          className="text-balance wrap-break-word font-display text-sm font-black uppercase leading-[1.15] sm:text-lg lg:text-xl"
           style={{ color: accent }}
         >
-          {o.role}
+          {officer.role}
         </p>
-        <span className="mx-auto mt-4 block h-1 w-12 rounded-full" style={{ background: accent }} />
-        <p className="mt-4 font-head text-sm uppercase tracking-widest text-white">{o.name}</p>
-        <p className="mt-2 text-xs text-muted-foreground">{o.detail}</p>
+        <span className="mx-auto mt-3 block h-1 w-10 rounded-full" style={{ background: accent }} />
+        <p className="mt-3 text-balance wrap-break-word font-head text-[11px] uppercase leading-snug tracking-wide text-white sm:text-sm sm:tracking-widest">
+          {officer.name}
+        </p>
+        <p className="mt-4 text-balance wrap-break-word text-xs text-muted-foreground">{officer.detail}</p>
       </div>
+    </div>
+  );
+}
+
+function BoardSlide({
+  slot,
+  officer,
+  isFlipped,
+  onClick,
+}: {
+  slot: Slot;
+  officer: Officer | undefined;
+  isFlipped: boolean;
+  onClick: () => void;
+}) {
+  if (!officer) return null;
+
+  const accent = accentOf(officer);
+  const style = ROLE_STYLE[slot.role];
+  const isCurrent = slot.role === "current";
+
+  return (
+    <div
+      className="absolute left-1/2 top-1/2 aspect-4/5 w-(--slide-w) transition-transform duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none"
+      style={{
+        zIndex: slot.z,
+        transform: `translate3d(calc(-50% + ${style.tx}), -50%, 0) rotateY(${style.rotY}) scale(${style.scale})`,
+        transformStyle: "preserve-3d",
+      }}
+    >
+      <button
+        type="button"
+        tabIndex={isCurrent ? 0 : -1}
+        onClick={onClick}
+        aria-label={
+          isCurrent
+            ? `${officer.name}, ${officer.role}. Flip card`
+            : `${officer.name}, ${officer.role}. Bring to front`
+        }
+        className="relative block h-full w-full cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        style={{ perspective: "1200px" }}
+      >
+        <div
+          className="relative h-full w-full transition-transform duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none"
+          style={{
+            transformStyle: "preserve-3d",
+            transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          }}
+        >
+          <CardFront officer={officer} accent={accent} isCurrent={isCurrent} />
+          <CardBack officer={officer} accent={accent} index={slot.index} />
+        </div>
+      </button>
     </div>
   );
 }
@@ -197,262 +254,173 @@ export default function Board() {
   const roster = useRoster();
   const n = roster.length;
 
-  const stageRef = useRef<HTMLDivElement>(null);
-  const cardsRef = useRef<HTMLDivElement[]>([]);
-  const posRef = useRef(0);
-  const cardWRef = useRef(280);
-  const activeRef = useRef(0);
-  const dragRef = useRef({ on: false, startX: 0, startPos: 0, moved: 0 });
-  const detachRef = useRef<(() => void) | null>(null);
-  const tweenRef = useRef<gsap.core.Tween | null>(null);
-
   const [active, setActive] = useState(0);
+  const [slots, setSlots] = useState<Slot[]>([]);
   const [flipped, setFlipped] = useState<Set<number>>(() => new Set());
 
-  // Guarded against n === 0 — briefly true while the roster is still loading,
-  // and `i % 0` is NaN rather than a thrown error, which would otherwise
-  // silently poison active/posRef the moment a key or drag event landed
-  // during that window.
   const wrap = useCallback((i: number) => (n === 0 ? 0 : ((i % n) + n) % n), [n]);
 
-  /** Shortest signed ring distance from `pos` to card `i`. */
-  const delta = useCallback(
-    (i: number, pos: number) => {
-      if (n === 0) return 0;
-      let d = (((i - pos) % n) + n) % n;
-      if (d > n / 2) d -= n;
-      return d;
+  // Seeds once the roster first arrives (n goes 0 -> N). Adjusting state
+  // during render, gated on a comparison against the last render, rather
+  // than in an effect — React's documented pattern for state that depends
+  // on a value that changes (here, an async-arriving prop) instead of on
+  // an event.
+  const [seededN, setSeededN] = useState(0);
+  if (n > 0 && seededN === 0) {
+    setSeededN(n);
+    setSlots([
+      { slotId: 0, role: "previous2", index: wrap(-2), z: ROLE_STYLE.previous2.z },
+      { slotId: 1, role: "previous", index: wrap(-1), z: ROLE_STYLE.previous.z },
+      { slotId: 2, role: "current", index: 0, z: ROLE_STYLE.current.z },
+      { slotId: 3, role: "next", index: wrap(1), z: ROLE_STYLE.next.z },
+      { slotId: 4, role: "next2", index: wrap(2), z: ROLE_STYLE.next2.z },
+    ]);
+    setActive(0);
+  }
+
+  /** Steps the whole deck by one position in `dir`. */
+  const nav = useCallback(
+    (dir: 1 | -1) => {
+      if (n === 0) return;
+      setSlots((prev) => {
+        if (prev.length < 5) return prev;
+        const cur = prev.find((s) => s.role === "current")!;
+        const newActive = wrap(cur.index + dir);
+        const shift = ROLE_SHIFT[dir];
+        // The role vacating the trailing edge is the one recycled with new content.
+        const recycledFrom: Role = dir === 1 ? "previous2" : "next2";
+
+        return prev.map((s) => {
+          const newRole = shift[s.role];
+          if (s.role === recycledFrom) {
+            const newIndex = dir === 1 ? wrap(newActive + 2) : wrap(newActive - 2);
+            return { ...s, role: newRole, index: newIndex, z: 5 };
+          }
+          return { ...s, role: newRole, z: ROLE_STYLE[newRole].z };
+        });
+      });
+      setActive((a) => wrap(a + dir));
+      setFlipped(new Set()); // moving to a different officer drops any open flip
     },
-    [n]
+    [n, wrap]
   );
 
-  const render = useCallback(() => {
-    const pos = posRef.current;
-    const cw = cardWRef.current;
-
-    cardsRef.current.forEach((el, i) => {
-      if (!el) return;
-      const d = delta(i, pos);
-      const ad = Math.abs(d);
-      const near = ad <= 3.4;
-
-      // Compressed spacing so the far cards tuck in rather than march off.
-      const x = Math.sign(d) * Math.pow(ad, 0.86) * cw * GAP;
-      const scale = Math.max(0.55, 1 - ad * 0.12);
-      const ry = gsap.utils.clamp(-24, 24, -d * 15);
-      const tz = -ad * 140;
-
-      el.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), -50%, ${tz.toFixed(
-        2
-      )}px) rotateY(${ry.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-      el.style.opacity = near ? String(Math.max(0, 1 - ad * 0.2)) : "0";
-      el.style.zIndex = String(500 - Math.round(ad * 10));
-      el.style.visibility = near ? "visible" : "hidden";
-      el.style.pointerEvents = ad <= 2.2 ? "auto" : "none";
+  const toggleFlip = useCallback((index: number) => {
+    setFlipped((prev) => {
+      const s = new Set(prev);
+      if (s.has(index)) s.delete(index);
+      else s.add(index);
+      return s;
     });
-  }, [delta]);
-
-  const go = useCallback(
-    (target: number, duration = 0.75) => {
-      tweenRef.current?.kill();
-
-      // Only drop the flips when we actually land on a different officer —
-      // otherwise the snap that follows a tap would undo the tap's own flip.
-      const next = wrap(Math.round(target));
-      if (next !== activeRef.current) {
-        setFlipped(new Set());
-        activeRef.current = next;
-        setActive(next);
-      }
-
-      // GSAP tweens its own proxy rather than posRef: posRef is also written by
-      // the drag and re-anchored below, and letting both own one value lets a
-      // stale tween tick clobber a fresh position.
-      const proxy = { v: posRef.current };
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-      tweenRef.current = gsap.to(proxy, {
-        v: target,
-        duration: reduce ? 0 : duration,
-        ease: "power3.out",
-        onUpdate: () => {
-          posRef.current = proxy.v;
-          render();
-        },
-        onComplete: () => {
-          // Re-anchor inside [0, n) so many laps can't drift the float. Every
-          // transform is derived circularly, so this is invisible.
-          posRef.current = wrap(target);
-          render();
-        },
-      });
-    },
-    [render, wrap]
-  );
-
-  const step = useCallback((dir: number) => go(Math.round(posRef.current) + dir), [go]);
-
-  useGSAP(
-    () => {
-      const measure = () => {
-        const el = cardsRef.current[0];
-        if (el?.offsetWidth) cardWRef.current = el.offsetWidth;
-        render();
-      };
-      measure();
-
-      const ro = new ResizeObserver(measure);
-      const stage = stageRef.current;
-      if (stage) ro.observe(stage);
-
-      /* Sideways scroll only — a trackpad swipe or shift+wheel. A plain
-         vertical wheel is left alone so the page scrolls past the section
-         normally instead of trapping the reader here.
-
-         Bound natively rather than via onWheel because React registers wheel
-         listeners as passive at the root, where preventDefault() is a no-op. */
-      let snap: ReturnType<typeof setTimeout>;
-      const onWheel = (e: WheelEvent) => {
-        const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
-        if (!dx) return;
-        e.preventDefault();
-        tweenRef.current?.kill();
-        posRef.current += dx / (cardWRef.current * GAP);
-        render();
-        clearTimeout(snap);
-        snap = setTimeout(() => go(Math.round(posRef.current), 0.45), 90);
-      };
-      stage?.addEventListener("wheel", onWheel, { passive: false });
-
-      return () => {
-        ro.disconnect();
-        clearTimeout(snap);
-        stage?.removeEventListener("wheel", onWheel);
-        tweenRef.current?.kill();
-        detachRef.current?.(); // don't strand drag listeners if we unmount mid-swipe
-      };
-    },
-    { scope: stageRef }
-  );
-
-  /* ── Drag / swipe ── */
-
-  /* Deliberately no setPointerCapture: capturing on the stage retargets the
-     derived click to the stage, so the card's own onClick would never fire and
-     tap-to-flip would silently die. Window listeners keep a drag alive outside
-     the stage without stealing the click. */
-  const onDown = (e: React.PointerEvent) => {
-    tweenRef.current?.kill();
-    const d = dragRef.current;
-    d.on = true;
-    d.startX = e.clientX;
-    d.startPos = posRef.current;
-    d.moved = 0;
-
-    const move = (ev: PointerEvent) => {
-      if (!d.on) return;
-      const dx = ev.clientX - d.startX;
-      d.moved = Math.max(d.moved, Math.abs(dx));
-      posRef.current = d.startPos - dx / (cardWRef.current * GAP);
-      render();
-    };
-    const up = () => {
-      if (!d.on) return;
-      d.on = false;
-      detachRef.current?.();
-      go(Math.round(posRef.current), 0.5);
-    };
-
-    detachRef.current = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
-      detachRef.current = null;
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
-  };
-
-  const onCardClick = (i: number) => {
-    if (dragRef.current.moved > 6) return; // that was a drag, not a tap
-    const d = delta(i, posRef.current);
-    if (Math.abs(d) < 0.5) {
-      setFlipped((prev) => {
-        const s = new Set(prev);
-        if (s.has(i)) s.delete(i);
-        else s.add(i);
-        return s;
-      });
-    } else {
-      go(posRef.current + d);
-    }
-  };
+  }, []);
 
   return (
-    <section id="board" className="relative border-t border-line/60 bg-[#070707]">
-      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-28">
+    <section id="board" className="relative overflow-hidden border-t border-line/60 bg-[#070707]">
+      {/* Ambient backdrop — the current slide's own photo, blurred and
+          scrimmed, echoing it back behind the deck. Scoped to the section
+          (not viewport-fixed like the source) so it doesn't bleed into
+          neighbouring sections when scrolled past. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {slots.map((slot) => {
+          const officer = roster[slot.index];
+          if (!officer?.photo) return null;
+          return (
+            <div
+              key={slot.slotId}
+              className="absolute inset-[-10%] bg-cover bg-center transition-[opacity,transform] duration-700 motion-reduce:transition-none"
+              style={{
+                backgroundImage: `url(${officer.photo})`,
+                filter: "blur(36px) saturate(1.15)",
+                opacity: slot.role === "current" ? 0.4 : 0,
+                transform:
+                  slot.role === "previous"
+                    ? "translateX(-4%)"
+                    : slot.role === "next"
+                      ? "translateX(4%)"
+                      : "translateX(0)",
+              }}
+            />
+          );
+        })}
+        <div className="absolute inset-0 bg-black/80" />
+      </div>
+
+      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-28">
         <SectionHeading
           kicker="Leadership"
           title="Executive Board"
           sub="The officers who steer ICPEP BulSU Meneses Campus — students and faculty who lead by building, organizing, and showing up for every member."
         />
 
-        <div
-          ref={stageRef}
-          role="region"
-          aria-roledescription="carousel"
-          aria-label="Executive board"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowLeft") {
-              e.preventDefault();
-              step(-1);
-            } else if (e.key === "ArrowRight") {
-              e.preventDefault();
-              step(1);
+        <div className="mt-14 flex items-center justify-center gap-3 sm:gap-6">
+          <button
+            type="button"
+            onClick={() => nav(-1)}
+            disabled={n === 0}
+            aria-label="Previous officer"
+            className="inline-flex shrink-0 items-center justify-center text-white opacity-70 transition-opacity duration-250 ease-out hover:opacity-100 disabled:opacity-30"
+          >
+            <ChevronLeft size={40} strokeWidth={2} />
+          </button>
+
+          <div
+            role="region"
+            aria-roledescription="carousel"
+            aria-label="Executive board"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                nav(-1);
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                nav(1);
+              }
+            }}
+            /* overflow-hidden matters: peeking cards sit past the stage's
+               own box on narrow viewports — unclipped they'd spill into the
+               nav buttons and drag the page sideways. */
+            className="relative h-85 w-full max-w-6xl overflow-hidden select-none outline-none sm:h-110 lg:h-120"
+            style={
+              {
+                perspective: "1400px",
+                "--slide-w": "clamp(140px, 30vw, 260px)",
+              } as CSSProperties
             }
-          }}
-          onPointerDown={onDown}
-          /* overflow-hidden matters: the far cards sit ~380px either side of
-             centre, which is wider than a phone — unclipped they'd drag the
-             whole page sideways. */
-          className="relative mt-14 h-85 cursor-grab select-none overflow-hidden outline-none active:cursor-grabbing sm:h-110 lg:h-120"
-          style={{ perspective: "1600px", touchAction: "pan-y" }}
-        >
-          {roster.map((o, i) => (
-            <div
-              key={o.name}
-              ref={(el) => {
-                if (el) cardsRef.current[i] = el;
-              }}
-              className="absolute left-1/2 top-1/2 aspect-4/5 w-[clamp(200px,54vw,290px)]"
-              style={{ transformStyle: "preserve-3d", willChange: "transform" }}
-            >
-              <button
-                type="button"
-                tabIndex={i === active ? 0 : -1}
-                onClick={() => onCardClick(i)}
-                aria-label={
-                  i === active
-                    ? `${o.name}, ${o.role}. Flip card`
-                    : `${o.name}, ${o.role}. Bring to front`
-                }
-                className="relative block h-full w-full rounded-3xl outline-none transition-transform duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)] focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-                style={{
-                  transformStyle: "preserve-3d",
-                  transform: flipped.has(i) ? "rotateY(180deg)" : "rotateY(0deg)",
-                }}
-              >
-                <CardFront o={o} onPhotoLoad={render} />
-                <CardBack o={o} index={i} />
-              </button>
-            </div>
-          ))}
+          >
+            {slots.map((slot) => {
+              const jump = ROLE_JUMP[slot.role];
+              return (
+                <BoardSlide
+                  key={slot.slotId}
+                  slot={slot}
+                  officer={roster[slot.index]}
+                  isFlipped={slot.role === "current" && flipped.has(slot.index)}
+                  onClick={() => {
+                    if (jump) {
+                      for (let i = 0; i < jump.steps; i++) nav(jump.dir);
+                    } else {
+                      toggleFlip(slot.index);
+                    }
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => nav(1)}
+            disabled={n === 0}
+            aria-label="Next officer"
+            className="inline-flex shrink-0 items-center justify-center text-white opacity-70 transition-opacity duration-250 ease-out hover:opacity-100 disabled:opacity-30"
+          >
+            <ChevronRight size={40} strokeWidth={2} />
+          </button>
         </div>
 
         <p className="mt-8 flex items-center justify-center gap-2 font-head text-xs uppercase tracking-widest text-muted-foreground">
-          <Hand size={14} className="text-primary/70" /> Drag to browse · Tap a card to flip
+          <MoveHorizontal size={14} className="text-primary/70" /> Use the arrows or click a card to browse
         </p>
 
         {roster[active] && (
