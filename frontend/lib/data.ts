@@ -133,7 +133,7 @@ export interface Officer {
 export type OfficerMeta = { detail: string; photo?: string; plainPortrait?: boolean };
 
 export const OFFICER_META: Record<string, OfficerMeta> = {
-  "adviser@icpep.se": { detail: "Faculty Adviser · CCpE, MSCpE", photo: "/board/amanda-abelardo-photo.jpg", plainPortrait: true },
+  "adviser@icpep.se": { detail: "Faculty Adviser", photo: "/board/amanda-abelardo-photo.jpg", plainPortrait: true },
   "president@icpep.se": { detail: "BS Computer Engineering – 4th Year", photo: "/board/archie-baltazar.jpg" },
   "vpea@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/julia-mae-narne.jpg" },
   "vpia@icpep.se": { detail: "BS Computer Engineering – 3rd Year", photo: "/board/john-quelvin-rosales.jpg" },
