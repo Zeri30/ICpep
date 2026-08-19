@@ -1,14 +1,37 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowRight, Calendar, ChevronDown, Code2, Cpu, Trophy, Users, Zap } from "lucide-react";
-import Badge from "@/components/ui/Badge";
+import { ArrowRight, Calendar, ChevronDown, Code2, Cpu, Trophy, Users } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import CtaButton from "@/components/ui/CtaButton";
 import CountUp from "@/components/ui/CountUp";
 import Reveal from "@/components/ui/Reveal";
 import InteractiveHeroBackground from "@/components/InteractiveHeroBackground";
+import VantaGlobeBackground from "@/components/VantaGlobeBackground";
 import { easeOutExpo } from "@/components/ui/motion-primitives";
 import { STATS } from "@/lib/data";
+
+const DESKTOP_QUERY = "(min-width: 640px)";
+
+function subscribeToDesktopQuery(onChange: () => void) {
+  const mq = window.matchMedia(DESKTOP_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+/** Vanta's globe reads as a wide desktop centrepiece; on small screens the
+    original particle-constellation canvas holds up better and is cheaper
+    (skips loading three.js entirely on mobile). `useSyncExternalStore`
+    renders the SSR-safe fallback on first paint, then syncs to the real
+    viewport width right after hydration. */
+function HeroBackground() {
+  const isDesktop = useSyncExternalStore(
+    subscribeToDesktopQuery,
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => false
+  );
+  return isDesktop ? <VantaGlobeBackground /> : <InteractiveHeroBackground />;
+}
 
 function StatsBar() {
   return (
@@ -99,20 +122,21 @@ export default function Hero() {
   return (
     <>
       <section id="home" className="relative min-h-screen hero-mesh flex flex-col overflow-hidden">
-        <InteractiveHeroBackground />
+        <HeroBackground />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(5,5,5,0.85)_100%)] pointer-events-none" />
 
         <div className="relative flex-1 flex items-center justify-center px-4 pt-24 pb-16">
           <div className="text-center max-w-5xl mx-auto">
-            <motion.div
+            <motion.p
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.5, duration: 0.5 }}
+              className="mb-6 flex items-center justify-center gap-3 font-head font-semibold tracking-[0.4em] uppercase text-primary text-xs"
             >
-              <Badge tone="red" className="mb-6">
-                <Zap size={12} /> Student Edition
-              </Badge>
-            </motion.div>
+              <span className="h-px w-8 bg-primary/50" />
+              Student Edition
+              <span className="h-px w-8 bg-primary/50" />
+            </motion.p>
 
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
@@ -121,7 +145,7 @@ export default function Hero() {
               className="font-display font-black uppercase leading-[1.05] text-4xl sm:text-6xl lg:text-7xl"
             >
               <span className="text-foreground">ICPEP</span>
-              <span className="block mt-3 text-2xl sm:text-4xl lg:text-5xl text-primary text-glow-red tracking-wider">
+              <span className="block mt-3 text-2xl sm:text-4xl lg:text-5xl text-primary tracking-wider">
                 BulSU Meneses Campus
               </span>
             </motion.h1>
