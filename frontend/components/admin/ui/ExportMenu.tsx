@@ -10,7 +10,18 @@ import { ChevronDown, Download, FileSpreadsheet, FileText, FileType } from "luci
 import { useRef, useState } from "react";
 import { useOutsideClick } from "@/lib/useOutsideClick";
 
-export default function ExportMenu({ base, queryString }: { base: string; queryString: string }) {
+/* `pdfSignatureChoice` swaps the single PDF link for two — with and without the
+   e-signature column — sent as `signatures=1|0`. Only the Members List has
+   signatures to leave out, so the other modules keep the one link. */
+export default function ExportMenu({
+  base,
+  queryString,
+  pdfSignatureChoice = false,
+}: {
+  base: string;
+  queryString: string;
+  pdfSignatureChoice?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,9 +46,20 @@ export default function ExportMenu({ base, queryString }: { base: string; queryS
           <a href={`${base}/excel?${queryString}`} className={item} onClick={() => setOpen(false)}>
             <FileSpreadsheet size={15} /> Export as Excel
           </a>
-          <a href={`${base}/pdf?${queryString}`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
-            <FileType size={15} /> Export as PDF
-          </a>
+          {pdfSignatureChoice ? (
+            <>
+              <a href={`${base}/pdf?${queryString}&signatures=1`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
+                <FileType size={15} /> PDF with signatures
+              </a>
+              <a href={`${base}/pdf?${queryString}&signatures=0`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
+                <FileType size={15} /> PDF without signatures
+              </a>
+            </>
+          ) : (
+            <a href={`${base}/pdf?${queryString}`} target="_blank" rel="noopener noreferrer" className={item} onClick={() => setOpen(false)}>
+              <FileType size={15} /> Export as PDF
+            </a>
+          )}
         </div>
       )}
     </div>

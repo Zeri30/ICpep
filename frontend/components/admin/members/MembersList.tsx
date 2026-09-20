@@ -709,7 +709,7 @@ export default function MembersList() {
           ) : null}
         </div>
         {/* Open to every role — reading the list is all it takes to export it. */}
-        <ExportMenu base="/api/admin/members/export" queryString={exportQueryString} />
+        <ExportMenu base="/api/admin/members/export" queryString={exportQueryString} pdfSignatureChoice />
       </div>
 
       {/* Filters and the bulk actions share one row: the selection controls
