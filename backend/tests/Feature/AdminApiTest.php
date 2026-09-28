@@ -400,6 +400,36 @@ class AdminApiTest extends TestCase
         $this->assertStringStartsWith('%PDF', $response->getContent());
     }
 
+    public function test_members_export_pdf_signature_column_follows_the_signatures_flag(): void
+    {
+        $data = [
+            'rows' => collect([[
+                'number' => 1, 'name' => 'Dela Cruz, Juan', 'section' => 'A', 'yearLevel' => 1,
+                'status' => 'Paid', 'balance' => 0.0, 'semester' => '1st', 'signature' => null,
+            ]]),
+            'term' => null,
+            'filters' => [],
+            'generatedAt' => now(),
+        ];
+
+        $this->assertStringContainsString(
+            'E-Signature',
+            view('admin.members.export-pdf', $data + ['withSignatures' => true])->render(),
+        );
+        $this->assertStringNotContainsString(
+            'E-Signature',
+            view('admin.members.export-pdf', $data + ['withSignatures' => false])->render(),
+        );
+
+        // The flag is accepted end to end and still yields a PDF.
+        Storage::fake('supabase');
+        $this->makeApplication();
+        $this->actingAs($this->admin())
+            ->get('/api/admin/members/export/pdf?signatures=0')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
     public function test_members_export_requires_authentication(): void
     {
         $this->get('/api/admin/members/export/csv')->assertUnauthorized();

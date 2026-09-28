@@ -111,7 +111,9 @@
                 <th>Status</th>
                 <th>Balance</th>
                 <th>Semester</th>
-                <th>E-Signature</th>
+                @if ($withSignatures)
+                    <th>E-Signature</th>
+                @endif
             </tr>
         </thead>
         <tbody>
@@ -124,13 +126,15 @@
                     <td class="{{ $row['status'] === 'Paid' ? 'status-paid' : 'status-unpaid' }}">{{ $row['status'] }}</td>
                     <td>{{ number_format($row['balance'], 2) }}</td>
                     <td>{{ $row['semester'] }}</td>
-                    <td class="signature">
-                        @if ($row['signature'])
-                            <img src="{{ $row['signature'] }}" alt="Signature">
-                        @else
-                            <span class="none">&mdash;</span>
-                        @endif
-                    </td>
+                    @if ($withSignatures)
+                        <td class="signature">
+                            @if ($row['signature'])
+                                <img src="{{ $row['signature'] }}" alt="Signature">
+                            @else
+                                <span class="none">&mdash;</span>
+                            @endif
+                        </td>
+                    @endif
                 </tr>
             @endforeach
         </tbody>

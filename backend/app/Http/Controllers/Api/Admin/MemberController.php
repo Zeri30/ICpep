@@ -13,6 +13,8 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -21,6 +23,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use OpenSpout\Common\Entity\Row;
@@ -785,9 +788,15 @@ class MemberController extends Controller
     {
         $term = MembershipTerm::resolve($request->input('term'));
         $members = $this->exportRows($request);
-        $signatureDisk = $this->signatureDisk();
+        // `signatures=0` (the Members List's "PDF without signatures") drops the
+        // column altogether — and with it every signature download. Anything
+        // else keeps it, so a bare link to this endpoint behaves as before.
+        $withSignatures = $request->boolean('signatures', true);
+        $signatures = $withSignatures
+            ? $this->signatureDataUris($members->pluck('signature_path')->filter()->unique()->all())
+            : [];
 
-        $rows = $members->values()->map(function (Application $member, int $i) use ($signatureDisk): array {
+        $rows = $members->values()->map(function (Application $member, int $i) use ($signatures): array {
             [$status, $balance] = $this->statusAndBalance($member);
 
             return [
@@ -798,7 +807,7 @@ class MemberController extends Controller
                 'status' => $status,
                 'balance' => $balance,
                 'semester' => $member->membershipTerm?->label ?? '—',
-                'signature' => $this->signatureDataUri($signatureDisk, $member->signature_path),
+                'signature' => $signatures[$member->signature_path] ?? null,
             ];
         });
 
@@ -807,6 +816,7 @@ class MemberController extends Controller
             'term' => $term,
             'filters' => $this->filterSummary($request, $term),
             'generatedAt' => now(),
+            'withSignatures' => $withSignatures,
         ])->setPaper('a4', 'portrait');
 
         return $pdf->stream($this->exportFilename($request, 'pdf'));
@@ -840,55 +850,94 @@ class MemberController extends Controller
     }
 
     /**
-     * A disk pointed at the exact same 'supabase' bucket/credentials as
-     * everywhere else (config/filesystems.php is untouched — this only
-     * builds an on-demand extra client from the same config array), but
-     * with a short connect/read timeout and no SDK-level retries.
+     * The members' submitted e-signatures, keyed by storage path and inlined
+     * as base64 data URIs — dompdf renders straight from the string with no
+     * network round trip per row, unlike a signed URL into the private
+     * Supabase bucket (which is also the wrong tool here: a 10-minute link is
+     * meaningless on a printed page). Missing or unreadable files are simply
+     * absent from the result rather than failing the whole export; the view
+     * prints an em dash for those.
      *
-     * This embed is a best-effort addition to a printable report, not a
-     * critical read: the default S3 client would otherwise retry a slow or
-     * unreachable file with growing backoff, and pay that cost again for
-     * every remaining row of a large roster if the outage isn't per-file
-     * but per-connection. A couple of seconds per row is an acceptable
-     * worst case; the SDK's own default is not. Built once per export and
-     * reused across rows rather than rebuilt per member.
+     * The files are downloaded 25 at a time instead of one after another:
+     * fetched serially, a 130-member roster spent ~43s just waiting on the
+     * bucket (about a third of a second per file), which by itself outlasted
+     * the dev proxy's timeout. Each download is bounded by a short connect
+     * timeout and a total timeout, and none are retried — this embed is a
+     * best-effort addition to a printable report, so a slow file costs its
+     * own row a dash, not the export a hang.
+     *
+     * The stored file is the member's original upload (up to 5 MB, and a
+     * transparent PNG is typical), but the PDF only ever prints it at 14px
+     * tall. Embedding it as-is made dompdf walk every pixel of every
+     * signature in PHP to split out the alpha channel, which alone pushed a
+     * large roster past the 60s request limit — so each is shrunk and
+     * flattened first, see shrinkSignature().
+     *
+     * @param  list<string>  $paths
+     * @return array<string, string>
      */
-    private function signatureDisk(): Filesystem
+    private function signatureDataUris(array $paths): array
     {
-        return Storage::build(array_merge(
-            config('filesystems.disks.supabase'),
-            ['http' => ['connect_timeout' => 2, 'timeout' => 4], 'retries' => 0],
-        ));
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk('supabase');
+        $uris = [];
+
+        foreach (array_chunk($paths, 25) as $chunk) {
+            try {
+                $responses = Http::pool(function (Pool $pool) use ($disk, $chunk): void {
+                    foreach ($chunk as $path) {
+                        $pool->as($path)->connectTimeout(2)->timeout(10)
+                            ->get($disk->temporaryUrl($path, now()->addMinutes(10)));
+                    }
+                });
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            foreach ($responses as $path => $response) {
+                if (! $response instanceof ClientResponse || ! $response->successful()) {
+                    continue;
+                }
+
+                if ($jpeg = $this->shrinkSignature($response->body())) {
+                    $uris[$path] = 'data:image/jpeg;base64,'.base64_encode($jpeg);
+                }
+            }
+        }
+
+        return $uris;
     }
 
     /**
-     * The member's submitted e-signature, inlined as a base64 data URI —
-     * dompdf renders straight from the string with no network round trip
-     * per row, unlike a signed URL into the private Supabase bucket (which
-     * is also the wrong tool here: a 10-minute link is meaningless on a
-     * printed page). Missing or unreadable files fall back to null rather
-     * than failing the whole export; the view prints an em dash for those.
+     * A print-sized, opaque JPEG of the signature, or null if the bytes
+     * aren't an image GD can read (e.g. the PDF the upload form also
+     * accepts). Bounded to 3x the box the view prints it in (90x14px, see
+     * `td.signature img`) so it stays sharp on paper, never upscaled, and
+     * flattened onto white — with no alpha channel dompdf embeds it directly
+     * instead of taking its per-pixel alpha path.
      */
-    private function signatureDataUri(Filesystem $disk, ?string $path): ?string
+    private function shrinkSignature(string $bytes): ?string
     {
-        if (! $path) {
+        $src = @imagecreatefromstring($bytes);
+        if ($src === false) {
             return null;
         }
 
-        try {
-            $bytes = $disk->get($path);
-        } catch (\Throwable $e) {
-            return null;
-        }
+        $srcW = imagesx($src);
+        $srcH = imagesy($src);
+        $scale = min(1, 270 / $srcW, 42 / $srcH);
+        $w = max(1, (int) round($srcW * $scale));
+        $h = max(1, (int) round($srcH * $scale));
 
-        $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
-            'jpg', 'jpeg' => 'image/jpeg',
-            'gif' => 'image/gif',
-            'webp' => 'image/webp',
-            default => 'image/png',
-        };
+        $dst = imagecreatetruecolor($w, $h);
+        imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $w, $h, $srcW, $srcH);
 
-        return 'data:'.$mime.';base64,'.base64_encode($bytes);
+        ob_start();
+        imagejpeg($dst, null, 85);
+        $jpeg = ob_get_clean();
+
+        return $jpeg === false ? null : $jpeg;
     }
 
     /** @return list<string> */
